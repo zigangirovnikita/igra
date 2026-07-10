@@ -1,0 +1,106 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model GameSession {
+  id            String       @id @default(uuid()) @db.Uuid
+  anonymousId   String       @db.Uuid
+  status        String
+  configVersion String
+  seedEncrypted String?
+  stateVersion  Int          @default(0)
+  setup         Json
+  currentState  Json
+  utm           Json?
+  referrer      String?
+  landingUrl    String?
+  startedAt     DateTime     @default(now())
+  lastEventAt   DateTime     @default(now())
+  finishedAt    DateTime?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+  events        GameEvent[]
+  result        GameResult?
+  aiReports     AiReport[]
+  leads         Lead[]
+
+  @@map("game_sessions")
+}
+
+model GameEvent {
+  id             String      @id @default(uuid()) @db.Uuid
+  sessionId      String      @db.Uuid
+  sequenceNumber Int
+  commandId      String
+  eventType      String
+  gameDay        Int
+  payload        Json
+  idempotencyKey String      @unique
+  createdAt      DateTime    @default(now())
+  session        GameSession @relation(fields: [sessionId], references: [id])
+
+  @@unique([sessionId, sequenceNumber])
+  @@unique([sessionId, commandId])
+  @@map("game_events")
+}
+
+model GameResult {
+  id              String      @id @default(uuid()) @db.Uuid
+  sessionId       String      @unique @db.Uuid
+  configVersion   String
+  metrics         Json
+  targets         Json
+  financials      Json
+  strongDecisions Json
+  bottlenecks     Json
+  counterfactuals Json
+  finalStatus     String
+  createdAt       DateTime    @default(now())
+  session         GameSession @relation(fields: [sessionId], references: [id])
+
+  @@map("game_results")
+}
+
+model AiReport {
+  id           String      @id @default(uuid()) @db.Uuid
+  sessionId    String      @db.Uuid
+  provider     String
+  model        String
+  promptVersion String
+  status       String
+  report       Json?
+  errorCode    String?
+  latencyMs    Int
+  inputTokens  Int?
+  outputTokens Int?
+  createdAt    DateTime    @default(now())
+  session      GameSession @relation(fields: [sessionId], references: [id])
+
+  @@map("ai_reports")
+}
+
+model Lead {
+  id                 String      @id @default(uuid()) @db.Uuid
+  sessionId          String      @db.Uuid
+  name               String
+  contactEncrypted   String
+  product            String
+  productPrice       Int
+  socialLink         String?
+  comment            String?
+  privacyConsentAt   DateTime
+  marketingConsentAt DateTime?
+  deliveryStatus     String
+  deliveryAttempts   Int         @default(0)
+  webhookLastError   String?
+  createdAt          DateTime    @default(now())
+  deliveredAt        DateTime?
+  session            GameSession @relation(fields: [sessionId], references: [id])
+
+  @@map("leads")
+}

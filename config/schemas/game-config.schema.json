@@ -1,0 +1,302 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/schemas/launch-game-config.schema.json",
+  "title": "Launch Game Config",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "currency",
+    "startingBank",
+    "totalDays",
+    "startingEnergy",
+    "goals",
+    "productTypes",
+    "superpowers",
+    "actions",
+    "content",
+    "routes",
+    "conversions",
+    "randomness",
+    "decay",
+    "events",
+    "dreams",
+    "copy",
+    "assets",
+    "cta"
+  ],
+  "properties": {
+    "version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    },
+    "currency": {
+      "const": "RUB"
+    },
+    "startingBank": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "totalDays": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 365
+    },
+    "startingEnergy": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 100
+    },
+    "goals": {
+      "$ref": "#/$defs/goals"
+    },
+    "productTypes": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/productType"
+      }
+    },
+    "superpowers": {
+      "type": "array",
+      "minItems": 4,
+      "items": {
+        "$ref": "#/$defs/namedConfig"
+      }
+    },
+    "actions": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/action"
+      }
+    },
+    "content": {
+      "type": "object"
+    },
+    "routes": {
+      "type": "object"
+    },
+    "conversions": {
+      "type": "object"
+    },
+    "randomness": {
+      "$ref": "#/$defs/randomness"
+    },
+    "decay": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "number",
+        "minimum": 0,
+        "maximum": 1
+      }
+    },
+    "events": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/event"
+      }
+    },
+    "dreams": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/dream"
+      }
+    },
+    "copy": {
+      "type": "object"
+    },
+    "assets": {
+      "type": "object"
+    },
+    "cta": {
+      "type": "object",
+      "required": ["primary", "secondary"],
+      "properties": {
+        "primary": { "type": "string", "minLength": 1 },
+        "secondary": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": false
+    }
+  },
+  "$defs": {
+    "namedConfig": {
+      "type": "object",
+      "required": ["id", "enabled", "title"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "enabled": { "type": "boolean" },
+        "title": { "type": "string", "minLength": 1 },
+        "description": { "type": "string" },
+        "modifiers": { "type": "array", "items": { "type": "object" } }
+      },
+      "additionalProperties": false
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*$"
+    },
+    "goals": {
+      "type": "object",
+      "required": ["lowTicketMinimumRevenue", "priceBuckets"],
+      "properties": {
+        "lowTicketMinimumRevenue": { "type": "integer", "minimum": 0 },
+        "priceBuckets": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["maxPrice", "targetSales"],
+            "properties": {
+              "maxPrice": { "type": ["integer", "null"], "minimum": 1 },
+              "targetSales": { "type": "integer", "minimum": 1 }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "productType": {
+      "type": "object",
+      "required": ["id", "enabled", "title", "capacity"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "enabled": { "type": "boolean" },
+        "title": { "type": "string", "minLength": 1 },
+        "capacity": { "type": ["integer", "null"], "minimum": 1 },
+        "recommendedSalesMethods": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/id" }
+        }
+      },
+      "additionalProperties": false
+    },
+    "condition": {
+      "type": "object",
+      "required": ["operator"],
+      "properties": {
+        "operator": {
+          "enum": [
+            "eq", "neq", "gt", "gte", "lt", "lte", "in", "notIn",
+            "hasFlag", "lacksFlag", "and", "or", "not"
+          ]
+        },
+        "path": { "type": "string" },
+        "value": {},
+        "conditions": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/condition" }
+        }
+      },
+      "additionalProperties": false
+    },
+    "effect": {
+      "type": "object",
+      "required": ["operator"],
+      "properties": {
+        "operator": {
+          "enum": [
+            "setFlag", "addMetric", "multiplyMetric", "addResource",
+            "createAsset", "replaceAsset", "scheduleAction", "emitEvent"
+          ]
+        },
+        "path": { "type": "string" },
+        "value": {},
+        "payload": { "type": "object" }
+      },
+      "additionalProperties": false
+    },
+    "action": {
+      "type": "object",
+      "required": [
+        "id", "enabled", "category", "title", "cost", "days",
+        "energyCost", "requirements", "effects", "repeatPolicy"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "enabled": { "type": "boolean" },
+        "category": { "$ref": "#/$defs/id" },
+        "title": { "type": "string", "minLength": 1 },
+        "description": { "type": "string" },
+        "cost": { "type": "integer", "minimum": 0 },
+        "days": { "type": "integer", "minimum": 0 },
+        "energyCost": { "type": "number", "minimum": 0 },
+        "requirements": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/condition" }
+        },
+        "effects": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/effect" }
+        },
+        "repeatPolicy": {
+          "enum": ["never", "once_per_cohort", "unlimited", "upgrade"]
+        },
+        "analyticsId": { "$ref": "#/$defs/id" }
+      },
+      "additionalProperties": false
+    },
+    "randomness": {
+      "type": "object",
+      "required": ["distribution"],
+      "properties": {
+        "distribution": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["probability", "multiplier"],
+            "properties": {
+              "probability": { "type": "number", "exclusiveMinimum": 0, "maximum": 1 },
+              "multiplier": { "type": "number", "minimum": 0 }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "event": {
+      "type": "object",
+      "required": [
+        "id", "enabled", "priority", "once", "conditions", "sceneType",
+        "messages", "effects", "analyticsId"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "enabled": { "type": "boolean" },
+        "priority": { "type": "integer" },
+        "once": { "type": "boolean" },
+        "conditions": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/condition" }
+        },
+        "sceneType": { "$ref": "#/$defs/id" },
+        "messages": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "effects": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/effect" }
+        },
+        "analyticsId": { "$ref": "#/$defs/id" }
+      },
+      "additionalProperties": false
+    },
+    "dream": {
+      "type": "object",
+      "required": ["id", "enabled", "title", "price"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "enabled": { "type": "boolean" },
+        "title": { "type": "string", "minLength": 1 },
+        "price": { "type": "integer", "minimum": 0 },
+        "custom": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    }
+  }
+}

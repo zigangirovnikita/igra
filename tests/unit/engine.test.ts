@@ -1,0 +1,81 @@
+import { describe, expect, it } from 'vitest';
+import {
+  applyCommand,
+  assertStateInvariants,
+  createInitialState,
+  getBucketTargetSales,
+  hashToUnitInterval,
+  stochasticRound
+} from '../../packages/game-engine/src';
+import { loadGameConfig } from '../../lib/config/game-config';
+import { scenarios } from '../fixtures/scenarios';
+
+const config = loadGameConfig();
+const setup = scenarios[0].setup;
+
+describe('goals', () => {
+  it('uses configured price buckets', () => {
+    expect(getBucketTargetSales(5_000, config)).toBe(60);
+    expect(getBucketTargetSales(5_001, config)).toBe(50);
+    expect(getBucketTargetSales(250_000, config)).toBe(5);
+  });
+
+  it('applies low-ticket minimum revenue', () => {
+    const state = createInitialState({ ...setup, productPrice: 3_000 }, config, 'goal_seed');
+    expect(state.targets.targetSales).toBe(100);
+    expect(state.targets.targetRevenue).toBe(300_000);
+  });
+});
+
+describe('randomness', () => {
+  it('is stable for the same key and changes for different keys', () => {
+    expect(hashToUnitInterval('a', 'b')).toBe(hashToUnitInterval('a', 'b'));
+    expect(hashToUnitInterval('a', 'b')).not.toBe(hashToUnitInterval('a', 'c'));
+  });
+
+  it('stochastic rounding is deterministic', () => {
+    expect(stochasticRound(3.4, 'round_key')).toBe(stochasticRound(3.4, 'round_key'));
+  });
+});
+
+describe('commands and invariants', () => {
+  it('does not apply the same command twice', () => {
+    const state = createInitialState(setup, config, 'idempotent_seed');
+    const command = { commandId: 'same', type: 'start_action' as const, payload: { actionId: 'demand_poll' } };
+    const once = applyCommand(state, config, command);
+    const twice = applyCommand(once, config, command);
+    expect(twice).toEqual(once);
+  });
+
+  it('blocks actions without enough bank', () => {
+    const state = createInitialState(setup, config, 'bank_seed');
+    expect(() =>
+      applyCommand(
+        { ...state, resources: { ...state.resources, bank: 1_000 } },
+        config,
+        { commandId: 'site', type: 'start_action', payload: { actionId: 'website_beautiful' } }
+      )
+    ).toThrow(/Не хватает/);
+  });
+
+  it('finishes fixture scenarios without invariant violations', () => {
+    for (const scenario of scenarios) {
+      let state = createInitialState(scenario.setup, config, scenario.seed);
+      for (const command of scenario.commands) {
+        state = applyCommand(state, config, command);
+      }
+      assertStateInvariants(state, config);
+      expect(state.status).toBe('finished');
+      expect(state.metrics.revenue).toBe(state.metrics.sales * state.player.productPrice);
+      expect(Number.isFinite(state.metrics.revenue)).toBe(true);
+    }
+  });
+
+  it('keeps finished sessions immutable', () => {
+    let state = createInitialState(setup, config, 'finished_seed');
+    state = applyCommand(state, config, { commandId: 'finish', type: 'finish_game', payload: {} });
+    expect(() =>
+      applyCommand(state, config, { commandId: 'late', type: 'start_action', payload: { actionId: 'stories_3d' } })
+    ).toThrow(/Finished session/);
+  });
+});
