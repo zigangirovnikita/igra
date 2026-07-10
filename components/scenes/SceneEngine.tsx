@@ -28,7 +28,7 @@ function draftToSetupInput(draft: SetupDraft): SetupInput {
     productPrice: draft.productPrice,
     averageReelViews: draft.averageReelViews,
     averageStoryViews: draft.averageStoryViews,
-    telegramStatus: draft.hasTelegram ? 'active' : 'none',
+    telegramStatus: draft.hasTelegram ? 'known' : 'none',
     averageTelegramViews: draft.hasTelegram ? draft.averageTelegramViews : 0,
     dreams: draft.dreams,
   };
@@ -44,6 +44,7 @@ export function SceneEngine({ config }: Props) {
   const [phase, setPhase] = useState<'setup' | 'game' | 'lead'>('setup');
   const [queue, setQueue] = useState<Scene[]>([]);
   const [gameState, setGameState] = useState<GameState | null>(null);
+  const [setupDraft, setSetupDraft] = useState<SetupDraft | undefined>(undefined);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [leadStatus, setLeadStatus] = useState<string | null>(null);
@@ -62,6 +63,7 @@ export function SceneEngine({ config }: Props) {
   // ── Setup complete: create session ───────────────────────────────
 
   async function handleSetupComplete(draft: SetupDraft) {
+    setSetupDraft(draft);
     setBusy(true);
     setError(null);
     try {
@@ -132,7 +134,7 @@ export function SceneEngine({ config }: Props) {
 
       localStorage.setItem('launch-game-cache', JSON.stringify({ expiresAt: Date.now() + 86_400_000, state: newState }));
 
-      if (newState.status === 'finished') {
+      if (newState.status === 'finished' || newState.resources.day >= config.totalDays) {
         await finishGame(newState);
       }
     } catch (err) {
@@ -268,7 +270,7 @@ export function SceneEngine({ config }: Props) {
     return (
       <main className="scene-shell">
         {error && <div className="scene-error" role="alert">{error}</div>}
-        <SetupScene config={config} onComplete={handleSetupComplete} busy={busy} />
+        <SetupScene config={config} onComplete={handleSetupComplete} busy={busy} initialDraft={setupDraft} />
       </main>
     );
   }

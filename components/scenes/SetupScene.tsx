@@ -8,6 +8,7 @@ type Props = {
   config: GameConfig;
   onComplete: (draft: SetupDraft) => void;
   busy: boolean;
+  initialDraft?: SetupDraft;
 };
 
 type Step =
@@ -62,37 +63,22 @@ const familyOptions: { id: FamilyType; label: string }[] = [
   { id: 'single_kids', label: 'Дети есть, без партнёра' },
 ];
 
-const professionalDreams = [
-  { id: 'quit_job', title: 'Уйти с постоянной работы', price: 300000 },
-  { id: 'stop_referrals', title: 'Перестать зависеть от сарафана', price: 200000 },
-  { id: 'hire_assistant', title: 'Нанять ассистента', price: 150000 },
-  { id: 'first_launch', title: 'Запустить первый поток', price: 100000 },
-  { id: 'income_300k', title: 'Выйти на 300 000 ₽/мес', price: 300000 },
-  { id: 'stop_manual_sales', title: 'Перестать продавать вручную', price: 200000 },
-];
+
 
 const rub = (n: number) =>
   n.toLocaleString('ru-RU', { style: 'currency', currency: 'RUB', maximumFractionDigits: 0 });
 
 function getLegendText(draft: SetupDraft): string[] {
-  const { name, gender, familyType, productType } = draft;
+  const { name, familyType, productType } = draft;
   const productWord = productTypeLabels[productType]?.toLowerCase() ?? 'свой продукт';
 
   if (familyType === 'couple_no_kids' || familyType === 'couple_kids') {
-    if (gender === 'female') {
-      return [
-        `${name}, поздравляем — у вас отличные стартовые условия!`,
-        `Муж подарил вам 100 000 ₽ и уехал на вахту на целый месяц.`,
-        `Перед отъездом он сказал:`,
-        `«Ты давно хотела продавать ${productWord}. У тебя как раз есть месяц. Жильё, еда и расходы закрыты. Попробуй!»`,
-        `И вот вы остались одна с идеей, деньгами и месяцем свободы.`,
-      ];
-    }
     return [
       `${name}, поздравляем — у вас отличные стартовые условия!`,
-      `Жена поддержала вашу идею и выделила 100 000 ₽ на запуск.`,
-      `Она сказала: «Ты давно хотел продавать ${productWord}. Бытовые расходы я беру на себя. Есть целый месяц — попробуй!»`,
-      `Сейчас всё зависит только от вас.`,
+      `Ваш партнёр поддержал идею и выделил 100 000 ₽ на запуск.`,
+      `Он взял на себя бытовые расходы и сказал:`,
+      `«Ты давно хотел(а) продавать ${productWord}. У тебя как раз есть месяц. Попробуй!»`,
+      `И вот вы остались с идеей, деньгами и месяцем свободы.`,
     ];
   }
   return [
@@ -103,9 +89,9 @@ function getLegendText(draft: SetupDraft): string[] {
   ];
 }
 
-export function SetupScene({ config, onComplete, busy }: Props) {
+export function SetupScene({ config, onComplete, busy, initialDraft }: Props) {
   const [step, setStep] = useState<Step>('welcome');
-  const [draft, setDraft] = useState<SetupDraft>(defaultDraft);
+  const [draft, setDraft] = useState<SetupDraft>(initialDraft ?? defaultDraft);
   const [legendLine, setLegendLine] = useState(0);
 
   const set = <K extends keyof SetupDraft>(key: K, value: SetupDraft[K]) =>
@@ -134,16 +120,11 @@ export function SetupScene({ config, onComplete, busy }: Props) {
 
   const legendLines = getLegendText(draft);
   const personalGoal = draft.dreams.reduce((sum, id) => {
-    const dream = [...professionalDreams].find((d) => d.id === id);
-    if (dream) return sum + dream.price;
     const configDream = config.dreams.find((d) => d.id === id);
     return sum + (configDream?.price ?? 0);
   }, 0);
 
-  const allDreams = [
-    ...config.dreams.filter((d) => d.enabled && !d.custom),
-    ...professionalDreams.map((d) => ({ ...d, enabled: true, custom: false })),
-  ];
+  const allDreams = config.dreams.filter((d) => d.enabled && !d.custom);
 
   return (
     <div className="scene-screen scene-screen--setup">

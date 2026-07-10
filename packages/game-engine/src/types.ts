@@ -129,6 +129,7 @@ export type LeadCohort = {
   sales: number;
   considering: number;
   unprocessedWarm: number;
+  unprocessedApplications: number;
   lost: number;
   capacityLostLeads: number;
   temperature: number;

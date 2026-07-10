@@ -2,6 +2,7 @@ import type { ActionConfig, GameCommand, GameConfig, GameState, ScheduledAction 
 import { assertStateInvariants } from '../state/invariants';
 import { calculateDiagnostics } from '../diagnostics/report';
 import { advanceDays, completeAction, recalculateMetrics } from '../time/ticks';
+import { applyProcessing } from '../calculations/funnel';
 import { findAction, getActionAvailability } from './availability';
 
 export function applyCommand(input: GameState, config: GameConfig, command: GameCommand): GameState {
@@ -19,7 +20,7 @@ export function applyCommand(input: GameState, config: GameConfig, command: Game
   } else if (command.type === 'start_parallel') {
     state = startParallel(state, config, command.payload.actionAId, command.payload.actionBId, command.payload);
   } else if (command.type === 'resolve_mini_game') {
-    state = resolveMiniGame(state, command.payload.cohortId, command.payload.mode, command.payload.processed);
+    state = resolveMiniGame(state, config, command.payload.cohortId, command.payload.mode, command.payload.processed);
   } else if (command.type === 'finish_game') {
     state = finishGame(state, config);
   }
@@ -101,13 +102,21 @@ function startParallel(
   return advanceDays(state, config, Math.min(config.totalDays, state.resources.day + Math.max(actionA.days, actionB.days) + 1));
 }
 
-function resolveMiniGame(input: GameState, cohortId: string, mode: 'manual' | 'auto', processed?: number): GameState {
+function resolveMiniGame(input: GameState, config: GameConfig, cohortId: string, mode: 'manual' | 'auto', processed?: number): GameState {
   const state = structuredClone(input);
-  const cohort = state.cohorts.find((item) => item.id === cohortId);
-  if (!cohort) throw new Error(`Unknown cohort: ${cohortId}`);
-  const selected = mode === 'auto' ? Math.min(cohort.activated, 15) : Math.min(cohort.activated, Math.max(0, processed ?? 0));
-  cohort.processed = selected;
-  cohort.unprocessedWarm = Math.max(0, cohort.activated - selected);
+  const cohortIndex = state.cohorts.findIndex((item) => item.id === cohortId);
+  if (cohortIndex === -1) throw new Error(`Unknown cohort: ${cohortId}`);
+  
+  if (mode === 'auto') {
+    const capacity = (state.player.superpowers.includes('energy') ? 25 : 15) * 1.0; 
+    state.cohorts[cohortIndex] = applyProcessing(state, config, state.cohorts[cohortIndex], 'manual', capacity);
+  } else {
+    state.cohorts[cohortIndex] = applyProcessing(state, config, state.cohorts[cohortIndex], 'manual', processed);
+    if (processed && processed > 0) {
+      state.resources.energy = Math.max(0, state.resources.energy - processed * 0.3); // 0.3 energy per response
+    }
+  }
+  
   state.metrics.miniGameCount += 1;
   recalculateMetrics(state);
   return state;

@@ -106,6 +106,7 @@
     { "id": "quit_job", "enabled": true, "title": "Уйти с постоянной работы", "price": 300000 },
     { "id": "stop_referrals", "enabled": true, "title": "Перестать зависеть от сарафана", "price": 200000 },
     { "id": "hire_assistant", "enabled": true, "title": "Нанять ассистента", "price": 150000 },
+    { "id": "first_launch", "enabled": true, "title": "Запустить первый поток", "price": 100000 },
     { "id": "income_300k", "enabled": true, "title": "Выйти на 300 000 ₽ в месяц", "price": 300000 },
     { "id": "stop_manual_sales", "enabled": true, "title": "Перестать продавать вручную каждого", "price": 200000 }
   ],

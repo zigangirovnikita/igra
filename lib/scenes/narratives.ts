@@ -45,14 +45,18 @@ function familyLegend(draft: SetupDraft): string[] {
   ];
 }
 
-function beachReflection(draft: SetupDraft): string[] {
-  const { name, productType, productPrice, dreams } = draft;
-  const productWord = productTypeWord(productType, draft.gender);
-  const goal = dreams.length > 0 ? `на это мне нужно примерно ${rub(draft.dreams.length * 250_000)}` : 'хочется наконец заработать на свои мечты';
+function beachReflection(state: GameState): string[] {
+  const { name, productType, productPrice } = state.player;
+  const gender = state.player.avatarGender;
+  const productWord = productTypeWord(productType, gender);
+  const goalText = state.targets.personalGoal > 0 
+    ? `на это мне нужно примерно ${rub(state.targets.personalGoal)}` 
+    : 'хочется наконец заработать на свои мечты';
+  
   return [
     `Вы решили поехать к морю — подумать.`,
     `«Итак. У меня есть месяц, 100 000 ₽ и идея продавать ${productWord} за ${rub(productPrice)}.`,
-    `Если получится сделать хотя бы несколько продаж, ${goal}`,
+    `Если получится сделать хотя бы несколько продаж, ${goalText}.`,
     `Хорошо. Надо решить, с чего начать.»`,
   ];
 }

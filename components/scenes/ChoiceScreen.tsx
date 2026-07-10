@@ -31,7 +31,7 @@ export function ChoiceScreen({ scene, onChoice, busy }: Props) {
                 <span className="choice-icon" aria-hidden="true">{option.icon}</span>
                 <span className="choice-content">
                   <span className="choice-title">{option.title}</span>
-                  <span className="choice-desc">{option.desc || option.description}</span>
+                  <span className="choice-desc">{option.description}</span>
                   {(option.costLabel || option.daysLabel || option.energyLabel) && (
                     <span className="choice-tags">
                       {option.costLabel && <span className="choice-tag choice-tag--cost">{option.costLabel}</span>}

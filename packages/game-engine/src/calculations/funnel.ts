@@ -3,56 +3,103 @@ import { keyedRandomMultiplier, stochasticRound } from '../random/keyed';
 import { clamp } from '../state/invariants';
 import { baseSaleRate, demandMultiplier, lowEnergyManualMultiplier, nurtureMultiplier, processingQuality, saleModifier } from './modifiers';
 
-export function processCohort(state: GameState, config: GameConfig, cohort: LeadCohort): LeadCohort {
+export function applyEntry(state: GameState, config: GameConfig, cohort: LeadCohort): LeadCohort {
   if (cohort.sourceType === 'webinar') {
     return processWebinar(state, config, cohort);
   }
   const next = { ...cohort };
   const route = next.routeSnapshot;
   const entryRate = route.entry === 'direct_messages' ? 1 : route.entry === 'website' ? 0.6 : 0.7;
-  next.activated = next.responses * entryRate;
+  next.activated = stochasticRound(next.responses * entryRate, `${state.seed}|${next.id}|activated`);
+  next.unprocessedWarm = next.activated;
 
-  const processingRate = route.processing === 'simple_bot' ? 0.8 : route.processing === 'ai_bot' ? 0.99 : route.processing === 'manager' ? 0.95 : 1;
-  if (route.processing === 'manual') {
-    const capacity = (state.player.superpowers.includes('energy') ? 25 : 15) * lowEnergyManualMultiplier(state);
-    next.processed = Math.min(next.activated, capacity);
-  } else {
-    next.processed = next.activated * processingRate;
+  // Auto-process bots immediately if configured
+  if (route.processing !== 'manual') {
+    return applyProcessing(state, config, next, 'auto');
   }
-  next.unprocessedWarm = Math.max(0, next.activated - next.processed);
+  return next;
+}
 
+export function applyProcessing(
+  state: GameState, 
+  config: GameConfig, 
+  cohort: LeadCohort, 
+  mode: 'auto' | 'manual', 
+  manualAmount?: number
+): LeadCohort {
+  if (cohort.unprocessedWarm <= 0) return cohort;
+  const next = { ...cohort };
+  const route = next.routeSnapshot;
+  
+  let toProcess = 0;
+  if (mode === 'auto') {
+    toProcess = next.unprocessedWarm;
+  } else {
+    toProcess = Math.min(next.unprocessedWarm, manualAmount ?? 0);
+  }
+  
+  const processingRate = route.processing === 'simple_bot' ? 0.8 : route.processing === 'ai_bot' ? 0.99 : route.processing === 'manager' ? 0.95 : 1;
+  
+  const successfullyProcessed = stochasticRound(toProcess * processingRate, `${state.seed}|${next.id}|processed_${state.resources.day}`);
+  
+  next.unprocessedWarm = Math.max(0, next.unprocessedWarm - toProcess);
+  next.processed += successfullyProcessed;
+  
   const applicationRate = clamp(
     0.075 *
       nurtureMultiplier(route.nurture) *
       processingQuality(route.processing) *
       demandMultiplier(state) *
-      keyedRandomMultiplier(state.seed, config, next.id, 'application'),
+      keyedRandomMultiplier(state.seed, config, next.id, `app_${state.resources.day}`),
     0,
     0.45
   );
-  next.applications = next.processed * applicationRate;
-  applySales(state, config, next, route.saleMethod);
-  return applyCapacity(state, config, next);
+  
+  const newApplications = stochasticRound(successfullyProcessed * applicationRate, `${state.seed}|${next.id}|apps_${state.resources.day}`);
+  next.applications += newApplications;
+  next.unprocessedApplications += newApplications;
+  
+  // Auto-apply sales if method is automatic
+  if (route.saleMethod !== 'manual_chat' && route.saleMethod !== 'call') {
+    return applySales(state, config, next, route.saleMethod, newApplications);
+  }
+  
+  return next;
 }
 
-export function applySales(state: GameState, config: GameConfig, cohort: LeadCohort, method: SaleMethod): void {
+export function applySales(
+  state: GameState, 
+  config: GameConfig, 
+  cohort: LeadCohort, 
+  method: SaleMethod, 
+  applicationsToProcess: number
+): LeadCohort {
+  if (applicationsToProcess <= 0) return cohort;
+  const next = { ...cohort };
   const rate = clamp(
     baseSaleRate(state.player.productPrice, method) *
       saleModifier(state, method) *
-      keyedRandomMultiplier(state.seed, config, cohort.id, `sale_${method}`),
+      keyedRandomMultiplier(state.seed, config, cohort.id, `sale_${method}_${state.resources.day}`),
     0,
     0.6
   );
+  
+  next.unprocessedApplications = Math.max(0, next.unprocessedApplications - applicationsToProcess);
+
   if (method === 'call') {
-    cohort.bookedCalls = cohort.applications * 0.75;
-    cohort.heldCalls = cohort.bookedCalls * 0.75;
-    cohort.sales = stochasticRound(cohort.heldCalls * rate, `${state.seed}|${cohort.id}|round_call_sales`);
-    cohort.considering = Math.max(0, cohort.heldCalls - cohort.sales) * 0.35;
+    const booked = stochasticRound(applicationsToProcess * 0.75, `${state.seed}|${next.id}|booked_${state.resources.day}`);
+    const held = stochasticRound(booked * 0.75, `${state.seed}|${next.id}|held_${state.resources.day}`);
+    next.bookedCalls += booked;
+    next.heldCalls += held;
+    const sales = stochasticRound(held * rate, `${state.seed}|${next.id}|round_call_sales_${state.resources.day}`);
+    next.sales += sales;
+    next.considering += Math.max(0, held - sales) * 0.35;
   } else {
-    const eligible = method === 'manual_chat' ? cohort.processed : cohort.applications;
-    cohort.sales = stochasticRound(eligible * rate, `${state.seed}|${cohort.id}|round_${method}_sales`);
-    cohort.considering = Math.max(0, eligible - cohort.sales) * 0.35;
+    const sales = stochasticRound(applicationsToProcess * rate, `${state.seed}|${next.id}|round_${method}_sales_${state.resources.day}`);
+    next.sales += sales;
+    next.considering += Math.max(0, applicationsToProcess - sales) * 0.35;
   }
+  return applyCapacity(state, config, next);
 }
 
 export function applyFollowup(state: GameState, config: GameConfig, cohort: LeadCohort): LeadCohort {
@@ -83,7 +130,9 @@ function processWebinar(state: GameState, config: GameConfig, cohort: LeadCohort
   const remainingAttendees = Math.max(0, attendees - directSales);
   next.activated = registrations;
   next.processed = attendees;
-  next.applications = remainingAttendees * 0.2 * keyedRandomMultiplier(state.seed, config, next.id, 'webinar_application');
+  const newApplications = stochasticRound(remainingAttendees * 0.2 * keyedRandomMultiplier(state.seed, config, next.id, 'webinar_application'), `${state.seed}|${next.id}|webinar_app`);
+  next.applications = newApplications;
+  next.unprocessedApplications = newApplications;
   next.sales = directSales;
   next.considering = Math.max(0, remainingAttendees - next.applications) * 0.35;
   return applyCapacity(state, config, next);

@@ -21,7 +21,7 @@ const bottleneckLabels: Record<string, string> = {
 };
 
 export function DiagnosisScreen({ scene, onCta, onRestart }: Props) {
-  const { diagnostics: diag, metrics, productPrice, personalGoal, targetRevenue, dreamsMet } = scene;
+  const { diagnostics: diag, metrics, productPrice, personalGoal, targetRevenue, dreamsMet, resources } = scene;
 
   const topBottleneck = diag.bottlenecks[0];
   const profit = diag.financials.launchProfit;
@@ -86,28 +86,69 @@ export function DiagnosisScreen({ scene, onCta, onRestart }: Props) {
           </div>
         )}
 
-        {/* Financials */}
+        {/* Financials & Resources */}
         <div className="financials-grid">
           <div className="financial-card">
             <span className="financial-label">Выручка</span>
             <span className="financial-value">{rub(diag.financials.revenue)}</span>
           </div>
           <div className="financial-card">
-            <span className="financial-label">Расходы</span>
-            <span className="financial-value financial-value--down">{rub(diag.financials.expenses)}</span>
+            <span className="financial-label">Остаток банка</span>
+            <span className="financial-value">{rub(diag.financials.bankRemaining)}</span>
           </div>
-          <div className={`financial-card financial-card--wide`}>
-            <span className="financial-label">Прибыль</span>
-            <span className={`financial-value ${profit >= 0 ? 'financial-value--up' : 'financial-value--down'}`}>
-              {rub(profit)}
-            </span>
+          <div className="financial-card">
+            <span className="financial-label">Доступные деньги</span>
+            <span className="financial-value financial-value--up">{rub(diag.financials.totalLiquidity)}</span>
+          </div>
+          <div className="financial-card">
+            <span className="financial-label">Энергия</span>
+            <span className="financial-value">{Math.round(resources.energy)}%</span>
+          </div>
+          <div className="financial-card">
+            <span className="financial-label">Потрачено дней</span>
+            <span className="financial-value">{resources.day}</span>
           </div>
         </div>
 
-        {/* Personal goal */}
-        <div className={`dream-status${dreamsMet ? ' dream-status--met' : ' dream-status--missed'}`}>
-          {dreamsMet ? '🎯 Личная цель достигнута!' : `📍 До личной цели не хватило ${rub(personalGoal - diag.financials.revenue)}`}
+        {/* Goals */}
+        <div className={`dream-status${metrics.sales >= targetRevenue / productPrice ? ' dream-status--met' : ' dream-status--missed'}`}>
+          {metrics.sales >= targetRevenue / productPrice ? '💼 Бизнес-цель выполнена!' : `📈 До бизнес-цели не хватило ${Math.ceil(targetRevenue / productPrice - metrics.sales)} продаж`}
         </div>
+
+        <div className={`dream-status${dreamsMet ? ' dream-status--met' : ' dream-status--missed'}`}>
+          {dreamsMet ? '🎯 Личная цель достигнута! Деньги на мечту есть.' : `📍 До личной цели не хватило ${rub(personalGoal - diag.financials.revenue)}`}
+        </div>
+
+        {/* Decisions and Mistakes */}
+        <div className="insights-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginTop: '1rem' }}>
+          <div className="insight-card">
+            <h3 style={{ fontSize: '1rem', marginBottom: '0.5rem', color: '#16a34a' }}>✅ Сильные решения</h3>
+            <ul style={{ paddingLeft: '1rem', margin: 0, fontSize: '0.9rem' }}>
+              {diag.strongDecisions.length > 0 
+                ? diag.strongDecisions.map((d, i) => <li key={i}>{d}</li>)
+                : <li>Особых прорывов не было</li>}
+            </ul>
+          </div>
+          <div className="insight-card">
+            <h3 style={{ fontSize: '1rem', marginBottom: '0.5rem', color: '#dc2626' }}>❌ Главные ошибки</h3>
+            <ul style={{ paddingLeft: '1rem', margin: 0, fontSize: '0.9rem' }}>
+              {diag.counterfactuals.length > 0 
+                ? diag.counterfactuals.map((c, i) => <li key={i}>{c.change}</li>)
+                : <li>Грубых ошибок не найдено</li>}
+            </ul>
+          </div>
+        </div>
+        
+        {/* Lost Leads info */}
+        {metrics.expectedLostRevenue > 0 && (
+          <div className="bottleneck-box" style={{ marginTop: '1rem', fontSize: '0.9rem' }}>
+            <span className="bottleneck-icon">💸</span>
+            <div>
+              <strong>Потерянные клиенты</strong>
+              <p>Вы не смогли обработать часть лидов. Упущено выручки примерно на {rub(metrics.expectedLostRevenue)}</p>
+            </div>
+          </div>
+        )}
 
         {/* CTA */}
         <div className="scene-btn-row">

@@ -5,7 +5,7 @@
  */
 
 import type { ChoiceOption, ChoiceScene, MetricDelta, MetricsScene, NarrativeScene, ResultScene, Scene } from './types';
-import type { ActionConfig, GameConfig, GameState } from '@/packages/game-engine/src';
+import { getActionAvailability, type ActionConfig, type GameConfig, type GameState } from '@/packages/game-engine/src';
 import {
   beachReflection,
   days,
@@ -25,7 +25,7 @@ export function buildInitialGameScenes(state: GameState, config: GameConfig): Sc
     {
       type: 'narrative',
       image: 'character_thinking',
-      lines: beachReflection(state.player as unknown as import('./types').SetupDraft),
+      lines: beachReflection(state),
     },
     buildMainChoiceScene(state, config),
   ];
@@ -121,7 +121,7 @@ export function buildPostActionScenes(
 // ─── Main choice scene ────────────────────────────────────────────────────────
 
 export function buildMainChoiceScene(state: GameState, config: GameConfig, earlyFinish = false): ChoiceScene {
-  const available = config.actions.filter((a) => a.enabled && isActionAvailableForChoice(state, a));
+  const available = config.actions.filter((a) => a.enabled && isActionAvailableForChoice(state, a, config));
   const phase = detectPhase(state);
   const options = buildChoiceOptions(state, available, phase, config);
 
@@ -133,15 +133,13 @@ export function buildMainChoiceScene(state: GameState, config: GameConfig, early
     mixed: `У вас ${state.resources.day}/30 дней. Что делаете дальше?`,
   };
 
-  const baseOptions = options.slice(0, 5);
-  if (earlyFinish) {
-    baseOptions.push({
-      id: '__finish__',
-      icon: '🏁',
-      title: 'Завершить и посмотреть итоги',
-      description: 'Цель достигнута. Посмотрите финальный разбор запуска.',
-    });
-  }
+  const baseOptions = options;
+  baseOptions.push({
+    id: '__finish__',
+    icon: '🏁',
+    title: earlyFinish ? 'Завершить и посмотреть итоги' : 'Завершить запуск досрочно',
+    description: earlyFinish ? 'Цель достигнута. Посмотрите финальный разбор запуска.' : 'Остановить запуск и перейти к итогам.',
+  });
 
   return {
     type: 'choice',
@@ -204,7 +202,7 @@ function buildChoiceOptions(
     }
   }
 
-  return filtered.slice(0, 6).map((action) => actionToChoice(state, action));
+  return filtered.map((action) => actionToChoice(state, action));
 }
 
 function actionToChoice(state: GameState, action: ActionConfig): ChoiceOption {
@@ -304,6 +302,7 @@ export function buildFinalScenes(state: GameState, config: GameConfig): Scene[] 
     personalGoal: state.targets.personalGoal,
     targetRevenue: state.targets.targetRevenue,
     dreamsMet: state.metrics.revenue >= state.targets.personalGoal,
+    resources: { bank: state.resources.bank, energy: state.resources.energy, day: state.resources.day },
   });
 
   scenes.push({
@@ -318,10 +317,15 @@ export function buildFinalScenes(state: GameState, config: GameConfig): Scene[] 
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function isActionAvailableForChoice(state: GameState, action: ActionConfig): boolean {
-  // Simplified availability — full check is on the server
-  if (action.repeatPolicy === 'never' && state.flags[action.id]) return false;
-  if (action.cost > state.resources.bank) return true; // show but disable
+function isActionAvailableForChoice(state: GameState, action: ActionConfig, config: GameConfig): boolean {
+  const availability = getActionAvailability(state, action, config);
+  if (!availability.available) {
+    // Show (but disable later) if the only reason is lack of resources
+    if (availability.reason.startsWith('Не хватает') || availability.reason.includes('энергии')) {
+      return true;
+    }
+    return false;
+  }
   return true;
 }
 

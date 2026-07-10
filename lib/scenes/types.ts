@@ -109,6 +109,7 @@ export type DiagnosisScene = {
   personalGoal: number;
   targetRevenue: number;
   dreamsMet: boolean;
+  resources: { bank: number; energy: number; day: number };
 };
 
 export type CtaScene = {

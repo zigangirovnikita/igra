@@ -38,6 +38,7 @@ export function createContentCohort(
     sales: 0,
     considering: 0,
     unprocessedWarm: 0,
+    unprocessedApplications: 0,
     lost: 0,
     capacityLostLeads: 0,
     temperature: 1,

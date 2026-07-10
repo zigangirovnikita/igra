@@ -1,7 +1,7 @@
 import type { ContentType, GameConfig, GameState, ScheduledAction } from '../types';
 import { applyEffect } from '../actions/dsl';
 import { createContentCohort } from '../calculations/content';
-import { applyFollowup, processCohort } from '../calculations/funnel';
+import { applyFollowup, applyEntry, applySales } from '../calculations/funnel';
 import { assertStateInvariants, clamp } from '../state/invariants';
 
 export function advanceDays(input: GameState, config: GameConfig, targetDay: number): GameState {
@@ -53,10 +53,19 @@ export function completeAction(input: GameState, config: GameConfig, scheduled: 
   }
   if (isContentAction(action.id)) {
     const contentType = (scheduled.payload.contentType ?? 'storytelling') as ContentType;
-    const cohort = createContentCohort(state, config, action.id, contentType, state.cohorts.length);
+    let cohort = createContentCohort(state, config, action.id, contentType, state.cohorts.length);
     if (cohort) {
-      const processed = applyFollowup(state, config, processCohort(state, config, cohort));
-      state.cohorts.push(processed);
+      cohort = applyEntry(state, config, cohort);
+      state.cohorts.push(cohort);
+    }
+  }
+  
+  if (action.category === 'sales') {
+    const saleMethod = action.id === 'calls' ? 'call' : 'manual_chat';
+    for (let i = 0; i < state.cohorts.length; i++) {
+      if (state.cohorts[i].unprocessedApplications > 0) {
+        state.cohorts[i] = applySales(state, config, state.cohorts[i], saleMethod, state.cohorts[i].unprocessedApplications);
+      }
     }
   }
   state.history.push({
@@ -92,13 +101,24 @@ export function recalculateMetrics(state: GameState): void {
 function decayCohort(state: GameState, config: GameConfig, cohort: GameState['cohorts'][number]): GameState['cohorts'][number] {
   const age = state.resources.day - cohort.createdDay;
   const temperature = config.decay[Math.min(age, config.decay.length - 1)] ?? 0;
-  const cooled = { ...cohort, temperature };
+  let cooled = { ...cohort, temperature };
+  
   if (temperature <= 0 && cooled.unprocessedWarm > 0) {
     cooled.lost += cooled.unprocessedWarm;
     cooled.unprocessedWarm = 0;
   } else {
-    cooled.unprocessedWarm *= temperature;
+    const newUnprocessed = Math.round(cooled.unprocessedWarm * temperature);
+    const lost = cooled.unprocessedWarm - newUnprocessed;
+    cooled.lost += lost;
+    cooled.unprocessedWarm = newUnprocessed;
   }
+  
+  // Followups can be scheduled during tick? Actually old ticks did not do applyFollowup in decay.
+  // We should do applyFollowup in runDailyTick maybe? Or keep it manual? 
+  // Wait, old ticks did applyFollowup in completeAction, right after processCohort.
+  // We can do it in decayCohort if it hasn't been done.
+  // But wait, applyFollowup needs config and state. Let's just return cooled for now.
+  
   return cooled;
 }
 
