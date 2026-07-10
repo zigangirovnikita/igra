@@ -8,6 +8,7 @@ The source of truth is `launch-game-tz.md`. If examples in older product notes c
 
 ## Working rules
 
+- **MANDATORY**: Before starting any architectural or UI work, read `docs/lessons_learned.md` to understand past decisions, corrected misinterpretations, and architectural fixes to avoid repeating mistakes.
 - Implement milestones 0–10 in the order defined by the spec.
 - Do not start final visual polish before the pure game engine, fixtures, and balance simulator pass.
 - Keep `packages/game-engine` framework-independent and deterministic.
