@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextResponse } from 'next/server';
 import { finishGame } from '@/packages/game-engine/src';
 import { explainWithAi } from '@/lib/ai/report';

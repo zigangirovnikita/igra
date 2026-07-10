@@ -4,8 +4,9 @@
  * tapped through on NarrativeScreen.
  */
 
-import type { FamilyType, SetupDraft } from './types';
-import type { GameState } from '@/packages/game-engine/src';
+/* eslint-disable @typescript-eslint/no-unused-vars */
+import type { SetupDraft } from './types';
+import type { GameState, GameConfig } from '@/packages/game-engine/src';
 
 const rub = (n: number) =>
   n.toLocaleString('ru-RU', { style: 'currency', currency: 'RUB', maximumFractionDigits: 0 });

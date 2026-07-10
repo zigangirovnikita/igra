@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import type { Diagnostics, GameState, SetupInput } from '@/packages/game-engine/src';
 
 import { prisma } from '../db/client';

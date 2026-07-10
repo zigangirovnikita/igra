@@ -10,7 +10,9 @@ export default defineConfig({
   webServer: {
     command: './node_modules/.bin/next dev',
     url: 'http://127.0.0.1:3000',
-    reuseExistingServer: true,
+    reuseExistingServer: !process.env.CI,
+    stdout: 'pipe',
+    stderr: 'pipe',
     timeout: 120_000
   },
   projects: [

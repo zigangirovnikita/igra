@@ -5,7 +5,7 @@ import { assertStateInvariants } from './invariants';
 export function createInitialState(setup: SetupInput, config: GameConfig, seed: string): GameState {
   const state: GameState = {
     schemaVersion: 1,
-    sessionId: `session_${seed.slice(0, 12)}`,
+    sessionId: seed,
     configVersion: config.version,
     seed,
     stateVersion: 0,

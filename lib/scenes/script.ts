@@ -4,8 +4,9 @@
  * Чистая функция, без React, без API-вызовов.
  */
 
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import type { ChoiceOption, ChoiceScene, MetricDelta, MetricsScene, NarrativeScene, ResultScene, Scene } from './types';
-import { getActionAvailability, type ActionConfig, type GameConfig, type GameState } from '@/packages/game-engine/src';
+import { getActionAvailability, type ActionConfig, type GameState, type GameConfig } from '@/packages/game-engine/src';
 import {
   beachReflection,
   days,
