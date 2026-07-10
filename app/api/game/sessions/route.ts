@@ -15,7 +15,7 @@ export async function POST(request: Request) {
   const seed = crypto.randomUUID();
   const state = createInitialState(parsed.data, config, seed);
   const now = new Date().toISOString();
-  saveSession({
+  await saveSession({
     id: state.sessionId,
     state,
     setup: parsed.data,

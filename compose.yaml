@@ -22,6 +22,8 @@ services:
         condition: service_healthy
     env_file:
       - .env.example
+    environment:
+      - DATABASE_URL=postgresql://launch_game:launch_game@db:5432/launch_game
     ports:
       - "3000:3000"
 

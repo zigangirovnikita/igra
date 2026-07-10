@@ -1,5 +1,7 @@
 import type { Diagnostics, GameState, SetupInput } from '@/packages/game-engine/src';
 
+import { prisma } from '../db/client';
+
 export type StoredSession = {
   id: string;
   state: GameState;
@@ -19,32 +21,87 @@ export type StoredLead = {
   createdAt: string;
 };
 
-type Store = {
-  sessions: Map<string, StoredSession>;
-  leads: Map<string, StoredLead>;
-};
-
-const globalStore = globalThis as typeof globalThis & { launchGameStore?: Store };
-
-export function getStore(): Store {
-  globalStore.launchGameStore ??= {
-    sessions: new Map<string, StoredSession>(),
-    leads: new Map<string, StoredLead>()
-  };
-  return globalStore.launchGameStore;
-}
-
-export function saveSession(session: StoredSession): StoredSession {
-  session.updatedAt = new Date().toISOString();
-  getStore().sessions.set(session.id, session);
+export async function saveSession(session: StoredSession): Promise<StoredSession> {
+  const updatedDate = new Date();
+  
+  await prisma.gameSession.upsert({
+    where: { id: session.id },
+    update: {
+      stateVersion: { increment: 1 },
+      currentState: session.state as any,
+      updatedAt: updatedDate,
+      status: 'playing',
+    },
+    create: {
+      id: session.id,
+      anonymousId: session.id, // using session ID as anonymous ID for now
+      status: 'playing',
+      configVersion: session.state.configVersion,
+      seedEncrypted: null,
+      stateVersion: 1,
+      setup: session.setup as any,
+      currentState: session.state as any,
+      createdAt: new Date(session.createdAt),
+      updatedAt: updatedDate,
+    }
+  });
+  
+  session.updatedAt = updatedDate.toISOString();
   return session;
 }
 
-export function getSession(id: string): StoredSession | null {
-  return getStore().sessions.get(id) ?? null;
+export async function getSession(id: string): Promise<StoredSession | null> {
+  const record = await prisma.gameSession.findUnique({
+    where: { id }
+  });
+  if (!record) return null;
+
+  let result: Diagnostics | null = null;
+  const resultRecord = await prisma.gameResult.findUnique({
+    where: { sessionId: id }
+  });
+
+  if (resultRecord) {
+    result = {
+      finalStatus: resultRecord.finalStatus,
+      financials: resultRecord.financials as any,
+      strongDecisions: resultRecord.strongDecisions as any,
+      bottlenecks: resultRecord.bottlenecks as any,
+      counterfactuals: resultRecord.counterfactuals as any,
+    };
+  }
+
+  return {
+    id: record.id,
+    state: record.currentState as unknown as GameState,
+    setup: record.setup as unknown as SetupInput,
+    result,
+    createdAt: record.createdAt.toISOString(),
+    updatedAt: record.updatedAt.toISOString(),
+  };
 }
 
-export function saveLead(lead: StoredLead): StoredLead {
-  getStore().leads.set(lead.id, lead);
+export async function saveLead(lead: StoredLead): Promise<StoredLead> {
+  await prisma.lead.upsert({
+    where: { id: lead.id },
+    update: {
+      deliveryStatus: lead.status,
+      deliveryAttempts: lead.attempts,
+      webhookLastError: lead.lastError,
+    },
+    create: {
+      id: lead.id,
+      sessionId: lead.sessionId,
+      name: (lead.payload.name as string) || 'Lead',
+      contactEncrypted: (lead.payload.contact as string) || '',
+      product: (lead.payload.product as string) || '',
+      productPrice: (lead.payload.price as number) || 0,
+      deliveryStatus: lead.status,
+      deliveryAttempts: lead.attempts,
+      webhookLastError: lead.lastError,
+      privacyConsentAt: new Date(lead.createdAt),
+      createdAt: new Date(lead.createdAt),
+    }
+  });
   return lead;
 }

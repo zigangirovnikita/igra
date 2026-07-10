@@ -13,7 +13,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'spam_rejected' }, { status: 400 });
   }
 
-  const session = getSession(parsed.data.sessionId);
+  const session = await getSession(parsed.data.sessionId);
   if (!session || session.state.status !== 'finished') {
     return NextResponse.json({ error: 'finished_session_required' }, { status: 409 });
   }
@@ -33,7 +33,7 @@ export async function POST(request: Request) {
     metrics: session.state.metrics,
     superpowers: session.state.player.superpowers
   };
-  const lead = saveLead({
+  const lead = await saveLead({
     id: leadId,
     sessionId: parsed.data.sessionId,
     status: 'pending',
@@ -48,7 +48,7 @@ export async function POST(request: Request) {
   if (!webhookUrl || !webhookSecret) {
     lead.status = 'delivery_failed';
     lead.lastError = 'LEAD_WEBHOOK_URL or LEAD_WEBHOOK_SECRET is not configured';
-    saveLead(lead);
+    await saveLead(lead);
     return NextResponse.json({ error: 'webhook_not_configured', leadId }, { status: 503 });
   }
 
@@ -65,12 +65,12 @@ export async function POST(request: Request) {
     });
     if (!response.ok) throw new Error(`Webhook status ${response.status}`);
     lead.status = 'delivered';
-    saveLead(lead);
+    await saveLead(lead);
     return NextResponse.json({ ok: true, leadId });
   } catch (error) {
     lead.status = 'delivery_failed';
     lead.lastError = error instanceof Error ? error.message : 'unknown';
-    saveLead(lead);
+    await saveLead(lead);
     return NextResponse.json({ error: 'webhook_delivery_failed', leadId }, { status: 502 });
   }
 }
