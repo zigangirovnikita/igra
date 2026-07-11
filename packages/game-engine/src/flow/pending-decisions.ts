@@ -1,11 +1,23 @@
-import type { GameState, GameConfig, ProcessingType, SaleMethod } from '../types';
-import { applyProcessing, applySales, applyFollowup } from '../calculations/funnel';
+import type { GameConfig, GameState, SaleMethod } from '../types';
+import { applyFollowup, applyProcessing, applySales } from '../calculations/funnel';
 import { recalculateMetrics } from '../time/ticks';
 import { generateMiniGameSession } from '../calculations/minigame';
 
+const MINI_GAME_TRIGGER = 30;
+const MINI_GAME_LIMIT = 2;
+const MANUAL_MESSAGE_ENERGY = 0.3;
+const MANUAL_SALE_ENERGY = 0.5;
+
 export function deriveNextPendingDecision(state: GameState): NonNullable<GameState['pendingDecision']> | null {
   for (const cohort of state.cohorts) {
-    if (cohort.unprocessedInbound > 5 && cohort.routeSnapshot.processing === 'manual' && cohort.inboundDecision === 'pending' && state.metrics.miniGameCount < 1) {
+    const miniGameSeen = Boolean(state.flags[`mini_game_seen:${cohort.id}`]);
+    if (
+      cohort.unprocessedInbound >= MINI_GAME_TRIGGER &&
+      cohort.routeSnapshot.processing === 'manual' &&
+      cohort.inboundDecision === 'pending' &&
+      state.metrics.miniGameCount < MINI_GAME_LIMIT &&
+      !miniGameSeen
+    ) {
       return { type: 'mini_game', cohortId: cohort.id, returnStep: 'daily_intro' };
     }
     if (cohort.unprocessedInbound > 0 && cohort.routeSnapshot.processing === 'manual' && cohort.inboundDecision === 'pending') {
@@ -30,11 +42,14 @@ export function deriveNextPendingDecision(state: GameState): NonNullable<GameSta
   if (!state.flow.goalPromptHandled && state.targets.targetRevenue > 0 && state.metrics.revenue >= state.targets.targetRevenue) {
     return { type: 'goal_reached', returnStep: 'daily_intro' };
   }
-
   return null;
 }
 
-export function resolvePendingDecision(state: GameState, config: GameConfig, payload: { cohortId?: string, action: string, amount?: number }): GameState {
+export function resolvePendingDecision(
+  state: GameState,
+  config: GameConfig,
+  payload: { cohortId?: string; action: string; amount?: number },
+): GameState {
   const currentDecision = state.pendingDecision;
   if (!currentDecision) throw new Error('No pending decision');
 
@@ -46,11 +61,7 @@ export function resolvePendingDecision(state: GameState, config: GameConfig, pay
       state.pendingDecision = null;
     } else {
       state.pendingDecision = null;
-      if (state.flow.backStep) {
-        state.flow.step = state.flow.backStep;
-      } else {
-        state.flow.step = 'daily_intent';
-      }
+      state.flow.step = state.flow.backStep ?? 'daily_intent';
     }
     return state;
   }
@@ -80,8 +91,6 @@ export function resolvePendingDecision(state: GameState, config: GameConfig, pay
       state.resources.bank -= 5_000;
       state.metrics.expenses += 5_000;
       state.resources.energy = 10;
-    } else if (payload.action === 'push_through') {
-      state.resources.energy = 1;
     } else if (payload.action === 'confirm') {
       state.flow.stage = 'final';
       state.endingReason = 'resource_finished';
@@ -113,79 +122,75 @@ export function resolvePendingDecision(state: GameState, config: GameConfig, pay
   }
 
   if (!payload.cohortId) throw new Error('cohortId required for this decision');
-
-  const cohortIndex = state.cohorts.findIndex(c => c.id === payload.cohortId);
+  const cohortIndex = state.cohorts.findIndex((cohort) => cohort.id === payload.cohortId);
   if (cohortIndex === -1) throw new Error('Cohort not found');
   const cohort = state.cohorts[cohortIndex];
 
   if (currentDecision.type === 'inbound') {
     if (['process', 'process_all', 'process_available', 'process_selected'].includes(payload.action)) {
-      const amount = payload.action === 'process_all'
+      const energyCapacity = Math.max(0, Math.floor(state.resources.energy / MANUAL_MESSAGE_ENERGY));
+      const requested = payload.action === 'process_all'
         ? cohort.unprocessedInbound
         : payload.action === 'process_available'
-          ? Math.min(cohort.unprocessedInbound, Math.max(5, Math.floor(state.resources.energy / 0.3)))
-          : payload.amount || Math.min(cohort.unprocessedInbound, 15);
+          ? energyCapacity
+          : payload.amount ?? Math.min(cohort.unprocessedInbound, 15);
+      const amount = Math.min(cohort.unprocessedInbound, energyCapacity, Math.max(0, Math.floor(requested)));
+      if (amount <= 0) throw new Error('Not enough energy to process inbound');
       state.cohorts[cohortIndex] = applyProcessing(state, config, cohort, 'manual', amount);
-      state.resources.energy = Math.max(0, state.resources.energy - amount * 0.3);
+      state.resources.energy = Math.max(0, state.resources.energy - amount * MANUAL_MESSAGE_ENERGY);
       if (state.cohorts[cohortIndex].unprocessedInbound <= 0) state.cohorts[cohortIndex].inboundDecision = 'resolved';
     } else if (payload.action === 'connect_manager' || payload.action === 'connect_bot') {
-      const processing: ProcessingType = payload.action === 'connect_manager' ? 'manager' : 'simple_bot';
-      if (payload.action === 'connect_manager') {
-        if (state.resources.bank < 30_000) throw new Error('Not enough money to hire manager');
-        state.resources.bank -= 30_000;
-        state.metrics.expenses += 30_000;
-        state.assets.manager = 'urgent';
-      } else {
-        state.assets.simpleBot = 'urgent';
-      }
-      state.activeRoute = { ...state.activeRoute, processing };
-      state.cohorts[cohortIndex] = applyProcessing(state, config, { ...cohort, routeSnapshot: { ...cohort.routeSnapshot, processing } }, 'auto');
-      state.cohorts[cohortIndex].inboundDecision = 'resolved';
+      throw new Error('Create automation through a normal paid game action');
     } else if (payload.action === 'defer') {
-      if (cohort.deferCount >= 1) throw new Error('This cohort has already been deferred');
-      state.cohorts[cohortIndex].inboundDecision = 'deferred';
-      state.cohorts[cohortIndex].deferredUntilDay = state.resources.day + 1;
-      state.cohorts[cohortIndex].deferCount += 1;
+      deferCohort(state.cohorts[cohortIndex], state.resources.day, 'inbound');
     } else {
       state.cohorts[cohortIndex].inboundDecision = 'ignored';
       state.cohorts[cohortIndex].losses.processing += state.cohorts[cohortIndex].unprocessedInbound;
       state.cohorts[cohortIndex].unprocessedInbound = 0;
     }
   } else if (currentDecision.type === 'mini_game') {
-    if (payload.action === 'process_mini_game') {
-      const amount = payload.amount || Math.min(cohort.unprocessedInbound, 15);
-      // Mini-game bonus: slightly higher processing and application rates
-      const originalProcessing = cohort.routeSnapshot.processing;
-      cohort.routeSnapshot.processing = 'ai_bot'; // Simulate high quality processing
-      state.cohorts[cohortIndex] = applyProcessing(state, config, cohort, 'manual', amount);
-      cohort.routeSnapshot.processing = originalProcessing; // Restore
-      
-      state.resources.energy = Math.max(0, state.resources.energy - amount * 0.3);
-      if (state.cohorts[cohortIndex].unprocessedInbound <= 0) {
-        state.cohorts[cohortIndex].inboundDecision = 'resolved';
-      }
-      state.metrics.miniGameCount += 1;
-      state.miniGame = null;
-    } else if (payload.action === 'skip_mini_game') {
-      state.cohorts[cohortIndex].inboundDecision = 'ignored';
-      state.cohorts[cohortIndex].losses.processing += state.cohorts[cohortIndex].unprocessedInbound;
-      state.cohorts[cohortIndex].unprocessedInbound = 0;
-      state.metrics.miniGameCount += 1;
-      state.miniGame = null;
+    const miniGame = state.miniGame;
+    if (!miniGame || miniGame.status !== 'active' || miniGame.cohortId !== cohort.id) {
+      throw new Error('Mini-game session is not active');
     }
+    state.flags[`mini_game_seen:${cohort.id}`] = true;
+    state.metrics.miniGameCount += 1;
+
+    if (payload.action === 'process_mini_game') {
+      const beforeExpiry = Date.now() <= Date.parse(miniGame.expiresAt);
+      const energyCapacity = Math.max(0, Math.floor(state.resources.energy / MANUAL_MESSAGE_ENERGY));
+      const requested = beforeExpiry ? Math.max(0, Math.floor(payload.amount ?? 0)) : 0;
+      const amount = Math.min(requested, miniGame.messages.length, cohort.unprocessedInbound, energyCapacity);
+      if (amount > 0) {
+        state.cohorts[cohortIndex] = applyProcessing(state, config, cohort, 'manual', amount);
+        state.resources.energy = Math.max(0, state.resources.energy - amount * MANUAL_MESSAGE_ENERGY);
+      }
+    } else if (payload.action !== 'skip_mini_game') {
+      throw new Error('Invalid mini-game action');
+    }
+
+    state.miniGame = null;
+    state.cohorts[cohortIndex].inboundDecision = state.cohorts[cohortIndex].unprocessedInbound > 0 ? 'pending' : 'resolved';
   } else if (currentDecision.type === 'sales') {
     if (['process', 'sell_chat', 'sell_call', 'sell_website', 'sell_bot', 'sell_webinar'].includes(payload.action)) {
-      const amount = payload.amount || Math.min(cohort.unprocessedApplications, 10);
       const method = saleMethodForAction(payload.action, cohort.routeSnapshot.saleMethod);
-      state.activeRoute = { ...state.activeRoute, saleMethod: method };
-      state.cohorts[cohortIndex] = applySales(state, config, { ...cohort, routeSnapshot: { ...cohort.routeSnapshot, saleMethod: method } }, method, amount);
-      state.resources.energy = Math.max(0, state.resources.energy - amount * 0.5);
+      validateSaleAsset(state, method);
+      const energyCost = method === 'manual_chat' || method === 'call' ? MANUAL_SALE_ENERGY : 0;
+      const energyCapacity = energyCost > 0 ? Math.floor(state.resources.energy / energyCost) : cohort.unprocessedApplications;
+      const requested = payload.amount ?? Math.min(cohort.unprocessedApplications, 10);
+      const amount = Math.min(cohort.unprocessedApplications, Math.max(0, Math.floor(requested)), energyCapacity);
+      if (amount <= 0) throw new Error('Not enough energy to process sales');
+      state.cohorts[cohortIndex] = applySales(
+        state,
+        config,
+        { ...cohort, routeSnapshot: { ...cohort.routeSnapshot, saleMethod: method } },
+        method,
+        amount,
+      );
+      if (energyCost > 0) state.resources.energy = Math.max(0, state.resources.energy - amount * energyCost);
       if (state.cohorts[cohortIndex].unprocessedApplications <= 0) state.cohorts[cohortIndex].salesDecision = 'resolved';
     } else if (payload.action === 'defer') {
-      if (cohort.deferCount >= 1) throw new Error('This cohort has already been deferred');
-      state.cohorts[cohortIndex].salesDecision = 'deferred';
-      state.cohorts[cohortIndex].deferredUntilDay = state.resources.day + 1;
-      state.cohorts[cohortIndex].deferCount += 1;
+      deferCohort(state.cohorts[cohortIndex], state.resources.day, 'sales');
     } else {
       state.cohorts[cohortIndex].salesDecision = 'ignored';
       state.cohorts[cohortIndex].losses.sale += state.cohorts[cohortIndex].unprocessedApplications;
@@ -194,15 +199,18 @@ export function resolvePendingDecision(state: GameState, config: GameConfig, pay
   } else if (currentDecision.type === 'followup') {
     if (['process', 'followup_message', 'followup_call', 'followup_case', 'followup_discount', 'followup_bot'].includes(payload.action)) {
       const followup = payload.action === 'followup_bot' ? 'bot' : 'manual';
-      state.activeRoute = { ...state.activeRoute, followup };
-      state.cohorts[cohortIndex] = applyFollowup(state, config, { ...cohort, routeSnapshot: { ...cohort.routeSnapshot, followup } });
-      state.resources.energy = Math.max(0, state.resources.energy - 5);
+      if (followup === 'bot' && !state.assets.simpleBot && !state.assets.aiBot) {
+        throw new Error('Create a bot before automated follow-up');
+      }
+      if (followup === 'manual' && state.resources.energy < 5) throw new Error('Not enough energy for follow-up');
+      state.cohorts[cohortIndex] = applyFollowup(state, config, {
+        ...cohort,
+        routeSnapshot: { ...cohort.routeSnapshot, followup },
+      });
+      if (followup === 'manual') state.resources.energy -= 5;
       state.cohorts[cohortIndex].followupDecision = 'resolved';
     } else if (payload.action === 'defer') {
-      if (cohort.deferCount >= 1) throw new Error('This cohort has already been deferred');
-      state.cohorts[cohortIndex].followupDecision = 'deferred';
-      state.cohorts[cohortIndex].deferredUntilDay = state.resources.day + 1;
-      state.cohorts[cohortIndex].deferCount += 1;
+      deferCohort(state.cohorts[cohortIndex], state.resources.day, 'followup');
     } else {
       state.cohorts[cohortIndex].followupDecision = 'ignored';
       state.cohorts[cohortIndex].losses.followup += state.cohorts[cohortIndex].pendingFollowup;
@@ -211,24 +219,31 @@ export function resolvePendingDecision(state: GameState, config: GameConfig, pay
   }
 
   if (state.currentDayReport) {
-    state.currentDayReport.decisions.push({
-      type: currentDecision.type,
-      label: payload.action,
-    });
+    state.currentDayReport.decisions.push({ type: currentDecision.type, label: payload.action });
   }
 
   state.pendingDecision = deriveNextPendingDecision(state);
   if (state.pendingDecision?.type === 'mini_game') {
     state.miniGame = generateMiniGameSession(state, state.pendingDecision.cohortId);
   }
-
-  if (!state.pendingDecision) {
-    if (state.flow.step === 'post_action') {
-      state.flow.step = 'day_summary';
-    }
+  if (!state.pendingDecision && state.flow.step === 'post_action') {
+    state.flow.step = 'day_summary';
   }
   recalculateMetrics(state);
   return state;
+}
+
+function deferCohort(
+  cohort: GameState['cohorts'][number],
+  currentDay: number,
+  stage: 'inbound' | 'sales' | 'followup',
+): void {
+  if (cohort.deferCount >= 1) throw new Error('This cohort has already been deferred');
+  if (stage === 'inbound') cohort.inboundDecision = 'deferred';
+  if (stage === 'sales') cohort.salesDecision = 'deferred';
+  if (stage === 'followup') cohort.followupDecision = 'deferred';
+  cohort.deferredUntilDay = currentDay + 1;
+  cohort.deferCount += 1;
 }
 
 function saleMethodForAction(action: string, fallback: SaleMethod): SaleMethod {
@@ -238,4 +253,9 @@ function saleMethodForAction(action: string, fallback: SaleMethod): SaleMethod {
   if (action === 'sell_bot') return 'bot_auto';
   if (action === 'sell_webinar') return 'webinar_direct';
   return fallback;
+}
+
+function validateSaleAsset(state: GameState, method: SaleMethod): void {
+  if (method === 'website_auto' && !state.assets.website) throw new Error('Create a website before website sales');
+  if (method === 'bot_auto' && !state.assets.simpleBot && !state.assets.aiBot) throw new Error('Create a bot before bot sales');
 }
