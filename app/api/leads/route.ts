@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { leadSchema } from '@/lib/game/schemas';
-import { getSession, saveLead } from '@/lib/game/store';
+import { getSession, saveLead, type StoredLead } from '@/lib/game/store';
 import { signPayload } from '@/lib/security/hmac';
 import { globalRateLimiter } from '@/lib/api/rate-limit';
 import { hasSessionAccess, sessionAccessDenied } from '@/lib/security/session-access';
@@ -53,10 +53,10 @@ export async function POST(request: Request) {
     launchPlan: session.state.launchPlan,
   };
 
-  const lead = {
+  const lead: StoredLead = {
     id: leadId,
     sessionId: parsed.data.sessionId,
-    status: 'pending' as const,
+    status: 'pending',
     payload,
     attempts: existing?.deliveryAttempts ?? 0,
     lastError: null,
