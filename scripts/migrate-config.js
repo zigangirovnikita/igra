@@ -1,3 +1,4 @@
+/* eslint-disable */
 const fs = require('fs');
 const v1 = require('../config/game-config.v1.json');
 

@@ -5,6 +5,8 @@ export * from './DailyIntentFlow';
 export * from './ActionSelectionFlow';
 export * from './ActionConfigurationFlow';
 export * from './ActionConfirmationFlow';
+export * from './ActionProcessFlow';
+export * from './ActionResultFlow';
 export * from './PendingDecisionFlow';
 export * from './DayCompletionFlow';
 export * from './EnergyCrisisFlow';

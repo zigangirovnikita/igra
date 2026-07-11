@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { NextResponse } from 'next/server';
 import { leadSchema } from '@/lib/game/schemas';
 import { getSession, saveLead } from '@/lib/game/store';
@@ -32,7 +31,7 @@ export async function POST(request: Request) {
     marketingConsent: Boolean(parsed.data.marketingConsent),
     result: session.result,
     metrics: session.state.metrics,
-    superpowers: session.state.player.superpowers
+    launchPlan: session.state.launchPlan
   };
   const lead = await saveLead({
     id: leadId,

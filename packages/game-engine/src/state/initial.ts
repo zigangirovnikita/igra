@@ -9,7 +9,7 @@ export function createInitialState(setup: PlayerProfile, config: GameConfig, see
     seed,
     stateVersion: 0,
     appliedCommandIds: [],
-    status: 'setup',
+    status: 'active',
     player: setup,
     launchPlan: {
       productType: null,
@@ -87,7 +87,7 @@ export function createInitialState(setup: PlayerProfile, config: GameConfig, see
     flags: {},
     history: [],
     diagnostics: null,
-    
+
     pendingAction: null,
     pendingDecision: null,
     lastOutcome: null,

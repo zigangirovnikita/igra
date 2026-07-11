@@ -1,28 +1,55 @@
 import { expect, test, type Page } from '@playwright/test';
 
 async function completeOnboarding(page: Page) {
+  // 1. Setup Phase
   await page.goto('/');
   await page.getByRole('button', { name: 'Начать →' }).click();
   await page.getByRole('button', { name: '👩 Женщина' }).click();
   await page.getByPlaceholder('Например: Марина').fill('Марина');
   await page.getByRole('button', { name: 'Дальше →' }).click();
   await page.getByPlaceholder(/Психолог/).fill('Обучение вышивке');
+  await page.getByRole('button', { name: 'Начать историю →' }).click();
+
+  // 2. Intro Phase
   await page.getByRole('button', { name: 'Дальше →' }).click();
-  await page.getByRole('button', { name: /Экспертность/ }).click();
-  await page.getByRole('button', { name: /Энергия/ }).click();
+  await page.getByRole('button', { name: 'Создать продукт →' }).click();
+
+  // 3. Day 1 Phase
+  // day1_product_type
+  await page.getByRole('button', { name: 'Консультации' }).click();
   await page.getByRole('button', { name: 'Дальше →' }).click();
-  await page.getByRole('button', { name: 'Обучение в записи' }).click();
-  await page.getByPlaceholder(/обучение вышиванию/).fill('Курс вышивки крестиком');
+  // day1_product_name
+  await page.locator('input').fill('Мой продукт'); // InputScreen default placeholder is "..."
+  await page.getByRole('button', { name: 'Дальше' }).click();
+  // day1_product_price
+  await page.locator('input').fill('5000');
+  await page.getByRole('button', { name: 'Дальше' }).click();
+  // day1_sale_method
+  await page.getByRole('button', { name: 'В переписке лично' }).click();
   await page.getByRole('button', { name: 'Дальше →' }).click();
+  // day1_nurture
+  await page.getByRole('button', { name: 'Без прогрева' }).click();
   await page.getByRole('button', { name: 'Дальше →' }).click();
-  await page.getByRole('button', { name: 'Детей нет, партнёр есть' }).click();
-  await page.locator('.setup-dream-btn').first().click();
+  // day1_entry_point
+  await page.getByRole('button', { name: 'В директ' }).click();
   await page.getByRole('button', { name: 'Дальше →' }).click();
-  while (await page.locator('.setup-step--legend').count()) await page.locator('.setup-step--legend').click();
-  await page.getByRole('button', { name: '📱 + ✈️ Instagram + Telegram' }).click();
+  // day1_business_goal
+  await page.getByRole('button', { name: 'Понятно' }).click();
+  // day1_dreams
+  await page.locator('.scene-choice-btn').first().click(); // changed from setup-dream-btn to scene-choice-btn
   await page.getByRole('button', { name: 'Дальше →' }).click();
+
+  // day1 finish
+  await page.getByRole('button', { name: 'Завершить день' }).click();
+
+  // Day 2
+  await page.getByRole('button', { name: 'Дальше' }).click(); // day2_audience_intro
+  await page.getByRole('button', { name: 'Telegram' }).click(); // day2_audience_channels
   await page.getByRole('button', { name: 'Дальше →' }).click();
-  await page.getByRole('button', { name: 'Начать запуск →' }).click();
+  await page.locator('input').fill('100'); // day2_telegram_views
+  await page.getByRole('button', { name: 'Дальше' }).click();
+  await page.getByRole('button', { name: 'В бой' }).click();
+  await expect(page.getByRole('heading', { name: 'День 3' })).toBeVisible();
 }
 
 test('home and health endpoints respond', async ({ page, request }) => {
@@ -34,7 +61,6 @@ test('home and health endpoints respond', async ({ page, request }) => {
 
 test('mobile onboarding reaches initial plan with persistent HUD', async ({ page }) => {
   await completeOnboarding(page);
-  await expect(page.getByRole('heading', { name: 'Где будете брать людей?' })).toBeVisible();
   await expect(page.locator('.game-hud')).toContainText('День');
   await expect(page.locator('.game-hud')).toContainText('Банк');
   await expect(page.locator('.game-hud')).toContainText('Энергия');
@@ -45,7 +71,7 @@ test('reload offers canonical session resume', async ({ page }) => {
   await page.reload();
   await expect(page.getByRole('heading', { name: 'Продолжить запуск?' })).toBeVisible();
   await page.getByRole('button', { name: 'Продолжить' }).click();
-  await expect(page.locator('.choice-question')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'День 3' })).toBeVisible();
 });
 
 test('layout remains usable at 320px', async ({ page }) => {

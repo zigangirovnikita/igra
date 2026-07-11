@@ -8,7 +8,7 @@ type FlowProps = {
   busy: boolean;
 };
 
-export function Day2Flow({ state, config, dispatch, busy }: FlowProps) {
+export function Day2Flow({ state, config: _config, dispatch, busy }: FlowProps) {
   if (state.flow.step === 'day2_intro') {
     return (
       <NarrativeScreen
@@ -30,20 +30,37 @@ export function Day2Flow({ state, config, dispatch, busy }: FlowProps) {
           { id: 'telegram', label: 'Telegram' },
           { id: 'contacts', label: 'Телефонная книга' }
         ]}
-        onConfirm={(id) => dispatch('set_channels', { channels: [id] })}
+        isMulti={true}
+        onConfirm={(ids) => {
+          dispatch('set_channels', { channels: Array.isArray(ids) ? ids : [ids] });
+        }}
         busy={busy}
       />
     );
   }
 
   if (state.flow.step === 'day2_metrics') {
+    const fields: { id: string; label: string; type: 'number' | 'text' | 'select' }[] = [];
+    if (state.audience.channels.includes('instagram')) {
+      fields.push({ id: 'reels', label: 'Просмотры Reels', type: 'number' });
+      fields.push({ id: 'stories', label: 'Просмотры Stories', type: 'number' });
+    }
+    if (state.audience.channels.includes('telegram')) {
+      fields.push({ id: 'telegram', label: 'Просмотры Telegram', type: 'number' });
+    }
+    if (state.audience.channels.includes('contacts')) {
+      fields.push({ id: 'contacts', label: 'Количество контактов', type: 'number' });
+    }
+
+    if (fields.length === 0) {
+      // Fallback
+      fields.push({ id: 'contacts', label: 'Количество контактов', type: 'number' });
+    }
+
     return (
       <MultiInputScreen
         title="Охваты"
-        fields={[
-          { id: 'reels', label: 'Просмотры Reels', type: 'number' },
-          { id: 'stories', label: 'Просмотры Stories', type: 'number' }
-        ]}
+        fields={fields}
         buttonText="Дальше"
         onSubmit={(values) => dispatch('set_audience_metrics', values)}
         busy={busy}

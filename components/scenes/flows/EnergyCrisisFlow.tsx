@@ -8,19 +8,17 @@ type FlowProps = {
   busy: boolean;
 };
 
-export function EnergyCrisisFlow({ state, dispatch, busy }: FlowProps) {
-  const pending = state.pendingDecision;
-  
+export function EnergyCrisisFlow({ state: _state, dispatch, busy }: FlowProps) {
   // Note: if pending === goal_reached, that's not energy crisis. But let's assume this handles energy crisis for now.
-  
+
   return (
     <CrisisScreen
       title="Выгорание!"
       description="Энергия на нуле. Вы не можете продолжать работать в таком темпе."
       crisisType="energy"
-      onAction={(id) => dispatch('resolve_pending_decision', { 
-        cohortId: '', 
-        action: id 
+      onAction={(id) => dispatch('resolve_pending_decision', {
+        cohortId: '',
+        action: id
       })}
       busy={busy}
     />

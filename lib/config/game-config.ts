@@ -1,6 +1,5 @@
-// @ts-nocheck
 import { z } from 'zod';
-import rawConfig from '@/config/game-config.v1.json';
+import rawConfig from '@/config/game-config.v2.json';
 import type { GameConfig } from '@/packages/game-engine/src';
 
 const idSchema = z.string().regex(/^[a-z][a-z0-9_]*$/);
@@ -40,13 +39,7 @@ export const gameConfigSchema = z.object({
     capacity: z.number().int().positive().nullable(),
     recommendedSalesMethods: z.array(idSchema).optional()
   })).min(1),
-  superpowers: z.array(z.object({
-    id: idSchema,
-    enabled: z.boolean(),
-    title: z.string().min(1),
-    description: z.string().optional(),
-    modifiers: z.array(z.record(z.unknown())).optional()
-  })).min(4),
+
   actions: z.array(z.object({
     id: idSchema,
     enabled: z.boolean(),
@@ -59,7 +52,14 @@ export const gameConfigSchema = z.object({
     requirements: z.array(conditionSchema),
     effects: z.array(effectSchema),
     repeatPolicy: z.enum(['never', 'once_per_cohort', 'unlimited', 'upgrade']),
-    analyticsId: idSchema.optional()
+    analyticsId: idSchema.optional(),
+    intent: z.enum(['get_sales', 'fix_system', 'get_advice', 'restore_energy']),
+    group: z.string(),
+    configurationSteps: z.array(z.string()),
+    uiVisible: z.boolean(),
+    upgradeGroup: z.string().optional(),
+    upgradeLevel: z.number().optional(),
+    upgradeCost: z.number().optional()
   })).min(1),
   content: z.record(z.unknown()),
   routes: z.record(z.unknown()),
@@ -70,7 +70,7 @@ export const gameConfigSchema = z.object({
       multiplier: z.number().nonnegative()
     })).min(1)
   }),
-  decay: z.array(z.number().min(0).max(1)).min(1),
+
   events: z.array(z.object({
     id: idSchema,
     enabled: z.boolean(),

@@ -1,9 +1,7 @@
-// @ts-nocheck
-import type { GameCommand, RouteSelection, SetupInput } from '../../packages/game-engine/src';
+import type { GameCommand, SetupInput } from '../../packages/game-engine/src';
 
 export type ScenarioFixture = {
   id: string;
-  policy: string;
   setup: SetupInput;
   seed: string;
   commands: GameCommand[];
@@ -12,95 +10,56 @@ export type ScenarioFixture = {
 const baseSetup: SetupInput = {
   avatarGender: 'female',
   name: 'Никита',
-  niche: 'онлайн-консультации',
-  superpowers: ['marketing', 'sales'],
-  productType: 'consultation',
-  productPrice: 50_000,
-  averageReelViews: 3_000,
-  averageStoryViews: 700,
-  telegramStatus: 'known',
-  averageTelegramViews: 450,
-  dreams: ['vacation']
-};
-
-const callsRoute: RouteSelection = {
-  entry: 'guide',
-  nurture: ['guide', 'telegram'],
-  processing: 'ai_bot',
-  saleMethod: 'call',
-  followup: 'bot'
-};
-
-const manualRoute: RouteSelection = {
-  entry: 'direct_messages',
-  nurture: ['none'],
-  processing: 'manual',
-  saleMethod: 'manual_chat',
-  followup: 'none'
-};
-
-const websiteRoute: RouteSelection = {
-  entry: 'website',
-  nurture: ['none'],
-  processing: 'website_auto',
-  saleMethod: 'website_auto',
-  followup: 'none'
-};
-
-const webinarRoute: RouteSelection = {
-  entry: 'webinar_registration',
-  nurture: ['webinar'],
-  processing: 'manual',
-  saleMethod: 'webinar_direct',
-  followup: 'manual'
+  niche: 'онлайн-консультации'
 };
 
 export const scenarios: ScenarioFixture[] = [
-  scenario('strong_reels_bot_calls', { ...baseSetup, averageReelViews: 7_000, productPrice: 100_000 }, ['demand_pilot_offer', 'product_pilot', 'guide_specialist', 'ai_bot_specialist'], callsRoute, ['reels_7d', 'calls', 'reels_7d', 'calls', 'manual_followup']),
-  scenario('strong_webinar_followup', { ...baseSetup, productType: 'live_course', productPrice: 30_000, averageStoryViews: 7_500 }, ['demand_interviews', 'product_self'], webinarRoute, ['webinar', 'webinar', 'manual_followup']),
-  scenario('strong_low_ticket_auto', { ...baseSetup, productType: 'recorded_course', productPrice: 4_000, averageReelViews: 73_000, averageStoryViews: 20_000 }, ['demand_pilot_offer', 'product_self', 'guide_specialist', 'simple_bot_specialist'], { ...callsRoute, saleMethod: 'bot_auto', processing: 'simple_bot' }, ['reels_7d', 'reels_7d', 'reels_7d']),
-  scenario('manual_small_audience', { ...baseSetup, averageReelViews: 500, averageStoryViews: 120 }, ['product_pilot'], manualRoute, ['stories_3d']),
-  scenario('product_first', baseSetup, ['product_studio', 'demand_poll', 'guide_self'], callsRoute, ['reels_7d']),
-  scenario('website_first', baseSetup, ['website_beautiful', 'product_self'], websiteRoute, ['reels_7d']),
-  scenario('content_without_route', baseSetup, ['product_pilot'], manualRoute, ['reels_7d', 'stories_3d']),
-  scenario('bot_without_traffic', baseSetup, ['ai_bot_specialist', 'product_pilot'], callsRoute, []),
-  scenario('manager_without_warmup', baseSetup, ['hire_manager', 'product_pilot'], { ...manualRoute, processing: 'manager' }, ['reels_7d']),
-  scenario('burnout_route', { ...baseSetup, superpowers: ['marketing', 'expertise'] }, ['product_home', 'video_self', 'ai_bot_self'], callsRoute, ['reels_stories_7d', 'webinar']),
-  scenario('random_valid', baseSetup, ['demand_poll', 'product_pilot', 'guide_self'], manualRoute, ['stories_3d', 'live_stream']),
-  scenario('weighted_typical_user', { ...baseSetup, productType: 'mentorship', productPrice: 220_000, averageReelViews: 14_500 }, ['demand_interviews', 'product_self', 'simple_bot_specialist'], { ...callsRoute, processing: 'simple_bot', followup: 'none' }, ['reels_7d', 'calls']),
-  scenario('expensive_site', { ...baseSetup, productPrice: 220_000, productType: 'mentorship' }, ['product_self', 'website_basic'], websiteRoute, ['reels_7d']),
-  scenario('expensive_call', { ...baseSetup, productPrice: 220_000, productType: 'mentorship' }, ['demand_pilot_offer', 'product_pilot', 'video_specialist'], callsRoute, ['reels_7d', 'calls']),
-  scenario('many_inbound_no_bot', { ...baseSetup, averageReelViews: 20_000 }, ['product_pilot'], manualRoute, ['reels_7d']),
-  scenario('manager_with_warmup', baseSetup, ['demand_interviews', 'product_self', 'video_specialist', 'hire_manager'], { ...callsRoute, processing: 'manager' }, ['reels_7d']),
-  scenario('zero_revenue', { ...baseSetup, averageReelViews: 0, averageStoryViews: 0 }, ['product_home', 'website_beautiful'], websiteRoute, []),
-  scenario('pilot_before_full', baseSetup, ['demand_pilot_offer', 'product_pilot', 'product_self', 'ai_bot_specialist'], callsRoute, ['reels_7d']),
-  scenario('late_ai_bot', baseSetup, ['product_self', 'reels_7d', 'ai_bot_specialist'], callsRoute, ['reels_7d']),
-  scenario('consultation_capacity', { ...baseSetup, productType: 'consultation', productPrice: 10_000, averageReelViews: 50_000 }, ['demand_pilot_offer', 'product_pilot', 'ai_bot_specialist'], callsRoute, ['reels_7d']),
-  scenario('parallel_content_bot', baseSetup, ['demand_interviews', 'product_pilot'], callsRoute, ['parallel:reels_7d+ai_bot_specialist', 'manual_followup']),
-  scenario('telegram_reels', baseSetup, ['demand_interviews', 'product_self', 'guide_specialist'], callsRoute, ['parallel:telegram_warmup+reels_7d'])
+  scenario('basic_win', baseSetup, [
+    { commandId: 'c1', type: 'advance_intro', payload: {} },
+    { commandId: 'c2', type: 'set_product_type', payload: { productType: 'consultation' } },
+    { commandId: 'c3', type: 'set_product_name', payload: { productName: 'My Consult' } },
+    { commandId: 'c4', type: 'set_product_price', payload: { productPrice: 10_000 } },
+    { commandId: 'c5', type: 'set_sale_method', payload: { saleMethod: 'manual_chat' } },
+    { commandId: 'c6', type: 'set_nurture', payload: { nurture: ['none'] } },
+    { commandId: 'c7', type: 'set_entry_point', payload: { entryPoint: 'direct_messages' } },
+    { commandId: 'c8', type: 'advance_day1_goal', payload: {} },
+    { commandId: 'c9', type: 'set_dreams', payload: { dreams: ['vacation'] } },
+    { commandId: 'c10', type: 'complete_day_one', payload: {} },
+    { commandId: 'c11', type: 'advance_day2_intro', payload: {} },
+    { commandId: 'c12', type: 'set_channels', payload: { channels: ['instagram'] } },
+    { commandId: 'c13', type: 'set_audience_metrics', payload: { reels: 1000, stories: 300 } },
+    { commandId: 'c14', type: 'complete_day_two', payload: {} },
+    { commandId: 'c14a', type: 'advance_daily_intro', payload: {} },
+    // day 1 starts
+    { commandId: 'c15', type: 'choose_intent', payload: { intent: 'fix_system' } },
+    { commandId: 'c16', type: 'choose_action_group', payload: { group: 'product' } },
+    { commandId: 'c17', type: 'select_action', payload: { actionId: 'product_pilot' } },
+    { commandId: 'c18', type: 'confirm_action', payload: {} },
+    { commandId: 'c18_process', type: 'acknowledge_action_process', payload: {} },
+    { commandId: 'c19', type: 'acknowledge_action_result', payload: {} },
+    { commandId: 'c19_end', type: 'complete_day', payload: {} },
+    { commandId: 'c19a', type: 'advance_daily_intro', payload: {} },
+
+    // some content
+    { commandId: 'c20', type: 'choose_intent', payload: { intent: 'get_sales' } },
+    { commandId: 'c21', type: 'choose_action_group', payload: { group: 'traffic' } },
+    { commandId: 'c22', type: 'select_action', payload: { actionId: 'stories_3d' } },
+    { commandId: 'c23', type: 'configure_action', payload: { contentType: 'selling' } },
+    { commandId: 'c24', type: 'confirm_action', payload: {} },
+    { commandId: 'c25', type: 'acknowledge_action_process', payload: {} },
+    { commandId: 'c26', type: 'acknowledge_action_result', payload: {} },
+    { commandId: 'c26_end', type: 'complete_day', payload: {} },
+    { commandId: 'c26a', type: 'advance_daily_intro', payload: {} },
+
+    { commandId: 'end', type: 'choose_intent', payload: { intent: 'finish' } },
+    { commandId: 'end2', type: 'resolve_pending_decision', payload: { action: 'confirm' } },
+  ])
 ];
 
 function scenario(
   id: string,
   setup: SetupInput,
-  prepActions: string[],
-  route: RouteSelection,
-  playActions: string[]
+  commands: GameCommand[]
 ): ScenarioFixture {
-  const commands: GameCommand[] = [];
-  let index = 0;
-  for (const actionId of prepActions) {
-    commands.push({ commandId: `${id}_${index++}`, type: 'start_action', payload: { actionId } });
-  }
-  commands.push({ commandId: `${id}_${index++}`, type: 'set_route', payload: route });
-  for (const actionId of playActions) {
-    if (actionId.startsWith('parallel:')) {
-      const [actionAId, actionBId] = actionId.replace('parallel:', '').split('+');
-      commands.push({ commandId: `${id}_${index++}`, type: 'start_parallel', payload: { actionAId, actionBId, contentType: 'useful', route } });
-    } else {
-      commands.push({ commandId: `${id}_${index++}`, type: 'start_action', payload: { actionId, contentType: 'useful', route } });
-    }
-  }
-  commands.push({ commandId: `${id}_${index++}`, type: 'finish_game', payload: {} });
-  return { id, policy: id, setup, seed: `seed_${id}`, commands };
+  return { id, setup, seed: `seed_${id}`, commands };
 }

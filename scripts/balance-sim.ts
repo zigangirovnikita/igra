@@ -18,11 +18,21 @@ const summaries = new Map<string, Summary>();
 
 for (let index = 0; index < runs; index += 1) {
   const fixture = scenarios[index % scenarios.length];
-  const summary = getSummary(summaries, fixture.policy);
+  const summary = getSummary(summaries, fixture.id);
   try {
     let state = createInitialState(fixture.setup, config, `${fixture.seed}_${index}`);
     for (const command of fixture.commands) {
       state = applyCommand(state, config, { ...command, commandId: `${command.commandId}_${index}` });
+
+      while (state.flow.step === 'post_action' && state.pendingDecision) {
+        const decision = state.pendingDecision;
+        const cohortId = 'cohortId' in decision ? decision.cohortId : undefined;
+        state = applyCommand(state, config, {
+          commandId: `auto_resolve_${index}_${Date.now()}`,
+          type: 'resolve_pending_decision',
+          payload: { action: 'defer', cohortId }
+        });
+      }
     }
     assertStateInvariants(state, config);
     collect(summary, state);

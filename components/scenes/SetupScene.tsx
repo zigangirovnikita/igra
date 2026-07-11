@@ -11,7 +11,7 @@ type Props = {
   initialDraft?: SetupDraft;
 };
 
-export function SetupScene({ config, onComplete, busy, initialDraft }: Props) {
+export function SetupScene({ config: _config, onComplete, busy, initialDraft }: Props) {
   const [step, setStep] = useState<SetupStep>('welcome');
   const [draft, setDraft] = useState<SetupDraft>(initialDraft ?? defaultDraft);
 

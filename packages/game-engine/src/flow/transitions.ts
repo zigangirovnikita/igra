@@ -1,4 +1,4 @@
-import type { GameState, GameConfig, RouteSelection, ContentType, AudienceChannel } from '../types';
+import type { GameState, GameConfig, RouteSelection, AudienceChannel } from '../types';
 import { calculateTargets } from '../state/goals';
 
 export function advanceIntro(state: GameState): GameState {
@@ -71,7 +71,7 @@ export function completeDayOne(state: GameState): GameState {
     followup: 'none'
   };
   state.initialRoute = state.activeRoute;
-  
+
   state.flow.stage = 'day2_resources';
   state.flow.step = 'day2_intro';
   state.resources.day = 2;

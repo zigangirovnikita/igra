@@ -68,38 +68,37 @@ export function evaluateCondition(state: GameState, condition: Condition): boole
 
 export function applyEffect(state: GameState, effect: Effect): GameState {
   validateDsl(effect);
-  const next = structuredClone(state);
   switch (effect.operator) {
     case 'setFlag':
-      if (!effect.path) return next;
-      next.flags[effect.path] = Boolean(effect.value ?? true);
-      return next;
+      if (!effect.path) return state;
+      state.flags[effect.path] = Boolean(effect.value ?? true);
+      return state;
     case 'addMetric':
-      if (!effect.path || !(effect.path in next.metrics)) return next;
-      next.metrics[effect.path as keyof typeof next.metrics] += Number(effect.value ?? 0);
-      return next;
+      if (!effect.path || !(effect.path in state.metrics)) return state;
+      state.metrics[effect.path as keyof typeof state.metrics] += Number(effect.value ?? 0);
+      return state;
     case 'multiplyMetric':
-      if (!effect.path || !(effect.path in next.metrics)) return next;
-      next.metrics[effect.path as keyof typeof next.metrics] *= Number(effect.value ?? 1);
-      return next;
+      if (!effect.path || !(effect.path in state.metrics)) return state;
+      state.metrics[effect.path as keyof typeof state.metrics] *= Number(effect.value ?? 1);
+      return state;
     case 'addResource':
-      if (effect.path === 'bank') next.resources.bank += Number(effect.value ?? 0);
-      if (effect.path === 'energy') next.resources.energy += Number(effect.value ?? 0);
-      next.resources.energy = Math.min(100, Math.max(0, next.resources.energy));
-      return next;
+      if (effect.path === 'bank') state.resources.bank += Number(effect.value ?? 0);
+      if (effect.path === 'energy') state.resources.energy += Number(effect.value ?? 0);
+      state.resources.energy = Math.min(100, Math.max(0, state.resources.energy));
+      return state;
     case 'createAsset':
     case 'replaceAsset':
-      return createAsset(next, effect.path, effect.value);
+      return createAsset(state, effect.path, effect.value);
     case 'scheduleAction':
-      return next;
+      return state;
     case 'emitEvent':
-      next.history.push({
-        day: next.resources.day,
+      state.history.push({
+        day: state.resources.day,
         type: String(effect.payload?.type ?? 'config_event'),
         message: String(effect.payload?.message ?? effect.path ?? 'Событие'),
         payload: effect.payload
       });
-      return next;
+      return state;
   }
 }
 

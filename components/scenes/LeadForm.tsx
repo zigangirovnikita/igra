@@ -1,4 +1,3 @@
-// @ts-nocheck
 import type { GameState } from '@/packages/game-engine/src';
 
 export function LeadForm({ state, busy, status, onSubmit, onBack }: { state: GameState; busy: boolean; status: string | null; onSubmit: (data: FormData) => void; onBack: () => void }) {
@@ -8,8 +7,8 @@ export function LeadForm({ state, busy, status, onSubmit, onBack }: { state: Gam
       <p className="lead-form-sub">Оставьте контакт — мы разберём вашу ситуацию и найдём, где теряются заявки.</p>
       <label className="setup-field-label">Имя <input name="name" defaultValue={state.player.name} required /></label>
       <label className="setup-field-label">Telegram / телефон <input name="contact" required placeholder="@username" /></label>
-      <label className="setup-field-label">Ваш продукт <input name="product" defaultValue={state.player.productName ?? state.player.niche} required /></label>
-      <label className="setup-field-label">Чек <input name="productPrice" type="number" defaultValue={state.player.productPrice} required /></label>
+      <label className="setup-field-label">Ваш продукт <input name="product" defaultValue={state.launchPlan?.productName ?? state.player.niche} required /></label>
+      <label className="setup-field-label">Чек <input name="productPrice" type="number" defaultValue={state.launchPlan?.productPrice ?? ''} required /></label>
       <label className="setup-field-label">Соцсеть / ссылка <input name="socialLink" /></label>
       <label className="setup-field-label">Комментарий <textarea name="comment" maxLength={1000} /></label>
       <input className="hidden-field" name="website" tabIndex={-1} autoComplete="off" />

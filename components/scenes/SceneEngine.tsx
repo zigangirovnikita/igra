@@ -3,18 +3,23 @@
 import { useEffect, useState } from 'react';
 import type { GameConfig, GameState } from '@/packages/game-engine/src';
 import { SetupScene } from './SetupScene';
+import { ResumePrompt } from './ResumePrompt';
+import { GameHud } from './GameHud';
 import { resolveCurrentScene } from '@/lib/game/resolve-current-scene';
 import type { SetupDraft } from '@/lib/scenes/setupCopy';
-import { draftToSetupInput, readCachedGame } from '@/lib/scenes/setupMapping';
+import { cacheSessionPointer, draftToSetupInput, readCachedGame } from '@/lib/scenes/setupMapping';
 
 // These components will be implemented next
 import { IntroFlow } from './flows/IntroFlow';
 import { Day1Flow } from './flows/Day1Flow';
 import { Day2Flow } from './flows/Day2Flow';
+import { DailyIntroFlow } from './flows/DailyIntroFlow';
 import { DailyIntentFlow } from './flows/DailyIntentFlow';
 import { ActionSelectionFlow } from './flows/ActionSelectionFlow';
 import { ActionConfigurationFlow } from './flows/ActionConfigurationFlow';
 import { ActionConfirmationFlow } from './flows/ActionConfirmationFlow';
+import { ActionProcessFlow } from './flows/ActionProcessFlow';
+import { ActionResultFlow } from './flows/ActionResultFlow';
 import { PendingDecisionFlow } from './flows/PendingDecisionFlow';
 import { DayCompletionFlow } from './flows/DayCompletionFlow';
 import { EnergyCrisisFlow } from './flows/EnergyCrisisFlow';
@@ -23,17 +28,28 @@ import { FinishedFlow } from './flows/FinishedFlow';
 type Props = { config: GameConfig };
 
 export function SceneEngine({ config }: Props) {
-  const [phase, setPhase] = useState<'setup' | 'game' | 'lead'>('setup');
+  const [phase, setPhase] = useState<'setup' | 'game' | 'lead' | 'resume'>('setup');
   const [gameState, setGameState] = useState<GameState | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const cached = readCachedGame();
-    if (cached) {
-      setGameState(cached.state);
-      setPhase('game');
-    }
+    if (!cached) return;
+    setBusy(true);
+    fetch(`/api/game/sessions/${cached.sessionId}`)
+      .then(async (response) => {
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error ?? 'Не удалось загрузить сохранение');
+        if (data.state?.schemaVersion !== 2) throw new Error('Сохранение несовместимо с новой версией игры');
+        setGameState(data.state);
+        setPhase('resume');
+      })
+      .catch((reason: unknown) => {
+        localStorage.removeItem('launch-game-cache');
+        setError(reason instanceof Error ? reason.message : 'Не удалось загрузить сохранение');
+      })
+      .finally(() => setBusy(false));
   }, []);
 
   async function handleSetupComplete(draft: SetupDraft) {
@@ -47,11 +63,11 @@ export function SceneEngine({ config }: Props) {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? 'Не удалось начать игру');
-      
+
       const newState: GameState = data.state;
       setGameState(newState);
       setPhase('game');
-      localStorage.setItem('launch-game-cache', JSON.stringify({ expiresAt: Date.now() + 86_400_000, state: newState }));
+      cacheSessionPointer(newState.sessionId);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Ошибка старта');
     } finally {
@@ -65,7 +81,7 @@ export function SceneEngine({ config }: Props) {
     setBusy(true);
     setError(null);
     try {
-      const res = await fetch('/api/game/commands', {
+      const res = await fetch(`/api/game/sessions/${gameState.sessionId}/commands`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -77,9 +93,14 @@ export function SceneEngine({ config }: Props) {
         }),
       });
       const data = await res.json();
+      if (res.status === 409 && data.error === 'version_conflict' && data.state) {
+        setGameState(data.state);
+        setError('Состояние игры обновлено');
+        return;
+      }
       if (!res.ok) throw new Error(data.error ?? 'Ошибка команды');
       setGameState(data.state);
-      localStorage.setItem('launch-game-cache', JSON.stringify({ expiresAt: Date.now() + 86_400_000, state: data.state }));
+      cacheSessionPointer(data.state.sessionId);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Ошибка связи');
     } finally {
@@ -96,29 +117,51 @@ export function SceneEngine({ config }: Props) {
     );
   }
 
+  if (phase === 'resume' && gameState) {
+    return (
+      <main className="scene-shell">
+        {error && <div className="scene-error" role="alert">{error}</div>}
+        <ResumePrompt
+          state={gameState}
+          onResume={() => setPhase('game')}
+          onRestart={() => {
+            setGameState(null);
+            setPhase('setup');
+            localStorage.removeItem('launch-game-cache');
+          }}
+        />
+      </main>
+    );
+  }
+
   const { scene } = resolveCurrentScene(gameState);
-  
+
   const commonProps = { state: gameState, config, dispatch, busy };
 
   return (
     <main className="scene-shell">
       {error && <div className="scene-error" role="alert">{error}</div>}
-      
+
+      {scene !== 'finished' && <GameHud state={gameState} />}
+
       {scene === 'intro' && <IntroFlow {...commonProps} />}
       {scene === 'day_1' && <Day1Flow {...commonProps} />}
       {scene === 'day_2' && <Day2Flow {...commonProps} />}
-      
+
+      {scene === 'daily_intro' && <DailyIntroFlow {...commonProps} />}
       {scene === 'daily_intent' && <DailyIntentFlow {...commonProps} />}
       {scene === 'action_selection' && <ActionSelectionFlow {...commonProps} />}
       {scene === 'action_configuration' && <ActionConfigurationFlow {...commonProps} />}
       {scene === 'action_confirmation' && <ActionConfirmationFlow {...commonProps} />}
-      
+      {scene === 'action_process' && <ActionProcessFlow {...commonProps} />}
+      {scene === 'action_result' && <ActionResultFlow {...commonProps} />}
+
       {scene === 'pending_decision' && <PendingDecisionFlow {...commonProps} />}
       {scene === 'day_completion' && <DayCompletionFlow {...commonProps} />}
-      
+
       {scene === 'energy_crisis' && <EnergyCrisisFlow {...commonProps} />}
       {scene === 'finished' && <FinishedFlow {...commonProps} />}
-      
+
       {scene === 'unknown' && (
         <div style={{ padding: '20px', color: 'white' }}>
           <h2>Неизвестный экран</h2>

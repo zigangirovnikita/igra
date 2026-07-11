@@ -8,10 +8,10 @@ type FlowProps = {
   busy: boolean;
 };
 
-export function ActionConfigurationFlow({ state, dispatch, busy }: FlowProps) {
+export function ActionConfigurationFlow({ state: _state, dispatch, busy }: FlowProps) {
   // In a real implementation we would check `action.configurationSteps` and show different screens
   // For now just configure standard route/content type
-  
+
   return (
     <MultiChoiceScreen
       title="Настройка действия"

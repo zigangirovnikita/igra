@@ -1,0 +1,3 @@
+ALTER TABLE "game_results"
+ADD COLUMN IF NOT EXISTS "diagnostics" JSONB,
+ADD COLUMN IF NOT EXISTS "endingReason" TEXT;

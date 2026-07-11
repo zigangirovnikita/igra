@@ -9,9 +9,10 @@ type Props = {
   imageClass?: string;
   onSubmit: (value: string) => void;
   busy?: boolean;
+  type?: 'text' | 'number';
 };
 
-export function InputScreen({ title, description, placeholder, buttonText, defaultValue = '', imageClass, onSubmit, busy }: Props) {
+export function InputScreen({ title, description, placeholder, buttonText, defaultValue = '', imageClass, onSubmit, busy, type = 'text' }: Props) {
   const [value, setValue] = useState(defaultValue);
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -24,23 +25,24 @@ export function InputScreen({ title, description, placeholder, buttonText, defau
   return (
     <div className="scene-step">
       {imageClass && <div className={`scene-image ${imageClass}`} aria-hidden="true" />}
-      
+
       <h2 className="scene-question">{title}</h2>
       {description && <p className="scene-description">{description}</p>}
-      
+
       <form onSubmit={handleSubmit} className="scene-form">
         <input
           className="scene-input"
+          type={type}
           value={value}
           onChange={(e) => setValue(e.target.value)}
           placeholder={placeholder}
           autoFocus
           disabled={busy}
         />
-        
-        <button 
-          type="submit" 
-          className="btn-primary scene-submit-btn" 
+
+        <button
+          type="submit"
+          className="btn-primary scene-submit-btn"
           disabled={!value.trim() || busy}
         >
           {busy ? 'Сохранение...' : buttonText}

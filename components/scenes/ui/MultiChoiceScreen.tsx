@@ -12,12 +12,13 @@ type Props<T extends string = string> = {
   description?: ReactNode;
   imageClass?: string;
   choices: ChoiceItem<T>[];
-  selectedId?: T | null;
-  onSelect?: (id: T) => void;
-  onConfirm?: (id: T) => void;
+  selectedId?: T | T[] | null;
+  onSelect?: (id: T | T[]) => void;
+  onConfirm?: (id: T | T[]) => void;
   confirmText?: string;
   busy?: boolean;
   layout?: 'grid-2' | 'grid-3' | 'list';
+  isMulti?: boolean;
 };
 
 export function MultiChoiceScreen<T extends string>({
@@ -30,32 +31,62 @@ export function MultiChoiceScreen<T extends string>({
   onConfirm,
   confirmText = 'Дальше →',
   busy,
-  layout = 'grid-2'
+  layout = 'grid-2',
+  isMulti = false
 }: Props<T>) {
-  const [localSelected, setLocalSelected] = useState<T | null>(initialSelected);
+  const [localSelected, setLocalSelected] = useState<T | T[] | null>(
+    initialSelected !== null ? initialSelected : (isMulti ? [] : null)
+  );
 
   const handleSelect = (id: T) => {
     if (busy) return;
-    setLocalSelected(id);
-    if (onSelect) onSelect(id);
+
+    let newSelected: T | T[];
+
+    if (isMulti) {
+      const arr = (Array.isArray(localSelected) ? localSelected : []) as T[];
+      if (arr.includes(id)) {
+        newSelected = arr.filter(v => v !== id);
+      } else {
+        newSelected = [...arr, id];
+      }
+    } else {
+      newSelected = id;
+    }
+
+    setLocalSelected(newSelected);
+    if (onSelect) onSelect(newSelected);
   };
 
   const handleConfirm = () => {
-    if (localSelected && onConfirm && !busy) {
-      onConfirm(localSelected);
+    if (onConfirm && !busy) {
+      if (isMulti) {
+        if (Array.isArray(localSelected) && localSelected.length > 0) {
+          onConfirm(localSelected);
+        }
+      } else {
+        if (localSelected) {
+          onConfirm(localSelected);
+        }
+      }
     }
   };
+
+  const canConfirm = isMulti ? Array.isArray(localSelected) && localSelected.length > 0 : !!localSelected;
 
   return (
     <div className="scene-step">
       {imageClass && <div className={`scene-image ${imageClass}`} aria-hidden="true" />}
-      
+
       <h2 className="scene-question">{title}</h2>
       {description && <p className="scene-description">{description}</p>}
 
       <div className={`scene-choices scene-choices--${layout}`}>
         {choices.map(choice => {
-          const isSelected = localSelected === choice.id;
+          const isSelected = isMulti
+            ? Array.isArray(localSelected) && localSelected.includes(choice.id)
+            : localSelected === choice.id;
+
           return (
             <button
               key={choice.id}
@@ -73,10 +104,10 @@ export function MultiChoiceScreen<T extends string>({
       </div>
 
       {onConfirm && (
-        <button 
-          className="btn-primary scene-confirm-btn" 
+        <button
+          className="btn-primary scene-confirm-btn"
           onClick={handleConfirm}
-          disabled={!localSelected || busy}
+          disabled={!canConfirm || busy}
         >
           {busy ? 'Загрузка...' : confirmText}
         </button>

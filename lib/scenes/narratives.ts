@@ -1,60 +1,24 @@
-// @ts-nocheck
 /**
  * Narrative text templates.
  * All functions return string arrays — each string is one line/paragraph,
  * tapped through on NarrativeScreen.
  */
-
-/* eslint-disable @typescript-eslint/no-unused-vars */
-import type { SetupDraft } from './types';
-import type { GameState, GameConfig } from '@/packages/game-engine/src';
+import type { GameState } from '@/packages/game-engine/src';
 
 const rub = (n: number) =>
   n.toLocaleString('ru-RU', { style: 'currency', currency: 'RUB', maximumFractionDigits: 0 });
 
 const days = (n: number) => (n === 1 ? '1 день' : n <= 4 ? `${n} дня` : `${n} дней`);
 
-// ─── Onboarding legends ───────────────────────────────────────────────────────
-
-function familyLegend(draft: SetupDraft): string[] {
-  const { name, familyType, productType, gender } = draft;
-  const he = gender === 'female' ? 'она' : 'он';
-  const productWord = productTypeWord(productType, gender);
-
-  if (familyType === 'couple_no_kids' || familyType === 'couple_kids') {
-    if (gender === 'female') {
-      return [
-        `${name}, поздравляем! У вас отличные стартовые условия.`,
-        `Муж подарил вам 100 000 ₽ и уехал на вахту на целый месяц.`,
-        `Перед отъездом он сказал: «Ты давно хотела продавать ${productWord}. У тебя как раз есть месяц. Жильё, еда и расходы закрыты. Попробуй!»`,
-        `И вот вы остались одна с идеей, деньгами и месяцем свободы.`,
-      ];
-    }
-    return [
-      `${name}, поздравляем! У вас отличные стартовые условия.`,
-      `Жена поддержала вашу идею и выделила 100 000 ₽ на запуск.`,
-      `Она сказала: «Ты давно хотел продавать ${productWord}. Бытовые расходы я беру на себя. У тебя есть целый месяц — попробуй!»`,
-      `Сейчас всё зависит только от вас.`,
-    ];
-  }
-
-  // Single
-  return [
-    `${name}, поздравляем! У вас отличные стартовые условия.`,
-    `У вас есть 100 000 ₽, которые вы готовы вложить в запуск.`,
-    `Бытовые расходы закрыты. Впереди 30 дней, чтобы превратить ${productWord} в систему продаж.`,
-    `Сейчас всё зависит только от вас.`,
-  ];
-}
-
 function beachReflection(state: GameState): string[] {
-  const { name, productType, productPrice } = state.player;
+  const { productType } = state.launchPlan;
+  const productPrice = state.launchPlan?.productPrice ?? 0;
   const gender = state.player.avatarGender;
-  const productWord = productTypeWord(productType, gender);
-  const goalText = state.targets.personalGoal > 0 
-    ? `на это мне нужно примерно ${rub(state.targets.personalGoal)}` 
+  const productWord = productTypeWord(productType ?? 'продукт', gender);
+  const goalText = state.targets.personalGoal > 0
+    ? `на это мне нужно примерно ${rub(state.targets.personalGoal)}`
     : 'хочется наконец заработать на свои мечты';
-  
+
   return [
     `Вы решили поехать к морю — подумать.`,
     `«Итак. У меня есть месяц, 100 000 ₽ и идея продавать ${productWord} за ${rub(productPrice)}.`,
@@ -188,7 +152,7 @@ export function getActionResultNarrative(state: GameState, actionId: string, pre
   const { name } = state.player;
   const newSales = state.metrics.sales - prevState.metrics.sales;
   const newResponses = state.metrics.responses - prevState.metrics.responses;
-  const newRevenue = state.metrics.revenue - prevState.metrics.revenue;
+  const _newRevenue = state.metrics.revenue - prevState.metrics.revenue;
 
   // First sale reaction
   if (newSales > 0 && prevState.metrics.sales === 0) {
@@ -333,7 +297,7 @@ export function getFinalInsight(state: GameState): string[] {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function productTypeWord(productType: string, gender: 'female' | 'male'): string {
+function productTypeWord(productType: string, _gender: 'female' | 'male'): string {
   const map: Record<string, string> = {
     consultation: 'консультации',
     service: 'услуги',
@@ -345,4 +309,4 @@ function productTypeWord(productType: string, gender: 'female' | 'male'): string
   return map[productType] ?? 'свой продукт';
 }
 
-export { familyLegend, beachReflection, rub, days };
+export { beachReflection, rub, days };

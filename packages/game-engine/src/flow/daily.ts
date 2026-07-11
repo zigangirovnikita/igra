@@ -1,7 +1,13 @@
 import type { GameState, GameConfig, DailyIntent, RouteSelection, ContentType } from '../types';
 import { getActionAvailability, findAction } from '../actions/availability';
 
-export function chooseIntent(state: GameState, intent: DailyIntent): GameState {
+export function chooseIntent(state: GameState, intent: DailyIntent | null): GameState {
+  if (!intent) {
+    state.flow.selectedIntent = null;
+    state.flow.step = 'daily_intent';
+    return state;
+  }
+
   state.flow.selectedIntent = intent;
   if (intent === 'finish') {
     state.pendingDecision = { type: 'finish_confirmation' };
@@ -13,7 +19,12 @@ export function chooseIntent(state: GameState, intent: DailyIntent): GameState {
   return state;
 }
 
-export function chooseActionGroup(state: GameState, group: string): GameState {
+export function chooseActionGroup(state: GameState, group: string | null): GameState {
+  if (!group) {
+    state.flow.selectedGroup = null;
+    // Keep on action_list to re-select group
+    return state;
+  }
   state.flow.selectedGroup = group;
   state.flow.step = 'action_list';
   return state;
@@ -43,14 +54,14 @@ export function selectAction(state: GameState, config: GameConfig, actionId: str
 }
 
 export function configureAction(
-  state: GameState, 
+  state: GameState,
   payload: { contentType?: ContentType; route?: RouteSelection; targetCohortId?: string }
 ): GameState {
   if (!state.pendingAction) throw new Error('No pending action to configure');
   if (payload.contentType) state.pendingAction.contentType = payload.contentType;
   if (payload.route) state.pendingAction.temporaryRoute = payload.route;
   if (payload.targetCohortId) state.pendingAction.targetCohortId = payload.targetCohortId;
-  
+
   state.pendingAction.confirmed = true;
   state.flow.step = 'action_confirmation';
   return state;
@@ -68,38 +79,28 @@ export function completeDay(state: GameState, config: GameConfig): GameState {
   if (state.flow.step !== 'day_summary') {
     throw new Error('Cannot complete day outside of day_summary');
   }
-  
+
   state.currentDayReport = null;
   state.lastOutcome = null;
-  
-  if (state.resources.day >= config.totalDays) {
-    state.status = 'finished';
+
+  if (state.resources.day > config.totalDays) {
+    state.endingReason = 'time_finished';
     state.flow.stage = 'final';
-    state.flow.step = 'final_diagnosis';
+    state.flow.step = 'final_reason';
     return state;
   }
-  
-  state.resources.day += 1;
+
   state.flow.step = 'daily_intro';
-  
+
   // Advance pending decisions / deferred cohorts
   for (const cohort of state.cohorts) {
-    if (cohort.deferredUntilDay === state.resources.day) {
+    if (cohort.deferredUntilDay !== null && cohort.deferredUntilDay <= state.resources.day) {
       if (cohort.inboundDecision === 'deferred') cohort.inboundDecision = 'pending';
       if (cohort.salesDecision === 'deferred') cohort.salesDecision = 'pending';
       if (cohort.followupDecision === 'deferred') cohort.followupDecision = 'pending';
       cohort.deferredUntilDay = null;
     }
   }
-  
-  // Process scheduled actions that complete today
-  for (const action of state.scheduledActions) {
-    if (!action.completed && action.completesDay === state.resources.day) {
-      action.completed = true;
-      // Effects for scheduled actions are already applied on confirm (cost, cohorts).
-      // If there are end-of-action effects, they'd go here.
-    }
-  }
-  
+
   return state;
 }

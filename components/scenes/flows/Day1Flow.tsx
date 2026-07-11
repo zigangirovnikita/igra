@@ -13,10 +13,11 @@ export function Day1Flow({ state, config, dispatch, busy }: FlowProps) {
     return (
       <MultiChoiceScreen
         title="Какой продукт будем запускать?"
-        choices={[
-          { id: 'consultation', label: 'Консультации' },
-          { id: 'recorded_course', label: 'Обучение в записи' },
-        ]}
+        choices={config.productTypes.filter(pt => pt.enabled).map(pt => ({
+          id: pt.id,
+          label: pt.title,
+          description: pt.description
+        }))}
         onConfirm={(id) => dispatch('set_product_type', { productType: id })}
         busy={busy}
       />
@@ -39,6 +40,7 @@ export function Day1Flow({ state, config, dispatch, busy }: FlowProps) {
       <InputScreen
         title="Сколько он будет стоить?"
         buttonText="Дальше"
+        type="number"
         onSubmit={(price) => dispatch('set_product_price', { productPrice: Number(price) })}
         busy={busy}
       />
@@ -51,7 +53,10 @@ export function Day1Flow({ state, config, dispatch, busy }: FlowProps) {
         title="Как вы планируете продавать?"
         choices={[
           { id: 'manual_chat', label: 'В переписке лично' },
-          { id: 'call', label: 'Через созвоны' }
+          { id: 'call', label: 'Через созвоны' },
+          { id: 'website_auto', label: 'Автоматически через сайт' },
+          { id: 'bot_auto', label: 'Через бота' },
+          { id: 'webinar_direct', label: 'Через вебинар' }
         ]}
         onConfirm={(id) => dispatch('set_sale_method', { saleMethod: id })}
         busy={busy}
@@ -64,8 +69,11 @@ export function Day1Flow({ state, config, dispatch, busy }: FlowProps) {
       <MultiChoiceScreen
         title="Как будете прогревать?"
         choices={[
-          { id: 'none', label: 'Без прогрева' },
-          { id: 'guide', label: 'Через лид-магнит' }
+          { id: 'none', label: 'Без прогрева (сразу оффер)' },
+          { id: 'guide', label: 'Через статью/гайд' },
+          { id: 'video_lesson', label: 'Через видеоурок' },
+          { id: 'telegram', label: 'Через Telegram канал' },
+          { id: 'webinar', label: 'Через вебинар' }
         ]}
         onConfirm={(id) => dispatch('set_nurture', { nurture: [id] })}
         busy={busy}
@@ -76,9 +84,13 @@ export function Day1Flow({ state, config, dispatch, busy }: FlowProps) {
   if (state.flow.step === 'day1_entry_point') {
     return (
       <MultiChoiceScreen
-        title="Точка входа?"
+        title="Откуда к вам придут лиды?"
         choices={[
-          { id: 'direct_messages', label: 'Сразу в директ' },
+          { id: 'direct_messages', label: 'В директ/личку' },
+          { id: 'guide', label: 'За лид-магнитом' },
+          { id: 'video_lesson', label: 'На видеоурок' },
+          { id: 'website', label: 'Сразу на сайт' },
+          { id: 'webinar_registration', label: 'Регистрация на вебинар' }
         ]}
         onConfirm={(id) => dispatch('set_entry_point', { entryPoint: id })}
         busy={busy}
@@ -90,7 +102,10 @@ export function Day1Flow({ state, config, dispatch, busy }: FlowProps) {
     return (
       <NarrativeScreen
         title="Бизнес-цель"
-        paragraphs={['Ваша цель рассчитана автоматически.']}
+        paragraphs={[
+          `Цель по продажам: ${state.targets.targetSales} шт.`,
+          `План выручки: ${state.targets.targetRevenue.toLocaleString('ru-RU')} ₽`
+        ]}
         buttonText="Понятно"
         onNext={() => dispatch('advance_day1_goal')}
         busy={busy}
@@ -102,10 +117,16 @@ export function Day1Flow({ state, config, dispatch, busy }: FlowProps) {
     return (
       <MultiChoiceScreen
         title="На что потратите прибыль?"
-        choices={[
-          { id: 'macbook', label: 'MacBook' },
-        ]}
-        onConfirm={(id) => dispatch('set_dreams', { dreams: [id] })}
+        choices={config.dreams.filter(d => d.enabled).map(d => ({
+          id: d.id,
+          label: d.title,
+          description: `${d.price.toLocaleString('ru-RU')} ₽`
+        }))}
+        isMulti={true}
+        onConfirm={(ids) => {
+          // If MultiChoiceScreen uses array for isMulti, we pass array
+          dispatch('set_dreams', { dreams: Array.isArray(ids) ? ids : [ids] });
+        }}
         busy={busy}
       />
     );

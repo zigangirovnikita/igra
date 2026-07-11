@@ -9,12 +9,12 @@ import * as PendingDecisions from '../flow/pending-decisions';
 
 export function applyCommand(input: GameState, config: GameConfig, command: GameCommand): GameState {
   if (input.appliedCommandIds.includes(command.commandId)) return input;
-  if (input.status === 'finished' && command.type !== 'finish_game') {
+  if (input.status === 'finished') {
     throw new Error('Finished session does not accept game commands');
   }
 
   let state = structuredClone(input);
-  
+
   switch (command.type) {
     // Setup - Intro & Day 1
     case 'advance_intro':
@@ -47,7 +47,7 @@ export function applyCommand(input: GameState, config: GameConfig, command: Game
     case 'complete_day_one':
       state = SetupTransitions.completeDayOne(state);
       break;
-      
+
     // Setup - Day 2
     case 'advance_day2_intro':
       state = SetupTransitions.advanceDay2Intro(state);
@@ -61,8 +61,12 @@ export function applyCommand(input: GameState, config: GameConfig, command: Game
     case 'complete_day_two':
       state = SetupTransitions.completeDayTwo(state);
       break;
-      
+
     // Daily Flow
+    case 'advance_daily_intro':
+      if (state.flow.step !== 'daily_intro') throw new Error('Invalid step');
+      state.flow.step = 'daily_intent';
+      break;
     case 'choose_intent':
       state = DailyTransitions.chooseIntent(state, command.payload.intent);
       break;
@@ -81,11 +85,15 @@ export function applyCommand(input: GameState, config: GameConfig, command: Game
     case 'confirm_action':
       state = OutcomeTransitions.confirmAction(state, config);
       break;
-      
+
     // Action progression
     case 'acknowledge_action_process':
       if (state.flow.step !== 'action_process') throw new Error('Invalid step');
-      state.flow.step = 'action_result';
+      if (state.lastOutcome) {
+        state.flow.step = 'action_result';
+      } else {
+        state.flow.step = 'day_summary';
+      }
       break;
     case 'acknowledge_action_result':
       if (state.flow.step !== 'action_result') throw new Error('Invalid step');
@@ -93,9 +101,29 @@ export function applyCommand(input: GameState, config: GameConfig, command: Game
       state.pendingDecision = PendingDecisions.deriveNextPendingDecision(state);
       if (!state.pendingDecision) state.flow.step = 'day_summary';
       break;
-      
+
     // Mini-games
     case 'resolve_pending_decision':
+      state = PendingDecisions.resolvePendingDecision(state, config, command.payload);
+      break;
+    case 'resolve_inbound':
+      state.pendingDecision = { type: 'inbound', cohortId: command.payload.cohortId };
+      state = PendingDecisions.resolvePendingDecision(state, config, {
+        cohortId: command.payload.cohortId,
+        action: command.payload.mode === 'defer' ? 'defer' : command.payload.mode === 'none' ? 'ignore' : 'process',
+        amount: command.payload.processed,
+      });
+      break;
+    case 'defer_inbound':
+      state.pendingDecision = { type: 'inbound', cohortId: command.payload.cohortId };
+      state = PendingDecisions.resolvePendingDecision(state, config, { cohortId: command.payload.cohortId, action: 'defer' });
+      break;
+    case 'resolve_sales':
+      state.pendingDecision = { type: 'sales', cohortId: command.payload.cohortId };
+      state = PendingDecisions.resolvePendingDecision(state, config, command.payload);
+      break;
+    case 'resolve_followup':
+      state.pendingDecision = { type: 'followup', cohortId: command.payload.cohortId };
       state = PendingDecisions.resolvePendingDecision(state, config, command.payload);
       break;
 
@@ -103,20 +131,39 @@ export function applyCommand(input: GameState, config: GameConfig, command: Game
     case 'complete_day':
       state = DailyTransitions.completeDay(state, config);
       break;
-      
+    case 'request_finish':
+      state.flow.backStep = state.flow.step;
+      state.pendingDecision = { type: 'finish_confirmation' };
+      state.flow.step = 'finish_confirmation';
+      break;
+    case 'cancel_finish':
+      state.pendingDecision = null;
+      state.flow.step = state.flow.backStep ?? 'daily_intent';
+      state.flow.backStep = null;
+      break;
+    case 'continue_after_goal':
+      state.flow.goalPromptHandled = true;
+      state.pendingDecision = null;
+      state.flow.step = 'day_summary';
+      break;
+    case 'abandon_game':
+      state.status = 'abandoned';
+      break;
+    case 'repair_flow':
+      state.pendingAction = null;
+      state.pendingDecision = null;
+      state.flow.step = state.flow.stage === 'daily' ? 'daily_intro' : state.flow.step;
+      break;
+
     case 'record_reflection':
       state.history.push({ day: state.resources.day, type: 'reflection', message: command.payload.answer, payload: { eventId: command.payload.eventId } });
       break;
-      
-    case 'finish_game':
-      state = finishGame(state, config);
-      break;
-      
+
     default:
       console.warn(`Unknown command type`);
   }
 
-  const actionId = ['select_action', 'confirm_action'].includes(command.type) ? (command.payload as any).actionId : undefined;
+  const actionId = ['select_action', 'confirm_action'].includes(command.type) ? (command.payload as { actionId?: string }).actionId : undefined;
   state = appendTriggeredEvents(input, state, config, actionId);
   state.appliedCommandIds.push(command.commandId);
   state.stateVersion += 1;

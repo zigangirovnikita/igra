@@ -9,7 +9,7 @@ describe('lead webhook delivery', () => {
     mocks.saveLead.mockImplementation(async (lead) => lead);
     process.env.LEAD_WEBHOOK_URL = 'https://webhook.test/lead';
     process.env.LEAD_WEBHOOK_SECRET = 'secret';
-    mocks.getSession.mockResolvedValue({ state: { status: 'finished', metrics: {}, player: { superpowers: [] } }, result: {} });
+    mocks.getSession.mockResolvedValue({ state: { status: 'finished', metrics: {}, launchPlan: {} }, result: {} });
   });
 
   it('retries temporary webhook failures up to three attempts', async () => {

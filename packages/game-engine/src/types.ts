@@ -1,7 +1,7 @@
 export type Id = string;
 
 export type Gender = 'female' | 'male';
-export type GameStatus = 'setup' | 'intro' | 'day_start' | 'day_1' | 'day_2' | 'daily_intent' | 'action_selection' | 'action_configuration' | 'action_confirmation' | 'pending_decision' | 'day_completion' | 'goal_reached' | 'energy_crisis' | 'finished' | 'abandoned';
+export type GameStatus = 'setup' | 'active' | 'finished' | 'abandoned';
 export type ContentType = 'useful' | 'storytelling' | 'selling' | 'chaotic';
 export type SourceType = 'reels' | 'stories' | 'telegram' | 'live' | 'webinar' | 'contacts';
 export type ProcessingType = 'manual' | 'simple_bot' | 'ai_bot' | 'manager' | 'website_auto';
@@ -275,14 +275,14 @@ export type LeadCohort = {
   sourceType: SourceType;
   contentType: ContentType;
   impressions: number;
-  
+
   unprocessedInbound: number;
   pendingFollowup: number;
-  
+
   inboundDecision: 'pending' | 'resolved' | 'deferred' | 'ignored';
   salesDecision: 'not_ready' | 'pending' | 'resolved' | 'deferred' | 'ignored';
   followupDecision: 'not_ready' | 'pending' | 'resolved' | 'deferred' | 'ignored';
-  
+
   deferredUntilDay: number | null;
   deferCount: number;
 
@@ -293,11 +293,11 @@ export type LeadCohort = {
   bookedCalls: number;
   heldCalls: number;
   sales: number;
-  
+
   unprocessedApplications: number;
   lost: number;
   capacityLostLeads: number;
-  
+
   routeSnapshot: RouteSnapshot;
   followedUp: boolean;
 };
@@ -388,7 +388,7 @@ export type GameState = {
   flags: Record<string, boolean>;
   history: Array<{ day: number; type: string; message: string; payload?: Record<string, unknown> }>;
   diagnostics: Diagnostics | null;
-  
+
   pendingAction: PendingAction | null;
   pendingDecision: PendingDecision | null;
   lastOutcome: ActionOutcome | null;
@@ -412,6 +412,7 @@ export type GameCommand =
   | { commandId: string; type: 'set_channels'; payload: { channels: AudienceChannel[] } }
   | { commandId: string; type: 'set_audience_metrics'; payload: { reels?: number; stories?: number; telegram?: number; contacts?: number } }
   | { commandId: string; type: 'complete_day_two'; payload: Record<string, never> }
+  | { commandId: string; type: 'advance_daily_intro'; payload: Record<string, never> }
   | { commandId: string; type: 'choose_intent'; payload: { intent: DailyIntent } }
   | { commandId: string; type: 'choose_action_group'; payload: { group: string } }
   | { commandId: string; type: 'select_action'; payload: { actionId: string } }
@@ -422,8 +423,9 @@ export type GameCommand =
   | { commandId: string; type: 'acknowledge_action_result'; payload: Record<string, never> }
   | { commandId: string; type: 'resolve_inbound'; payload: { cohortId: string; mode: 'all' | 'manual' | 'bot' | 'manager' | 'none' | 'defer'; processed?: number } }
   | { commandId: string; type: 'defer_inbound'; payload: { cohortId: string } }
-  | { commandId: string; type: 'resolve_pending_decision'; payload: { cohortId: string; action: 'process' | 'defer' | 'ignore'; amount?: number } }
-  | { commandId: string; type: 'finish_game'; payload: Record<string, never> }
+  | { commandId: string; type: 'resolve_sales'; payload: { cohortId: string; action: 'process' | 'defer' | 'ignore'; amount?: number } }
+  | { commandId: string; type: 'resolve_followup'; payload: { cohortId: string; action: 'process' | 'defer' | 'ignore' } }
+  | { commandId: string; type: 'resolve_pending_decision'; payload: { cohortId?: string; action: 'process' | 'defer' | 'ignore' | 'confirm'; amount?: number } }
   | { commandId: string; type: 'complete_day'; payload: Record<string, never> }
   | { commandId: string; type: 'continue_after_goal'; payload: Record<string, never> }
   | { commandId: string; type: 'request_finish'; payload: Record<string, never> }

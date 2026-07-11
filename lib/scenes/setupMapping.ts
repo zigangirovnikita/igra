@@ -14,7 +14,13 @@ export function commandId(actionId: string): string {
   return `${actionId}_${Date.now()}`;
 }
 
-export function readCachedGame() {
+export type CachedSessionPointer = {
+  sessionId: string;
+  schemaVersion: 2;
+  expiresAt: number;
+};
+
+export function readCachedGame(): CachedSessionPointer | null {
   if (typeof localStorage === 'undefined') return null;
   const cached = localStorage.getItem('launch-game-cache');
   if (!cached) return null;
@@ -24,8 +30,22 @@ export function readCachedGame() {
       localStorage.removeItem('launch-game-cache');
       return null;
     }
-    return parsed;
+
+    if (parsed.schemaVersion !== 2 || typeof parsed.sessionId !== 'string') {
+      localStorage.removeItem('launch-game-cache');
+      return null;
+    }
+    return parsed as CachedSessionPointer;
   } catch {
+    localStorage.removeItem('launch-game-cache');
     return null;
   }
+}
+
+export function cacheSessionPointer(sessionId: string): void {
+  localStorage.setItem('launch-game-cache', JSON.stringify({
+    sessionId,
+    schemaVersion: 2,
+    expiresAt: Date.now() + 86_400_000,
+  } satisfies CachedSessionPointer));
 }

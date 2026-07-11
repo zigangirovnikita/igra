@@ -1,4 +1,4 @@
-import type { GameState, GameConfig, ActionConfig, ActionOutcome, DayReport, LeadCohort } from '../types';
+import type { GameState, GameConfig, ActionConfig, ActionOutcome, DayReport, LeadCohort, ContentType, ProcessingType } from '../types';
 import { applyEffect } from '../actions/dsl';
 import { createContentCohort } from '../calculations/content';
 import { applyEntry, applyFollowup, applyProcessing, applySales } from '../calculations/funnel';
@@ -8,50 +8,98 @@ export function confirmAction(state: GameState, config: GameConfig): GameState {
   if (!state.pendingAction || !state.pendingAction.confirmed) {
     throw new Error('No confirmed pending action');
   }
-  
+
   const actionId = state.pendingAction.actionId;
   const action = config.actions.find(a => a.id === actionId);
   if (!action) throw new Error(`Action not found: ${actionId}`);
-  
-  state.resources.bank -= action.cost;
+
+  let finalCost = action.cost;
+
+  if (action.repeatPolicy === 'upgrade' && action.upgradeCost !== undefined && action.upgradeGroup) {
+    const hasPrevious = state.history.some(h => {
+      if (h.type !== 'action_completed' || !h.payload?.actionId) return false;
+      const prevA = config.actions.find(a => a.id === h.payload!.actionId);
+      return prevA?.upgradeGroup === action.upgradeGroup;
+    });
+    if (hasPrevious) {
+      finalCost = action.upgradeCost;
+    }
+  }
+
+  state.resources.bank -= finalCost;
   state.resources.energy = Math.max(0, state.resources.energy - action.energyCost);
-  state.metrics.expenses += action.cost;
-  
+  state.metrics.expenses += finalCost;
+
   if (state.pendingAction.temporaryRoute) {
     state.activeRoute = state.pendingAction.temporaryRoute;
   }
-  
-  // Calculate baseline metrics before action
+
+  const startedDay = state.resources.day;
+  const finishedDay = startedDay + action.days;
+
+  // Spend time immediately
+  state.resources.day = finishedDay;
+
+  // Execute effects immediately
+  const report = executeActionEffects(state, config, action, startedDay, finishedDay, state.pendingAction.contentType);
+  state.lastOutcome = report.outcome;
+  state.currentDayReport = report;
+
+  state.history.push({
+    day: finishedDay,
+    type: 'action_completed',
+    message: `Завершено действие: ${action.title}`,
+    payload: { actionId: action.id }
+  });
+
+  state.pendingAction = null;
+
+  if (action.days > 0) {
+    state.flow.step = 'action_process'; // UI will acknowledge and go to action_result
+  } else {
+    state.flow.step = 'action_result'; // UI will show result immediately
+  }
+
+  return state;
+}
+
+export function executeActionEffects(
+  state: GameState,
+  config: GameConfig,
+  action: ActionConfig,
+  startedDay: number,
+  finishedDay: number,
+  contentType?: string
+): DayReport {
   const beforeMetrics = { ...state.metrics };
-  const beforeBank = state.resources.bank + action.cost;
-  const beforeEnergy = state.resources.energy + action.energyCost;
+  const beforeBank = state.resources.bank;
+  const beforeEnergy = state.resources.energy;
   const createdCohorts: string[] = [];
-  
+
   // Apply immediate effects
   for (const effect of action.effects) {
     applyEffect(state, effect);
   }
-  
+
   if (['simple_bot_self', 'simple_bot_specialist', 'ai_bot_self', 'ai_bot_specialist', 'hire_manager'].includes(action.id)) {
     pickUpWarmBacklog(state, config, action.id);
   }
-  
+
   activateRouteTool(state, action.id);
-  
+
   if (action.id === 'demand_pilot_offer') {
-    createdCohorts.push(runPilotOffer(state, config));
+    createdCohorts.push(runPilotOffer(state, config, finishedDay));
   }
-  
+
   if (['stories_3d', 'reels_7d', 'reels_stories_7d', 'live_stream', 'webinar', 'telegram_warmup', 'contacts_outreach'].includes(action.id)) {
-    const contentType = state.pendingAction.contentType || 'storytelling';
-    let cohort = createContentCohort(state, config, action.id, contentType, state.cohorts.length);
+    let cohort = createContentCohort(state, config, action.id, (contentType || 'storytelling') as ContentType, state.cohorts.length);
     if (cohort) {
       cohort = applyEntry(state, config, cohort);
       state.cohorts.push(cohort);
       createdCohorts.push(cohort.id);
     }
   }
-  
+
   if (action.id === 'manual_followup' || action.id === 'bot_followup') {
     state.cohorts = state.cohorts.map((cohort) => applyFollowup(state, config, {
       ...cohort,
@@ -65,17 +113,17 @@ export function confirmAction(state: GameState, config: GameConfig): GameState {
       }
     }
   }
-  
+
   recalculateMetrics(state);
-  
+
   const outcome: ActionOutcome = {
     actionId: action.id,
     title: action.title,
-    startedDay: state.resources.day,
-    finishedDay: state.resources.day + action.days,
-    
+    startedDay,
+    finishedDay,
+
     impressionsDelta: state.metrics.impressions - beforeMetrics.impressions,
-    inboundDelta: state.metrics.responses - beforeMetrics.responses, // responses = inbound
+    inboundDelta: state.metrics.responses - beforeMetrics.responses,
     processedDelta: state.metrics.processed - beforeMetrics.processed,
     applicationsDelta: state.metrics.applications - beforeMetrics.applications,
     bookedCallsDelta: state.metrics.bookedCalls - beforeMetrics.bookedCalls,
@@ -83,46 +131,23 @@ export function confirmAction(state: GameState, config: GameConfig): GameState {
     salesDelta: state.metrics.sales - beforeMetrics.sales,
     revenueDelta: state.metrics.revenue - beforeMetrics.revenue,
     lostDelta: state.metrics.lostLeads - beforeMetrics.lostLeads,
-    
+
     bankDelta: state.resources.bank - beforeBank,
     energyDelta: state.resources.energy - beforeEnergy,
-    
+
     createdCohortIds: createdCohorts,
-    narrativeKeys: [] // To be filled by narrative system
+    narrativeKeys: []
   };
-  
-  state.lastOutcome = outcome;
-  state.currentDayReport = {
-    id: `report_${state.resources.day}_${action.id}`,
-    startedDay: state.resources.day,
-    finishedDay: state.resources.day + action.days,
+
+  return {
+    id: `report_${finishedDay}_${action.id}`,
+    startedDay,
+    finishedDay,
     actionId: action.id,
     actionTitle: action.title,
     outcome,
     decisions: []
   };
-  
-  if (action.days > 0) {
-    state.scheduledActions.push({
-      id: `${action.id}_${state.resources.day}`,
-      actionId: action.id,
-      startedDay: state.resources.day,
-      completesDay: state.resources.day + action.days,
-      payload: {},
-      completed: false
-    });
-  } else {
-    state.history.push({
-      day: state.resources.day,
-      type: 'action_completed',
-      message: `Завершено действие: ${action.title}`,
-      payload: { actionId: action.id }
-    });
-  }
-  
-  state.pendingAction = null;
-  state.flow.step = 'action_process';
-  return state;
 }
 
 function activateRouteTool(state: GameState, actionId: string): void {
@@ -140,13 +165,13 @@ function pickUpWarmBacklog(state: GameState, config: GameConfig, actionId: strin
   state.activeRoute = { ...state.activeRoute, processing };
   state.cohorts = state.cohorts.map((cohort) => {
     if (cohort.unprocessedInbound <= 0) return cohort;
-    const updated = { ...cohort, routeSnapshot: { ...cohort.routeSnapshot, processing: processing as any } };
+    const updated = { ...cohort, routeSnapshot: { ...cohort.routeSnapshot, processing: processing as ProcessingType } };
     return applyProcessing(state, config, updated, 'auto');
   });
 }
 
-function runPilotOffer(state: GameState, config: GameConfig): string {
-  const id = `pilot_offer_${state.resources.day}`;
+function runPilotOffer(state: GameState, config: GameConfig, finishedDay: number): string {
+  const id = `pilot_offer_${finishedDay}`;
   let cohort: LeadCohort = {
     id, createdDay: state.resources.day, sourceActionId: 'demand_pilot_offer', sourceType: 'stories', contentType: 'selling',
     impressions: 3, responses: 3, activated: 3, processed: 3, applications: 3, bookedCalls: 0, heldCalls: 0, sales: 0,

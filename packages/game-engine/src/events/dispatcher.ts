@@ -44,7 +44,7 @@ function matches(id: string, previous: GameState, state: GameState, actionId?: s
     case 'capacity_reached': return state.metrics.capacityLostLeads > previous.metrics.capacityLostLeads;
     case 'followup_success': return actionId?.includes('followup') === true && salesDelta > 0;
     case 'followup_failed': return actionId?.includes('followup') === true && salesDelta === 0;
-    case 'business_goal_early': return previous.status !== 'goal_reached' && state.status === 'goal_reached' && state.resources.day < 30;
+    case 'business_goal_early': return previous.metrics.revenue < previous.targets.targetRevenue && state.metrics.revenue >= state.targets.targetRevenue && state.resources.day < 30;
     case 'consultation_risk_reveal': return isAction('consultation_basic', 'consultation_detailed');
     case 'call_booked': return state.metrics.bookedCalls > previous.metrics.bookedCalls;
     case 'call_no_show': return state.metrics.bookedCalls > state.metrics.heldCalls && actionId === 'calls';

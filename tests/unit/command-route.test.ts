@@ -16,7 +16,7 @@ describe('command API concurrency', () => {
     const state = createInitialState(scenarios[0].setup, config, crypto.randomUUID());
     mocks.getSession.mockResolvedValue({ id: state.sessionId, state, setup: state.player });
     const { POST } = await import('../../app/api/game/sessions/[id]/commands/route');
-    const response = await POST(new Request('http://localhost', { method: 'POST', body: JSON.stringify({ commandId: 'late', expectedVersion: 99, type: 'start_action', payload: { actionId: 'demand_poll' } }) }), { params: Promise.resolve({ id: state.sessionId }) });
+    const response = await POST(new Request('http://localhost', { method: 'POST', body: JSON.stringify({ commandId: 'late', expectedVersion: 99, type: 'advance_intro', payload: {} }) }), { params: Promise.resolve({ id: state.sessionId }) });
     expect(response.status).toBe(409);
     expect((await response.json()).state.stateVersion).toBe(0);
     expect(mocks.saveSession).not.toHaveBeenCalled();
@@ -27,7 +27,7 @@ describe('command API concurrency', () => {
     const session = { id: state.sessionId, state, setup: state.player };
     mocks.getSession.mockResolvedValue(session);
     const { POST } = await import('../../app/api/game/sessions/[id]/commands/route');
-    const body = { commandId: 'same', expectedVersion: 0, type: 'start_action', payload: { actionId: 'demand_poll' } };
+    const body = { commandId: 'same', expectedVersion: 0, type: 'advance_intro', payload: {} };
     const response = await POST(new Request('http://localhost', { method: 'POST', body: JSON.stringify(body) }), { params: Promise.resolve({ id: state.sessionId }) });
     expect(response.status).toBe(200);
     expect(session.state.appliedCommandIds).toEqual(['same']);

@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { explainWithAi } from '../../lib/ai/report';
 import { applyCommand, createInitialState } from '../../packages/game-engine/src';
@@ -6,7 +5,28 @@ import { loadGameConfig } from '../../lib/config/game-config';
 import { scenarios } from '../fixtures/scenarios';
 
 const config = loadGameConfig();
-const finished = applyCommand(createInitialState(scenarios[0].setup, config, 'ai_test'), config, { commandId: 'finish', type: 'finish_game' });
+
+// Build a finished state using the canonical scenario
+function buildFinishedState() {
+  const scenario = scenarios[0];
+  let state = createInitialState(scenario.setup, config, 'ai_test');
+  for (const command of scenario.commands) {
+    state = applyCommand(state, config, command);
+    // Auto-resolve pending decisions
+    while (state.flow.step === 'post_action' && state.pendingDecision) {
+      const decision = state.pendingDecision;
+      const cohortId = 'cohortId' in decision ? decision.cohortId : undefined;
+      state = applyCommand(state, config, {
+        commandId: `auto_resolve_${decision.type}`,
+        type: 'resolve_pending_decision',
+        payload: { action: 'defer', cohortId }
+      });
+    }
+  }
+  return state;
+}
+
+const finished = buildFinishedState();
 
 afterEach(() => { vi.unstubAllGlobals(); delete process.env.OPENAI_API_KEY; delete process.env.OPENAI_REPORT_MODEL; });
 

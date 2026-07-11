@@ -9,15 +9,29 @@ type FlowProps = {
 };
 
 export function DailyIntentFlow({ state, dispatch, busy }: FlowProps) {
+  let introText = `День ${state.resources.day}. Что будем делать?`;
+
+  if (state.lastOutcome) {
+    if (state.lastOutcome.salesDelta > 0) {
+      introText = 'Вчера пришли оплаты. Продолжить эту схему или усилить её?';
+    } else {
+      introText = 'Вчера продаж не было. Что попробовать теперь?';
+    }
+  }
+
   return (
     <MultiChoiceScreen
-      title={`День ${state.resources.day}. Что будем делать?`}
+      title={introText}
       choices={[
-        { id: 'get_sales', label: 'Продавать' },
-        { id: 'fix_system', label: 'Чинить систему' },
+        { id: 'get_sales', label: 'Попробовать получить продажи' },
+        { id: 'fix_system', label: 'Исправить систему запуска' },
+        { id: 'get_advice', label: 'Получить совет' },
+        { id: 'restore_energy', label: 'Восстановить силы' },
+        { id: 'finish', label: 'Завершить запуск' },
       ]}
       onConfirm={(id) => dispatch('choose_intent', { intent: id })}
       busy={busy}
+      layout="list"
     />
   );
 }
