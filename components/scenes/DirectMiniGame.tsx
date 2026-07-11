@@ -12,12 +12,13 @@ type Props = {
 export function DirectMiniGame({ state, dispatch, busy }: Props) {
   const miniGame = state.miniGame;
   const [cursor, setCursor] = useState(0);
-  const [processed, setProcessed] = useState(0);
+  const [answeredMessageIds, setAnsweredMessageIds] = useState<string[]>([]);
   const [remainingSeconds, setRemainingSeconds] = useState(() => secondsUntil(miniGame?.expiresAt));
   const submittedRef = useRef(false);
 
   const messages = useMemo(() => miniGame?.messages ?? [], [miniGame]);
   const current = messages[cursor];
+  const processed = answeredMessageIds.length;
   const energyRemaining = Math.max(0, state.resources.energy - processed * 0.3);
 
   const submit = useCallback(async (mode: 'manual' | 'auto') => {
@@ -26,9 +27,9 @@ export function DirectMiniGame({ state, dispatch, busy }: Props) {
     await dispatch('resolve_mini_game', {
       cohortId: miniGame.cohortId,
       mode,
-      processed: mode === 'manual' ? processed : undefined,
+      answeredMessageIds: mode === 'manual' ? answeredMessageIds : undefined,
     });
-  }, [dispatch, miniGame, processed]);
+  }, [answeredMessageIds, dispatch, miniGame]);
 
   useEffect(() => {
     if (!miniGame) return;
@@ -47,7 +48,7 @@ export function DirectMiniGame({ state, dispatch, busy }: Props) {
 
   const answerCurrent = () => {
     if (!current || busy || energyRemaining < 0.3) return;
-    setProcessed((value) => value + 1);
+    setAnsweredMessageIds((value) => [...value, current.id]);
     setCursor((value) => value + 1);
   };
 
