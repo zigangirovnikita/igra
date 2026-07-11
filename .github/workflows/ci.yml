@@ -3,40 +3,75 @@ name: CI
 on:
   pull_request:
   push:
-    branches: [main]
+    branches:
+      - main
+      - feat/game-flow-v2
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  verify:
+  validate:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:17-alpine
+        image: postgres:15
         env:
-          POSTGRES_DB: launch_game
           POSTGRES_USER: launch_game
           POSTGRES_PASSWORD: launch_game
-        ports: ["5433:5432"]
+          POSTGRES_DB: launch_game
+        ports:
+          - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U launch_game -d launch_game"
-          --health-interval 10s --health-timeout 5s --health-retries 10
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     env:
-      DATABASE_URL: postgresql://launch_game:launch_game@127.0.0.1:5433/launch_game
+      DATABASE_URL: postgresql://launch_game:launch_game@localhost:5432/launch_game
       SESSION_SECRET: ci-session-secret-at-least-32-bytes
+
     steps:
       - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 11.7.0
-      - uses: actions/setup-node@v4
+
+      - name: Install pnpm
+        run: corepack enable && pnpm install --frozen-lockfile
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm run lint
-      - run: pnpm run typecheck
-      - run: pnpm run test
-      - run: pnpm run validate:config
-      - run: pnpm exec prisma migrate deploy
-      - run: pnpm run build
-      - run: pnpm exec playwright install --with-deps chromium
-      - run: pnpm run test:e2e -- --project=chromium
+          cache: 'pnpm'
+
+      - name: Generate Prisma client
+        run: pnpm exec prisma generate
+
+      - name: Run lint
+        run: pnpm lint
+
+      - name: Run typecheck
+        run: pnpm typecheck
+
+      - name: Run tests
+        run: pnpm test
+
+      - name: Validate config
+        run: pnpm validate:config
+
+      - name: Validate DB schema
+        run: pnpm db:validate
+
+      - name: Test DB migrations
+        run: pnpm db:migrate:test
+
+      - name: Build Next.js
+        run: pnpm build
+
+      - name: Deploy DB migrations
+        run: pnpm exec prisma migrate deploy
+
+      - name: Run E2E tests
+        run: pnpm test:e2e

@@ -15,7 +15,12 @@
     "simulate:balance": "tsx scripts/balance-sim.ts",
     "export:sessions": "tsx scripts/export-sessions.ts",
     "db:validate": "DATABASE_URL=postgresql://launch_game:launch_game@localhost:5432/launch_game prisma validate",
-    "db:migrate:test": "DATABASE_URL=postgresql://launch_game:launch_game@localhost:5432/launch_game prisma migrate diff --from-empty --to-schema-datamodel prisma/schema.prisma --script"
+    "db:migrate:test": "DATABASE_URL=postgresql://launch_game:launch_game@localhost:5432/launch_game prisma migrate diff --from-empty --to-schema-datamodel prisma/schema.prisma --script",
+    "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm validate:config && pnpm build",
+    "db:migrate:deploy": "prisma migrate deploy",
+    "test:flow": "vitest run tests/unit/flow tests/unit/engine",
+    "test:release": "pnpm check && pnpm db:validate && pnpm db:migrate:test && pnpm test:e2e",
+    "simulate:balance:release": "tsx scripts/balance-sim.ts --runs 50000"
   },
   "dependencies": {
     "@prisma/client": "^6.0.0",
