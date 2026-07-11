@@ -84,7 +84,6 @@ export function resolvePendingDecision(
     if (payload.action === 'rest_day' || payload.action === 'rest_two_days') {
       const days = payload.action === 'rest_two_days' ? 2 : 1;
       if (state.resources.day + days > config.totalDays) throw new Error('Not enough days to rest');
-      // complete_day advances once more; pre-advance only the additional rest days here.
       state.resources.day += Math.max(0, days - 1);
       state.resources.energy = Math.min(100, state.resources.energy + (days === 2 ? 45 : 20));
     } else if (payload.action === 'delegate') {
@@ -181,13 +180,15 @@ export function resolvePendingDecision(
       const requested = payload.amount ?? Math.min(cohort.unprocessedApplications, 10);
       const amount = Math.min(cohort.unprocessedApplications, Math.max(0, Math.floor(requested)), energyCapacity);
       if (amount <= 0) throw new Error('Not enough energy to process sales');
-      state.cohorts[cohortIndex] = applySales(
+      const routeSnapshot = cohort.routeSnapshot;
+      const updated = applySales(
         state,
         config,
-        { ...cohort, routeSnapshot: { ...cohort.routeSnapshot, saleMethod: method } },
+        { ...cohort, routeSnapshot: { ...routeSnapshot, saleMethod: method } },
         method,
         amount,
       );
+      state.cohorts[cohortIndex] = { ...updated, routeSnapshot };
       if (energyCost > 0) state.resources.energy = Math.max(0, state.resources.energy - amount * energyCost);
       if (state.cohorts[cohortIndex].unprocessedApplications <= 0) state.cohorts[cohortIndex].salesDecision = 'resolved';
     } else if (payload.action === 'defer') {
@@ -204,10 +205,12 @@ export function resolvePendingDecision(
         throw new Error('Create a bot before automated follow-up');
       }
       if (followup === 'manual' && state.resources.energy < 5) throw new Error('Not enough energy for follow-up');
-      state.cohorts[cohortIndex] = applyFollowup(state, config, {
+      const routeSnapshot = cohort.routeSnapshot;
+      const updated = applyFollowup(state, config, {
         ...cohort,
-        routeSnapshot: { ...cohort.routeSnapshot, followup },
+        routeSnapshot: { ...routeSnapshot, followup },
       });
+      state.cohorts[cohortIndex] = { ...updated, routeSnapshot };
       if (followup === 'manual') state.resources.energy -= 5;
       state.cohorts[cohortIndex].followupDecision = 'resolved';
     } else if (payload.action === 'defer') {
