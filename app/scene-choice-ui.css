@@ -1,0 +1,208 @@
+.choice-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: clamp(20px, 5vw, 36px);
+  overflow-y: auto;
+}
+
+.choice-heading {
+  display: grid;
+  gap: 10px;
+}
+
+.choice-question {
+  margin: 0;
+  color: var(--color-ink, #241829);
+  font-size: clamp(28px, 6vw, 42px);
+  font-weight: 900;
+  line-height: 1.05;
+  letter-spacing: -0.03em;
+}
+
+.choice-subtext {
+  max-width: 720px;
+  margin: 0;
+  color: color-mix(in srgb, var(--color-ink, #241829) 78%, transparent);
+  font-size: clamp(16px, 3.4vw, 21px);
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.choice-list {
+  display: grid;
+  gap: 12px;
+}
+
+.choice-list--grid-2,
+.choice-list--grid-3 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.choice-list--list {
+  grid-template-columns: 1fr;
+}
+
+.choice-card {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 100%;
+  min-height: 88px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 14px;
+  padding: 16px;
+  border: 2px solid rgba(36, 24, 41, 0.9);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.82);
+  color: var(--color-ink, #241829);
+  text-align: left;
+  cursor: pointer;
+  box-shadow: 0 5px 0 rgba(36, 24, 41, 0.22);
+  transition: transform 120ms ease, box-shadow 120ms ease, background 120ms ease, border-color 120ms ease;
+}
+
+.choice-card:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 7px 0 rgba(36, 24, 41, 0.22);
+  background: #fff;
+}
+
+.choice-card:active:not(:disabled) {
+  transform: translateY(3px);
+  box-shadow: 0 2px 0 rgba(36, 24, 41, 0.2);
+}
+
+.choice-card:focus-visible {
+  outline: 4px solid rgba(226, 53, 119, 0.28);
+  outline-offset: 3px;
+}
+
+.choice-card--selected {
+  border-color: var(--color-accent, #e23577);
+  background: #fff1f7;
+  box-shadow: 0 5px 0 rgba(226, 53, 119, 0.32);
+}
+
+.choice-card--disabled,
+.choice-card:disabled {
+  opacity: 1;
+  border-color: rgba(36, 24, 41, 0.24);
+  background: rgba(255, 255, 255, 0.38);
+  color: rgba(36, 24, 41, 0.48);
+  box-shadow: none;
+  cursor: not-allowed;
+  filter: none;
+}
+
+.choice-icon {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.82);
+  font-size: 24px;
+  line-height: 1;
+}
+
+.choice-card--selected .choice-icon {
+  background: #ffd6e6;
+}
+
+.choice-content {
+  min-width: 0;
+  display: grid;
+  gap: 5px;
+}
+
+.choice-title {
+  color: inherit;
+  font-size: 17px;
+  font-weight: 850;
+  line-height: 1.2;
+}
+
+.choice-desc {
+  color: color-mix(in srgb, currentColor 72%, transparent);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.35;
+}
+
+.choice-disabled-reason {
+  display: inline-flex;
+  width: fit-content;
+  margin-top: 3px;
+  padding: 5px 8px;
+  border-radius: 999px;
+  background: rgba(192, 57, 43, 0.1);
+  color: #8f2d25;
+  font-size: 12px;
+  font-weight: 750;
+  line-height: 1.25;
+}
+
+.choice-state {
+  min-width: 24px;
+  color: var(--color-accent, #e23577);
+  font-size: 20px;
+  font-weight: 900;
+  text-align: center;
+}
+
+.choice-card--disabled .choice-state {
+  color: rgba(36, 24, 41, 0.42);
+  font-size: 16px;
+}
+
+.choice-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  display: grid;
+  gap: 10px;
+  margin-top: auto;
+  padding-top: 8px;
+  background: linear-gradient(to bottom, transparent, var(--bg, #9ee9ff) 24%);
+}
+
+.choice-actions .btn-primary,
+.choice-actions .btn-secondary {
+  border-radius: 14px;
+}
+
+.choice-actions .btn-primary:disabled {
+  opacity: 0.38;
+  box-shadow: none;
+}
+
+@media (max-width: 520px) {
+  .choice-list--grid-2,
+  .choice-list--grid-3 {
+    grid-template-columns: 1fr;
+  }
+
+  .choice-card {
+    min-height: 78px;
+    padding: 14px;
+  }
+
+  .choice-icon {
+    width: 38px;
+    height: 38px;
+    font-size: 21px;
+  }
+
+  .choice-title {
+    font-size: 16px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .choice-card {
+    transition: none;
+  }
+}
