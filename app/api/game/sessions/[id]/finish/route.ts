@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextResponse } from 'next/server';
-import { finishGame } from '@/packages/game-engine/src';
+import { finishGame, type Diagnostics, type GameState } from '@/packages/game-engine/src';
 import { explainWithAi } from '@/lib/ai/report';
 import { loadGameConfig } from '@/lib/config/game-config';
 import { getSession } from '@/lib/game/store';
@@ -56,7 +56,8 @@ export async function POST(request: Request, context: RouteContext) {
         });
         if (updated.count !== 1) throw new VersionConflictError();
 
-        const diagnostics = finalState.diagnostics!;
+        const diagnostics = finalState.diagnostics;
+        if (!diagnostics) throw new Error('missing_diagnostics');
         await transaction.gameResult.upsert({
           where: { sessionId: id },
           update: resultData(finalState, diagnostics),
@@ -113,7 +114,7 @@ export async function POST(request: Request, context: RouteContext) {
   });
 }
 
-function resultData(state: Awaited<ReturnType<typeof finishGame>>, diagnostics: NonNullable<typeof state.diagnostics>) {
+function resultData(state: GameState, diagnostics: Diagnostics) {
   return {
     metrics: state.metrics as any,
     targets: state.targets as any,
