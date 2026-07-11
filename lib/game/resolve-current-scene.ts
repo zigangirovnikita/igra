@@ -6,9 +6,11 @@ export function resolveCurrentScene(state: GameState): { scene: string; props?: 
       return { scene: 'setup' };
     case 'intro':
     case 'day_start':
+      return { scene: 'intro' }; // Both use narrative wrappers
     case 'day_1':
+      return { scene: 'day_1' };
     case 'day_2':
-      return { scene: 'narrative', props: { stateStatus: state.status } };
+      return { scene: 'day_2' };
     case 'daily_intent':
       return { scene: 'daily_intent' };
     case 'action_selection':
@@ -21,8 +23,9 @@ export function resolveCurrentScene(state: GameState): { scene: string; props?: 
       return { scene: 'pending_decision' };
     case 'day_completion':
       return { scene: 'day_completion' };
-    case 'goal_reached':
     case 'energy_crisis':
+      return { scene: 'energy_crisis' };
+    case 'goal_reached':
     case 'finished':
       return { scene: 'finished' };
     default:
