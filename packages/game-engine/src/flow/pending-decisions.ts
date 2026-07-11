@@ -7,6 +7,9 @@ const MINI_GAME_TRIGGER = 30;
 const MINI_GAME_LIMIT = 2;
 const MANUAL_MESSAGE_ENERGY = 0.3;
 const MANUAL_SALE_ENERGY = 0.5;
+const LOW_ENERGY_THRESHOLD = 30;
+const AUTO_THROUGHPUT_NORMAL = 18;
+const AUTO_THROUGHPUT_LOW_ENERGY = 12;
 
 export function deriveNextPendingDecision(state: GameState): NonNullable<GameState['pendingDecision']> | null {
   for (const cohort of state.cohorts) {
@@ -153,24 +156,39 @@ export function resolvePendingDecision(
     if (!miniGame || miniGame.status !== 'active' || miniGame.cohortId !== cohort.id) {
       throw new Error('Mini-game session is not active');
     }
-    state.flags[`mini_game_seen:${cohort.id}`] = true;
-    state.metrics.miniGameCount += 1;
 
-    if (payload.action === 'process_mini_game') {
-      const beforeExpiry = Date.now() <= Date.parse(miniGame.expiresAt);
-      const energyCapacity = Math.max(0, Math.floor(state.resources.energy / MANUAL_MESSAGE_ENERGY));
-      const requested = beforeExpiry ? Math.max(0, Math.floor(payload.amount ?? 0)) : 0;
-      const amount = Math.min(requested, miniGame.messages.length, cohort.unprocessedInbound, energyCapacity);
-      if (amount > 0) {
-        state.cohorts[cohortIndex] = applyProcessing(state, config, cohort, 'manual', amount);
+    const manual = payload.action === 'process_mini_game';
+    const automatic = payload.action === 'skip_mini_game';
+    if (!manual && !automatic) throw new Error('Invalid mini-game action');
+
+    const beforeExpiry = Date.now() <= Date.parse(miniGame.expiresAt);
+    const energyCapacity = Math.max(0, Math.floor(state.resources.energy / MANUAL_MESSAGE_ENERGY));
+    const requested = manual
+      ? (beforeExpiry ? Math.max(0, Math.floor(payload.amount ?? 0)) : 0)
+      : (state.resources.energy < LOW_ENERGY_THRESHOLD ? AUTO_THROUGHPUT_LOW_ENERGY : AUTO_THROUGHPUT_NORMAL);
+    const amount = Math.min(
+      requested,
+      miniGame.messages.length,
+      cohort.unprocessedInbound,
+      manual ? energyCapacity : cohort.unprocessedInbound,
+    );
+
+    if (amount > 0) {
+      state.cohorts[cohortIndex] = applyProcessing(state, config, cohort, 'auto', amount);
+      if (manual) {
         state.resources.energy = Math.max(0, state.resources.energy - amount * MANUAL_MESSAGE_ENERGY);
       }
-    } else if (payload.action !== 'skip_mini_game') {
-      throw new Error('Invalid mini-game action');
     }
 
+    const unresolved = state.cohorts[cohortIndex].unprocessedInbound;
+    if (unresolved > 0) {
+      state.cohorts[cohortIndex].losses.processing += unresolved;
+      state.cohorts[cohortIndex].unprocessedInbound = 0;
+    }
+    state.cohorts[cohortIndex].inboundDecision = 'resolved';
+    state.flags[`mini_game_seen:${cohort.id}`] = true;
+    state.metrics.miniGameCount += 1;
     state.miniGame = null;
-    state.cohorts[cohortIndex].inboundDecision = state.cohorts[cohortIndex].unprocessedInbound > 0 ? 'pending' : 'resolved';
   } else if (currentDecision.type === 'sales') {
     if (['process', 'sell_chat', 'sell_call', 'sell_website', 'sell_bot', 'sell_webinar'].includes(payload.action)) {
       const method = saleMethodForAction(payload.action, cohort.routeSnapshot.saleMethod);
