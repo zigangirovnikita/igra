@@ -1,9 +1,10 @@
 'use client';
 
 import { useCallback, useRef, useState } from 'react';
-import type { GameConfig, GameState, SetupInput } from '@/packages/game-engine/src';
+import { getActionAvailability, type GameConfig, type GameState, type SetupInput } from '@/packages/game-engine/src';
 import type { ChoiceOption, Scene, SetupDraft } from '@/lib/scenes/types';
-import { buildFinalScenes, buildInitialGameScenes, buildMainChoiceScene, buildPostActionScenes } from '@/lib/scenes/script';
+import { actionToChoice, buildFinalScenes, buildInitialGameScenes, buildMainChoiceScene, buildPostActionScenes } from '@/lib/scenes/script';
+import { buildCategoryScene, buildContentTypeScene, buildInitialPlanScenes, CONTENT_ACTIONS, operationalRoute, routeFromPlan, type DecisionCategory } from '@/lib/scenes/decisionFlow';
 import { getActionStartNarrative, getDirectMiniGameResult } from '@/lib/scenes/narratives';
 import { SetupScene } from './SetupScene';
 import { NarrativeScreen } from './NarrativeScreen';
@@ -35,7 +36,7 @@ function draftToSetupInput(draft: SetupDraft): SetupInput {
 }
 
 function defaultRouteFor(state: GameState) {
-  return state.activeRoute;
+  return operationalRoute(state);
 }
 
 type Props = { config: GameConfig };
@@ -49,6 +50,7 @@ export function SceneEngine({ config }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [leadStatus, setLeadStatus] = useState<string | null>(null);
   const prevStateRef = useRef<GameState | null>(null);
+  const planRef = useRef<Record<string, string>>({});
 
   // ── Queue helpers ────────────────────────────────────────────────
 
@@ -77,7 +79,7 @@ export function SceneEngine({ config }: Props) {
       const newState: GameState = data.state;
       setGameState(newState);
       prevStateRef.current = newState;
-      const scenes = buildInitialGameScenes(newState, config);
+      const scenes = buildInitialPlanScenes();
       setQueue(scenes);
       setPhase('game');
       localStorage.setItem('launch-game-cache', JSON.stringify({ expiresAt: Date.now() + 86_400_000, state: newState }));
@@ -92,6 +94,29 @@ export function SceneEngine({ config }: Props) {
 
   async function handleActionChosen(option: ChoiceOption) {
     if (!gameState) return;
+
+    if (option.id.startsWith('__plan:')) {
+      const [, key, value] = option.id.split(':');
+      planRef.current[key] = value;
+      if (key === 'followup') await saveInitialPlan(gameState);
+      return;
+    }
+
+    if (option.id.startsWith('__category:')) {
+      const category = option.id.split(':')[1] as DecisionCategory;
+      const available = config.actions.filter((action) => action.enabled && getActionAvailability(gameState, action, config).available);
+      pushScenes([buildCategoryScene(gameState, available, category, (action) => actionToChoice(gameState, action))]);
+      return;
+    }
+
+    if (CONTENT_ACTIONS.has(option.id) && !option.payload?.contentType) {
+      pushScenes([buildContentTypeScene(option)]);
+      return;
+    }
+
+    if (option.id.startsWith('__content:')) {
+      option = { ...option, id: String(option.payload?.actionId ?? '') };
+    }
 
     if (option.id === '__finish__') {
       await finishGame(gameState);
@@ -115,7 +140,7 @@ export function SceneEngine({ config }: Props) {
           type: 'start_action',
           payload: {
             actionId: option.id,
-            contentType: 'useful',
+            contentType: option.payload?.contentType ?? 'useful',
             route: defaultRouteFor(gameState),
             ...(option.payload ?? {}),
           },
@@ -143,6 +168,27 @@ export function SceneEngine({ config }: Props) {
       if (gameState) {
         setQueue((q) => [...q, buildMainChoiceScene(gameState, config)]);
       }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function saveInitialPlan(state: GameState) {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/game/sessions/${state.sessionId}/commands`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ commandId: commandId('initial-plan'), expectedVersion: state.stateVersion, type: 'set_plan', payload: routeFromPlan(planRef.current) }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message ?? data.error ?? 'Не удалось сохранить план');
+      const newState: GameState = data.state;
+      setGameState(newState);
+      prevStateRef.current = newState;
+      setQueue((current) => [...current, ...buildInitialGameScenes(newState, config)]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Ошибка сохранения плана');
     } finally {
       setBusy(false);
     }

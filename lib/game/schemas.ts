@@ -21,7 +21,7 @@ export const setupSchema = z.object({
 export const commandRequestSchema = z.object({
   commandId: z.string().min(1).max(120),
   expectedVersion: z.number().int().nonnegative(),
-  type: z.enum(['start_action', 'set_route', 'start_parallel', 'resolve_mini_game', 'finish_game']),
+  type: z.enum(['start_action', 'set_route', 'set_plan', 'start_parallel', 'resolve_mini_game', 'finish_game']),
   idempotencyKey: z.string().optional(),
   payload: z.unknown().optional()
 });

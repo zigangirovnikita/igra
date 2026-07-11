@@ -211,6 +211,7 @@ export type GameState = {
     manager: string | null;
   };
   activeRoute: RouteSelection;
+  initialPlan?: RouteSelection;
   scheduledActions: ScheduledAction[];
   cohorts: LeadCohort[];
   metrics: GameMetrics;
@@ -222,6 +223,7 @@ export type GameState = {
 export type GameCommand =
   | { commandId: string; type: 'start_action'; payload: { actionId: string; contentType?: ContentType; route?: RouteSelection } }
   | { commandId: string; type: 'set_route'; payload: RouteSelection }
+  | { commandId: string; type: 'set_plan'; payload: RouteSelection }
   | { commandId: string; type: 'start_parallel'; payload: { actionAId: string; actionBId: string; contentType?: ContentType; route?: RouteSelection } }
   | { commandId: string; type: 'resolve_mini_game'; payload: { cohortId: string; mode: 'manual' | 'auto'; processed?: number } }
   | { commandId: string; type: 'finish_game'; payload?: { continueAfterGoal?: boolean } };

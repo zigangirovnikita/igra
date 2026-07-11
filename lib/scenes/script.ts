@@ -18,6 +18,7 @@ import {
   getLowEnergyWarning,
   rub,
 } from './narratives';
+import { buildCategoryOptions } from './decisionFlow';
 
 // ─── After setup: initial game scenes ────────────────────────────────────────
 
@@ -53,10 +54,7 @@ export function buildPostActionScenes(
     deltas: resultDeltas,
   });
 
-  // 2. Metrics screen
-  scenes.push(buildMetricsScene(newState, prevState));
-
-  // 3. Low energy warning (once per threshold)
+  // 2. Low energy warning (once per threshold)
   if (newState.resources.energy < 30 && prevState.resources.energy >= 30) {
     scenes.push({
       type: 'narrative',
@@ -124,7 +122,7 @@ export function buildPostActionScenes(
 export function buildMainChoiceScene(state: GameState, config: GameConfig, earlyFinish = false): ChoiceScene {
   const available = config.actions.filter((a) => a.enabled && isActionAvailableForChoice(state, a, config));
   const phase = detectPhase(state);
-  const options = buildChoiceOptions(state, available, phase, config);
+  const options = buildCategoryOptions(available, state.resources.energy);
 
   const questions: Record<string, string> = {
     demand: 'Продукт ещё не проверен. С чего начнёте?',
@@ -135,11 +133,9 @@ export function buildMainChoiceScene(state: GameState, config: GameConfig, early
   };
 
   const baseOptions = options;
-  baseOptions.push({
-    id: '__finish__',
-    icon: '🏁',
-    title: earlyFinish ? 'Завершить и посмотреть итоги' : 'Завершить запуск досрочно',
-    description: earlyFinish ? 'Цель достигнута. Посмотрите финальный разбор запуска.' : 'Остановить запуск и перейти к итогам.',
+  if (earlyFinish) baseOptions.push({
+    id: '__finish__', icon: '🏁', title: 'Завершить и посмотреть итоги',
+    description: 'Цель достигнута. Посмотрите финальный разбор запуска.',
   });
 
   return {
@@ -206,7 +202,7 @@ function buildChoiceOptions(
   return filtered.map((action) => actionToChoice(state, action));
 }
 
-function actionToChoice(state: GameState, action: ActionConfig): ChoiceOption {
+export function actionToChoice(state: GameState, action: ActionConfig): ChoiceOption {
   const canAfford = state.resources.bank >= action.cost;
   const hasEnough = state.resources.energy >= action.energyCost;
 
@@ -304,13 +300,6 @@ export function buildFinalScenes(state: GameState, config: GameConfig): Scene[] 
     targetRevenue: state.targets.targetRevenue,
     dreamsMet: state.metrics.revenue >= state.targets.personalGoal,
     resources: { bank: state.resources.bank, energy: state.resources.energy, day: state.resources.day },
-  });
-
-  scenes.push({
-    type: 'cta',
-    won: state.metrics.sales >= state.targets.targetSales,
-    revenue: state.metrics.revenue,
-    personalGoal: state.targets.personalGoal,
   });
 
   return scenes;

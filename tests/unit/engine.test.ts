@@ -39,6 +39,15 @@ describe('randomness', () => {
 });
 
 describe('commands and invariants', () => {
+  it('stores the initial plan without activating unbuilt tools', () => {
+    const state = createInitialState(setup, config, 'plan_seed');
+    const plannedRoute = { entry: 'website' as const, nurture: ['none' as const], processing: 'manager' as const, saleMethod: 'website_auto' as const, followup: 'bot' as const };
+    const next = applyCommand(state, config, { commandId: 'plan', type: 'set_plan', payload: plannedRoute });
+    expect(next.initialPlan).toEqual(plannedRoute);
+    expect(next.activeRoute.processing).toBe('manual');
+    expect(next.history.at(-1)?.type).toBe('initial_plan_set');
+  });
+
   it('does not apply the same command twice', () => {
     const state = createInitialState(setup, config, 'idempotent_seed');
     const command = { commandId: 'same', type: 'start_action' as const, payload: { actionId: 'demand_poll' } };

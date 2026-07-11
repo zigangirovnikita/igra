@@ -17,6 +17,9 @@ export function applyCommand(input: GameState, config: GameConfig, command: Game
   } else if (command.type === 'set_route') {
     state.activeRoute = command.payload;
     state.history.push({ day: state.resources.day, type: 'route_changed', message: 'Маршрут обновлён' });
+  } else if (command.type === 'set_plan') {
+    state.initialPlan = command.payload;
+    state.history.push({ day: state.resources.day, type: 'initial_plan_set', message: 'Первоначальный план запуска сохранён' });
   } else if (command.type === 'start_parallel') {
     state = startParallel(state, config, command.payload.actionAId, command.payload.actionBId, command.payload);
   } else if (command.type === 'resolve_mini_game') {

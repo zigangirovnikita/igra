@@ -36,6 +36,7 @@ export function createInitialState(setup: SetupInput, config: GameConfig, seed: 
       saleMethod: 'manual_chat',
       followup: 'none'
     },
+    initialPlan: undefined,
     scheduledActions: [],
     cohorts: [],
     metrics: {
