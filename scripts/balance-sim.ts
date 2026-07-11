@@ -1,4 +1,4 @@
-import { applyCommand, assertStateInvariants, createInitialState, type GameState } from '../packages/game-engine/src';
+import { applyCommand, assertStateInvariants, createInitialState, type GameCommand, type GameState } from '../packages/game-engine/src';
 import { loadGameConfig } from '../lib/config/game-config';
 import { scenarios } from '../tests/fixtures/scenarios';
 
@@ -23,24 +23,13 @@ for (let index = 0; index < runs; index += 1) {
     let state = createInitialState(fixture.setup, config, `${fixture.seed}_${index}`);
     for (const command of fixture.commands) {
       state = applyCommand(state, config, { ...command, commandId: `${command.commandId}_${index}` });
-
-      while (state.flow.step === 'post_action' && state.pendingDecision) {
-        const decision = state.pendingDecision;
-        const cohortId = 'cohortId' in decision ? decision.cohortId : undefined;
-        state = applyCommand(state, config, {
-          commandId: `auto_resolve_${index}_${Date.now()}`,
-          type: 'resolve_pending_decision',
-          payload: { action: 'defer', cohortId }
-        });
-      }
+      state = resolveAllPending(state, index);
     }
     assertStateInvariants(state, config);
     collect(summary, state);
   } catch (error) {
     summary.invariantViolations += 1;
-    if (runs <= 100) {
-      console.error(`Simulation error in ${fixture.id}:`, error);
-    }
+    if (runs <= 100) console.error(`Simulation error in ${fixture.id}:`, error);
   }
 }
 
@@ -53,14 +42,83 @@ const report = [...summaries.values()].map((summary) => ({
   revenueP90: percentile(summary.revenue, 0.9),
   profitMedian: percentile(summary.profit, 0.5),
   energyMedian: percentile(summary.finalEnergy, 0.5),
-  invariantViolations: summary.invariantViolations
+  invariantViolations: summary.invariantViolations,
 }));
 
 console.table(report);
-
 const violations = report.reduce((sum, item) => sum + item.invariantViolations, 0);
-if (violations > 0) {
-  throw new Error(`Balance simulation found ${violations} invariant violations`);
+if (violations > 0) throw new Error(`Balance simulation found ${violations} invariant violations`);
+
+function resolveAllPending(input: GameState, runIndex: number): GameState {
+  let state = input;
+  let guard = 0;
+  while (state.pendingDecision && guard < 20) {
+    guard += 1;
+    const decision = state.pendingDecision;
+    const cohortId = 'cohortId' in decision ? decision.cohortId : undefined;
+    let command: GameCommand;
+
+    if (decision.type === 'mini_game') {
+      command = {
+        commandId: `sim_mini_${runIndex}_${guard}`,
+        type: 'resolve_mini_game',
+        payload: { cohortId: decision.cohortId, mode: 'auto', processed: 0 },
+      };
+    } else if (decision.type === 'inbound') {
+      command = {
+        commandId: `sim_inbound_${runIndex}_${guard}`,
+        type: 'resolve_pending_decision',
+        payload: {
+          cohortId,
+          action: state.resources.energy >= 0.3 ? 'process_available' : 'ignore',
+        },
+      };
+    } else if (decision.type === 'sales') {
+      command = {
+        commandId: `sim_sales_${runIndex}_${guard}`,
+        type: 'resolve_pending_decision',
+        payload: {
+          cohortId,
+          action: state.resources.energy >= 0.5 ? 'process' : 'ignore',
+          amount: 10,
+        },
+      };
+    } else if (decision.type === 'followup') {
+      command = {
+        commandId: `sim_followup_${runIndex}_${guard}`,
+        type: 'resolve_pending_decision',
+        payload: { cohortId, action: state.resources.energy >= 5 ? 'followup_message' : 'ignore' },
+      };
+    } else if (decision.type === 'energy_crisis') {
+      command = {
+        commandId: `sim_energy_${runIndex}_${guard}`,
+        type: 'resolve_pending_decision',
+        payload: { action: state.resources.day < config.totalDays ? 'rest_day' : 'confirm' },
+      };
+    } else if (decision.type === 'budget_notice') {
+      command = {
+        commandId: `sim_budget_${runIndex}_${guard}`,
+        type: 'resolve_pending_decision',
+        payload: { action: 'continue_without_budget' },
+      };
+    } else if (decision.type === 'goal_reached') {
+      command = {
+        commandId: `sim_goal_${runIndex}_${guard}`,
+        type: 'resolve_pending_decision',
+        payload: { action: 'cancel' },
+      };
+    } else {
+      command = {
+        commandId: `sim_finish_${runIndex}_${guard}`,
+        type: 'resolve_pending_decision',
+        payload: { action: 'cancel' },
+      };
+    }
+
+    state = applyCommand(state, config, command);
+  }
+  if (guard >= 20 && state.pendingDecision) throw new Error(`Pending decision loop: ${state.pendingDecision.type}`);
+  return state;
 }
 
 function collect(summary: Summary, state: GameState): void {
@@ -71,11 +129,11 @@ function collect(summary: Summary, state: GameState): void {
   summary.finalEnergy.push(state.resources.energy);
 }
 
-function getSummary(summaries: Map<string, Summary>, policy: string): Summary {
-  const existing = summaries.get(policy);
+function getSummary(summaries: Map<string, Summary>, policyName: string): Summary {
+  const existing = summaries.get(policyName);
   if (existing) return existing;
-  const created: Summary = { policy, runs: 0, wins: 0, revenue: [], profit: [], finalEnergy: [], invariantViolations: 0 };
-  summaries.set(policy, created);
+  const created: Summary = { policy: policyName, runs: 0, wins: 0, revenue: [], profit: [], finalEnergy: [], invariantViolations: 0 };
+  summaries.set(policyName, created);
   return created;
 }
 
@@ -87,7 +145,7 @@ function getRuns(): number {
 
 function percentile(values: number[], percentileValue: number): number {
   if (values.length === 0) return 0;
-  const sorted = [...values].sort((a, b) => a - b);
+  const sorted = [...values].sort((left, right) => left - right);
   const index = Math.min(sorted.length - 1, Math.max(0, Math.floor((sorted.length - 1) * percentileValue)));
   return Math.round(sorted[index]);
 }
