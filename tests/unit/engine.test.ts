@@ -4,9 +4,12 @@ import {
   assertStateInvariants,
   createInitialState,
   finishGame,
+  getActionAvailability,
   getBucketTargetSales,
   hashToUnitInterval,
-  stochasticRound
+  stochasticRound,
+  type GameCommand,
+  type GameState,
 } from '../../packages/game-engine/src';
 import { loadGameConfig } from '../../lib/config/game-config';
 import { scenarios } from '../fixtures/scenarios';
@@ -42,29 +45,49 @@ describe('commands and invariants', () => {
     expect(twice).toEqual(once);
   });
 
-  it('finishes fixture scenarios without invariant violations', () => {
+  it('runs every fixture without invariant violations', () => {
     for (const scenario of scenarios) {
       let state = createInitialState(scenario.setup, config, scenario.seed);
+      let resolutionSequence = 0;
       for (const command of scenario.commands) {
         state = applyCommand(state, config, command);
-
-        while (state.flow.step === 'post_action' && state.pendingDecision) {
-          const decision = state.pendingDecision;
-          const cohortId = 'cohortId' in decision ? decision.cohortId : undefined;
-          state = applyCommand(state, config, {
-            commandId: `auto_resolve_${Date.now()}`,
-            type: 'resolve_pending_decision',
-            payload: { action: 'defer', cohortId }
-          });
-        }
+        state = resolvePending(state, `${scenario.id}_${resolutionSequence}`);
+        resolutionSequence += 1;
       }
-      if (state.flow.step === 'final_reason') state = finishGame(state, config);
+      state = finishGame(state, config);
       assertStateInvariants(state, config);
       expect(state.status).toBe('finished');
       expect(state.metrics.revenue).toBe(state.metrics.sales * (state.launchPlan.productPrice ?? 0));
       expect(Number.isFinite(state.metrics.revenue)).toBe(true);
       expect(state.diagnostics).toBeDefined();
     }
+  });
+
+  it('reports the full bank and energy cost of an action', () => {
+    const scenario = scenarios[0];
+    let state = createInitialState(scenario.setup, config, 'outcome_seed');
+    for (const command of scenario.commands) {
+      state = applyCommand(state, config, command);
+      if (command.commandId === 'c18') break;
+    }
+
+    const action = config.actions.find((candidate) => candidate.id === 'product_pilot');
+    expect(action).toBeDefined();
+    expect(state.lastOutcome?.bankSpent).toBe(action?.cost);
+    expect(state.lastOutcome?.energySpent).toBe(action?.energyCost);
+    expect(state.lastOutcome?.bankBefore - (state.lastOutcome?.bankAfter ?? 0)).toBe(action?.cost);
+    expect(state.lastOutcome?.finishedDay - state.lastOutcome?.startedDay + 1).toBe(action?.days);
+  });
+
+  it('blocks an action when energy is below its complete cost', () => {
+    const action = config.actions.find((candidate) => candidate.energyCost > 1 && candidate.enabled);
+    expect(action).toBeDefined();
+    const state = createInitialState(setup, config, 'energy_seed');
+    state.status = 'active';
+    state.resources.energy = Math.max(0, (action?.energyCost ?? 1) - 1);
+    const availability = getActionAvailability(state, action!, config);
+    expect(availability.available).toBe(false);
+    if (!availability.available) expect(availability.reason).toMatch(/энергии/i);
   });
 
   it('keeps finished sessions immutable', () => {
@@ -75,3 +98,61 @@ describe('commands and invariants', () => {
     ).toThrow(/Finished session does not accept game commands/);
   });
 });
+
+function resolvePending(input: GameState, key: string): GameState {
+  let state = input;
+  let guard = 0;
+  while (state.pendingDecision && guard < 20) {
+    guard += 1;
+    const pending = state.pendingDecision;
+    const cohortId = 'cohortId' in pending ? pending.cohortId : undefined;
+    let command: GameCommand;
+
+    if (pending.type === 'mini_game') {
+      command = {
+        commandId: `resolve_${key}_${guard}`,
+        type: 'resolve_mini_game',
+        payload: { cohortId: pending.cohortId, mode: 'auto', processed: 0 },
+      };
+    } else if (pending.type === 'inbound') {
+      command = {
+        commandId: `resolve_${key}_${guard}`,
+        type: 'resolve_pending_decision',
+        payload: { cohortId, action: state.resources.energy >= 0.3 ? 'process_available' : 'ignore' },
+      };
+    } else if (pending.type === 'sales') {
+      command = {
+        commandId: `resolve_${key}_${guard}`,
+        type: 'resolve_pending_decision',
+        payload: { cohortId, action: state.resources.energy >= 0.5 ? 'process' : 'ignore', amount: 10 },
+      };
+    } else if (pending.type === 'followup') {
+      command = {
+        commandId: `resolve_${key}_${guard}`,
+        type: 'resolve_pending_decision',
+        payload: { cohortId, action: state.resources.energy >= 5 ? 'followup_message' : 'ignore' },
+      };
+    } else if (pending.type === 'energy_crisis') {
+      command = {
+        commandId: `resolve_${key}_${guard}`,
+        type: 'resolve_pending_decision',
+        payload: { action: state.resources.day < config.totalDays ? 'rest_day' : 'confirm' },
+      };
+    } else if (pending.type === 'budget_notice') {
+      command = {
+        commandId: `resolve_${key}_${guard}`,
+        type: 'resolve_pending_decision',
+        payload: { action: 'continue_without_budget' },
+      };
+    } else {
+      command = {
+        commandId: `resolve_${key}_${guard}`,
+        type: 'resolve_pending_decision',
+        payload: { action: 'cancel' },
+      };
+    }
+    state = applyCommand(state, config, command);
+  }
+  if (state.pendingDecision) throw new Error(`Pending decision loop: ${state.pendingDecision.type}`);
+  return state;
+}
