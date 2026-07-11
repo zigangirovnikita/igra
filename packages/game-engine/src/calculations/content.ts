@@ -1,5 +1,5 @@
 import type { ContentType, GameConfig, GameState, LeadCohort, RouteSnapshot, SourceType } from '../types';
-import { keyedRandomMultiplier } from '../random/keyed';
+import { keyedRandomMultiplier, stochasticRound } from '../random/keyed';
 import { lowEnergyContentMultiplier } from './modifiers';
 
 export function createContentCohort(
@@ -7,20 +7,28 @@ export function createContentCohort(
   config: GameConfig,
   actionId: string,
   contentType: ContentType,
-  occurrenceIndex: number
+  occurrenceIndex: number,
+  sourceTypeOverride?: SourceType,
 ): LeadCohort | null {
-  const sourceType = getSourceType(actionId);
+  const sourceType = sourceTypeOverride ?? getSourceType(actionId);
   if (!sourceType) return null;
-  const cohortId = `${actionId}_${state.resources.day}_${occurrenceIndex}`;
-  const impressions = calculateImpressions(state, config, sourceType, contentType, cohortId, occurrenceIndex);
-  
+
+  const cohortId = `${actionId}_${sourceType}_${state.resources.day}_${occurrenceIndex}`;
+  const rawImpressions = calculateImpressions(state, config, sourceType, contentType, cohortId, occurrenceIndex);
+  const impressions = Math.max(0, stochasticRound(rawImpressions, `${state.seed}|${cohortId}|impressions`));
+
   let responseRate = getResponseRate(sourceType, contentType);
   if (sourceType === 'contacts') {
     responseRate = Number(config.content?.contactsResponseRate ?? 0.05);
   }
-  
-  const responses = impressions * responseRate * keyedRandomMultiplier(state.seed, config, cohortId, 'response');
-  const routeSnapshot: RouteSnapshot = { ...state.activeRoute, capturedDay: state.resources.day };
+
+  const rawResponses = impressions * responseRate * keyedRandomMultiplier(state.seed, config, cohortId, 'response');
+  const responses = Math.min(impressions, Math.max(0, stochasticRound(rawResponses, `${state.seed}|${cohortId}|responses`)));
+  const routeSnapshot: RouteSnapshot = {
+    ...state.activeRoute,
+    nurture: [...state.activeRoute.nurture],
+    capturedDay: state.resources.day,
+  };
 
   return {
     id: cohortId,
@@ -29,17 +37,13 @@ export function createContentCohort(
     sourceType,
     contentType,
     impressions,
-    
     unprocessedInbound: 0,
     pendingFollowup: 0,
-    
     inboundDecision: 'pending',
     salesDecision: 'not_ready',
     followupDecision: 'not_ready',
-    
     deferredUntilDay: null,
     deferCount: 0,
-
     inbound: responses,
     activated: 0,
     processed: 0,
@@ -47,9 +51,7 @@ export function createContentCohort(
     bookedCalls: 0,
     heldCalls: 0,
     sales: 0,
-    
     unprocessedApplications: 0,
-    
     losses: { entry: 0, processing: 0, qualification: 0, callBooking: 0, callNoShow: 0, sale: 0, followup: 0, capacity: 0 },
     capacityLostLeads: 0,
     routeSnapshot,
@@ -59,9 +61,9 @@ export function createContentCohort(
       demandConfidence: state.assets.demandConfidence,
       productQuality: state.assets.productQuality,
       energyAtCreation: state.resources.energy,
-      createdDay: state.resources.day
+      createdDay: state.resources.day,
     },
-    followedUp: false
+    followedUp: false,
   };
 }
 
@@ -71,25 +73,37 @@ function calculateImpressions(
   sourceType: SourceType,
   contentType: ContentType,
   cohortId: string,
-  occurrenceIndex: number
+  occurrenceIndex: number,
 ): number {
   const contentReach = contentType === 'useful' ? 1.2 : contentType === 'selling' ? 0.7 : contentType === 'chaotic' ? 0.8 : 1;
   const random = keyedRandomMultiplier(state.seed, config, cohortId, 'traffic', occurrenceIndex);
-  
-  if (sourceType === 'contacts') {
-    return state.audience.contactsCount;
-  }
+
+  if (sourceType === 'contacts') return Math.max(0, state.audience.contactsCount);
   if (sourceType === 'reels') {
-    return state.audience.averageReelViews * 7 * contentReach * lowEnergyContentMultiplier(state) * random;
+    return Math.max(0, state.audience.averageReelViews) * 7 * contentReach * lowEnergyContentMultiplier(state) * random;
   }
   if (sourceType === 'stories') {
-    const sellingCycles = state.history.filter((entry) => entry.type === 'action_completed' && entry.payload?.actionId === 'stories_3d').length;
+    const sellingCycles = state.history.filter((entry) =>
+      entry.type === 'action_completed' && ['stories_3d', 'reels_stories_7d'].includes(String(entry.payload?.actionId))
+    ).length;
     const sellingPenalty = contentType === 'selling' ? 0.8 * Math.pow(0.85, sellingCycles) : 1;
-    return state.audience.averageStoryViews * 2.25 * contentReach * sellingPenalty * lowEnergyContentMultiplier(state) * random;
+    return Math.max(0, state.audience.averageStoryViews) * 2.25 * contentReach * sellingPenalty * lowEnergyContentMultiplier(state) * random;
   }
-  if (sourceType === 'telegram') return (state.audience.averageTelegramViews ?? 150) * 5 * lowEnergyContentMultiplier(state) * random;
-  if (sourceType === 'live') return Math.max(state.audience.averageStoryViews * 1.5, 50) * random;
-  return Math.max(state.audience.averageStoryViews * 2, 100) * random;
+  if (sourceType === 'telegram') {
+    return Math.max(0, state.audience.averageTelegramViews ?? 0) * 5 * lowEnergyContentMultiplier(state) * random;
+  }
+  if (sourceType === 'live') {
+    return Math.max(0, state.audience.averageStoryViews) * 1.5 * random;
+  }
+  if (sourceType === 'webinar') {
+    const reachableAudience = Math.max(
+      Math.max(0, state.audience.averageStoryViews) * 2,
+      Math.max(0, state.audience.averageTelegramViews ?? 0) * 5,
+      Math.max(0, state.audience.contactsCount),
+    );
+    return reachableAudience * random;
+  }
+  return 0;
 }
 
 function getResponseRate(sourceType: SourceType, contentType: ContentType): number {
