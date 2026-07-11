@@ -11,6 +11,8 @@ import {
   type GameCommand,
   type GameState,
 } from '../../packages/game-engine/src';
+import { createContentCohort } from '../../packages/game-engine/src/calculations/content';
+import { executeActionEffects } from '../../packages/game-engine/src/flow/outcome';
 import { loadGameConfig } from '../../lib/config/game-config';
 import { scenarios } from '../fixtures/scenarios';
 
@@ -94,6 +96,51 @@ describe('commands and invariants', () => {
     const availability = getActionAvailability(state, action, config);
     expect(availability.available).toBe(false);
     if (!availability.available) expect(availability.reason).toMatch(/энергии/i);
+  });
+
+  it('creates separate integer cohorts for combined reels and stories', () => {
+    const state = createInitialState(setup, config, 'combined_content_seed');
+    state.status = 'active';
+    state.resources.day = 3;
+    state.audience.channels = ['instagram'];
+    state.audience.averageReelViews = 1_000;
+    state.audience.averageStoryViews = 300;
+    state.launchPlan.productType = 'consultation';
+    state.launchPlan.productPrice = 10_000;
+    const action = config.actions.find((candidate) => candidate.id === 'reels_stories_7d');
+    if (!action) throw new Error('Missing combined content action');
+    const beforeMetrics = { ...state.metrics };
+
+    const report = executeActionEffects(
+      state,
+      config,
+      action,
+      3,
+      3 + action.days - 1,
+      'storytelling',
+      state.resources.bank,
+      state.resources.energy,
+      beforeMetrics,
+    );
+
+    expect(report.outcome.createdCohortIds).toHaveLength(2);
+    expect(state.cohorts.map((cohort) => cohort.sourceType).sort()).toEqual(['reels', 'stories']);
+    for (const cohort of state.cohorts) {
+      expect(Number.isInteger(cohort.impressions)).toBe(true);
+      expect(Number.isInteger(cohort.inbound)).toBe(true);
+    }
+  });
+
+  it('does not invent webinar audience when all channels are empty', () => {
+    const state = createInitialState(setup, config, 'empty_webinar_seed');
+    state.resources.day = 3;
+    state.audience.averageReelViews = 0;
+    state.audience.averageStoryViews = 0;
+    state.audience.averageTelegramViews = 0;
+    state.audience.contactsCount = 0;
+    const cohort = createContentCohort(state, config, 'webinar', 'storytelling', 0);
+    expect(cohort?.impressions).toBe(0);
+    expect(cohort?.inbound).toBe(0);
   });
 
   it('counts one-day and two-day rest exactly once', () => {
