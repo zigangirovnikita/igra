@@ -1,4 +1,4 @@
-import type { ActionConfig, ActionOutcome, ContentType, DayReport, GameConfig, GameState, LeadCohort, ProcessingType } from '../types';
+import type { ActionConfig, ActionOutcome, ContentType, DayReport, GameConfig, GameState, LeadCohort, ProcessingType, SourceType } from '../types';
 import { applyEffect } from '../actions/dsl';
 import { createContentCohort } from '../calculations/content';
 import { applyEntry, applyFollowup, applyProcessing, applySales } from '../calculations/funnel';
@@ -60,7 +60,7 @@ export function confirmAction(state: GameState, config: GameConfig): GameState {
     day: finishedDay,
     type: 'action_completed',
     message: `Завершено действие: ${action.title}`,
-    payload: { actionId: action.id, cohortId: state.pendingAction.targetCohortId }
+    payload: { actionId: action.id, cohortId: state.pendingAction.targetCohortId },
   });
 
   state.pendingAction = null;
@@ -95,13 +95,12 @@ export function executeActionEffects(
     createdCohorts.push(runPilotOffer(state, config, finishedDay));
   }
 
-  if (['stories_3d', 'reels_7d', 'reels_stories_7d', 'live_stream', 'webinar', 'telegram_warmup', 'contacts_outreach'].includes(action.id)) {
-    let cohort = createContentCohort(state, config, action.id, (contentType || 'storytelling') as ContentType, state.cohorts.length);
-    if (cohort) {
-      cohort = applyEntry(state, config, cohort);
-      state.cohorts.push(cohort);
-      createdCohorts.push(cohort.id);
-    }
+  const resolvedContentType = (contentType || 'storytelling') as ContentType;
+  if (action.id === 'reels_stories_7d') {
+    appendContentCohort(state, config, action.id, resolvedContentType, 'reels', createdCohorts);
+    appendContentCohort(state, config, action.id, resolvedContentType, 'stories', createdCohorts);
+  } else if (['stories_3d', 'reels_7d', 'live_stream', 'webinar', 'telegram_warmup', 'contacts_outreach'].includes(action.id)) {
+    appendContentCohort(state, config, action.id, resolvedContentType, undefined, createdCohorts);
   }
 
   if (action.id === 'manual_followup' || action.id === 'bot_followup') {
@@ -143,7 +142,7 @@ export function executeActionEffects(
     revenueDelta: state.metrics.revenue - beforeMetrics.revenue,
     lostDelta: state.metrics.lostLeads - beforeMetrics.lostLeads,
     createdCohortIds: createdCohorts,
-    narrativeKeys: []
+    narrativeKeys: [],
   };
 
   return {
@@ -153,8 +152,30 @@ export function executeActionEffects(
     actionId: action.id,
     actionTitle: action.title,
     outcome,
-    decisions: []
+    decisions: [],
   };
+}
+
+function appendContentCohort(
+  state: GameState,
+  config: GameConfig,
+  actionId: string,
+  contentType: ContentType,
+  sourceType: SourceType | undefined,
+  createdCohorts: string[],
+): void {
+  let cohort = createContentCohort(
+    state,
+    config,
+    actionId,
+    contentType,
+    state.cohorts.length,
+    sourceType,
+  );
+  if (!cohort) return;
+  cohort = applyEntry(state, config, cohort);
+  state.cohorts.push(cohort);
+  createdCohorts.push(cohort.id);
 }
 
 function activateRouteTool(state: GameState, actionId: string): void {
@@ -213,7 +234,7 @@ function runPilotOffer(state: GameState, config: GameConfig, finishedDay: number
     unprocessedApplications: 3,
     capacityLostLeads: 0,
     losses: { entry: 0, processing: 0, qualification: 0, callBooking: 0, callNoShow: 0, sale: 0, followup: 0, capacity: 0 },
-    routeSnapshot: { ...state.activeRoute, capturedDay: finishedDay },
+    routeSnapshot: { ...state.activeRoute, nurture: [...state.activeRoute.nurture], capturedDay: finishedDay },
     contextSnapshot: {
       productPrice: state.launchPlan.productPrice || 0,
       productType: state.launchPlan.productType || '',
