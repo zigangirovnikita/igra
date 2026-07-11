@@ -15,6 +15,7 @@ concurrency:
 jobs:
   validate:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     services:
       postgres:
         image: postgres:15
@@ -33,18 +34,23 @@ jobs:
     env:
       DATABASE_URL: postgresql://launch_game:launch_game@localhost:5432/launch_game
       SESSION_SECRET: ci-session-secret-at-least-32-bytes
+      LEAD_ENCRYPTION_KEY: MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
+      LEAD_WEBHOOK_URL: https://example.invalid/lead
+      LEAD_WEBHOOK_SECRET: ci-webhook-secret
 
     steps:
       - uses: actions/checkout@v4
-
-      - name: Install pnpm
-        run: corepack enable && pnpm install --frozen-lockfile
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: 'pnpm'
+          cache: pnpm
+
+      - name: Install dependencies
+        run: |
+          corepack enable
+          pnpm install --frozen-lockfile
 
       - name: Generate Prisma client
         run: pnpm exec prisma generate
@@ -55,7 +61,7 @@ jobs:
       - name: Run typecheck
         run: pnpm typecheck
 
-      - name: Run tests
+      - name: Run unit and integration tests
         run: pnpm test
 
       - name: Validate config
@@ -67,11 +73,17 @@ jobs:
       - name: Test DB migrations
         run: pnpm db:migrate:test
 
-      - name: Build Next.js
-        run: pnpm build
-
       - name: Deploy DB migrations
         run: pnpm exec prisma migrate deploy
 
+      - name: Build Next.js
+        run: pnpm build
+
+      - name: Install Playwright Chromium
+        run: pnpm exec playwright install --with-deps chromium
+
       - name: Run E2E tests
         run: pnpm test:e2e
+
+      - name: Run release balance simulation
+        run: pnpm simulate:balance:release
