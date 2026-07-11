@@ -33,8 +33,8 @@ function matches(id: string, previous: GameState, state: GameState, actionId?: s
     case 'beautiful_site_before_demand': return actionId === 'website_beautiful' && state.assets.demandConfidence === 0;
     case 'manager_cold_leads': return actionId === 'hire_manager' && state.cohorts.every((cohort) => cohort.routeSnapshot.nurture.includes('none'));
     case 'manager_warm_leads': return actionId === 'hire_manager' && state.cohorts.some((cohort) => !cohort.routeSnapshot.nurture.includes('none'));
-    case 'expensive_website_sale': return state.player.productPrice > 100_000 && state.activeRoute.saleMethod === 'website_auto' && isAction('reels_7d', 'stories_3d');
-    case 'expensive_call_sale': return state.player.productPrice > 100_000 && actionId === 'calls';
+    case 'expensive_website_sale': return (state.launchPlan.productPrice || 0) > 100_000 && state.activeRoute.saleMethod === 'website_auto' && isAction('reels_7d', 'stories_3d');
+    case 'expensive_call_sale': return (state.launchPlan.productPrice || 0) > 100_000 && actionId === 'calls';
     case 'pilot_before_product': return actionId === 'product_pilot' && state.assets.productQuality <= 0.95;
     case 'product_before_demand': return isAction('product_self', 'product_home', 'product_studio') && state.assets.demandConfidence === 0;
     case 'selling_story_fatigue': return actionId === 'stories_3d' && state.cohorts.filter((cohort) => cohort.sourceType === 'stories' && cohort.contentType === 'selling').length > 1;
@@ -48,7 +48,7 @@ function matches(id: string, previous: GameState, state: GameState, actionId?: s
     case 'consultation_risk_reveal': return isAction('consultation_basic', 'consultation_detailed');
     case 'call_booked': return state.metrics.bookedCalls > previous.metrics.bookedCalls;
     case 'call_no_show': return state.metrics.bookedCalls > state.metrics.heldCalls && actionId === 'calls';
-    case 'client_thinking': return state.cohorts.some((cohort) => cohort.considering > 0) && salesDelta === 0;
+    case 'client_thinking': return state.cohorts.some((cohort) => cohort.pendingFollowup > 0) && salesDelta === 0;
     case 'simple_bot_missed_custom': return content?.routeSnapshot.processing === 'simple_bot' && content.processed < content.activated;
     case 'ai_bot_application': return content?.routeSnapshot.processing === 'ai_bot' && state.metrics.applications > previous.metrics.applications;
     default: return false;

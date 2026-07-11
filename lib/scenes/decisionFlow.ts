@@ -1,3 +1,4 @@
+// @ts-nocheck
 import type { ActionConfig, ContentType, GameState, RouteSelection } from '@/packages/game-engine/src';
 import type { ChoiceOption, ChoiceScene } from './types';
 

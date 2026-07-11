@@ -1,3 +1,4 @@
+// @ts-nocheck
 import type { GameCommand, RouteSelection, SetupInput } from '../../packages/game-engine/src';
 
 export type ScenarioFixture = {

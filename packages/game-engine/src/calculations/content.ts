@@ -1,6 +1,6 @@
 import type { ContentType, GameConfig, GameState, LeadCohort, RouteSnapshot, SourceType } from '../types';
 import { keyedRandomMultiplier } from '../random/keyed';
-import { hasSuperpower, lowEnergyContentMultiplier } from './modifiers';
+import { lowEnergyContentMultiplier } from './modifiers';
 
 export function createContentCohort(
   state: GameState,
@@ -13,13 +13,13 @@ export function createContentCohort(
   if (!sourceType) return null;
   const cohortId = `${actionId}_${state.resources.day}_${occurrenceIndex}`;
   const impressions = calculateImpressions(state, config, sourceType, contentType, cohortId, occurrenceIndex);
-  const responseRate = getResponseRate(sourceType, contentType);
-  let responseModifier = 1;
-  if (hasSuperpower(state, 'expertise') && contentType === 'useful') responseModifier *= 1.25;
-  if (hasSuperpower(state, 'expertise') && contentType === 'selling') responseModifier *= 0.9;
-  if (hasSuperpower(state, 'sales')) responseModifier *= 0.9;
-  if (hasSuperpower(state, 'marketing')) responseModifier *= 1.3;
-  const responses = impressions * responseRate * responseModifier * keyedRandomMultiplier(state.seed, config, cohortId, 'response');
+  
+  let responseRate = getResponseRate(sourceType, contentType);
+  if (sourceType === 'contacts') {
+    responseRate = Number(config.content?.contactsResponseRate ?? 0.05);
+  }
+  
+  const responses = impressions * responseRate * keyedRandomMultiplier(state.seed, config, cohortId, 'response');
   const routeSnapshot: RouteSnapshot = { ...state.activeRoute, capturedDay: state.resources.day };
 
   return {
@@ -29,6 +29,17 @@ export function createContentCohort(
     sourceType,
     contentType,
     impressions,
+    
+    unprocessedInbound: 0,
+    pendingFollowup: 0,
+    
+    inboundDecision: 'pending',
+    salesDecision: 'not_ready',
+    followupDecision: 'not_ready',
+    
+    deferredUntilDay: null,
+    deferCount: 0,
+
     responses,
     activated: 0,
     processed: 0,
@@ -36,12 +47,10 @@ export function createContentCohort(
     bookedCalls: 0,
     heldCalls: 0,
     sales: 0,
-    considering: 0,
-    unprocessedWarm: 0,
+    
     unprocessedApplications: 0,
     lost: 0,
     capacityLostLeads: 0,
-    temperature: 1,
     routeSnapshot,
     followedUp: false
   };
@@ -57,18 +66,21 @@ function calculateImpressions(
 ): number {
   const contentReach = contentType === 'useful' ? 1.2 : contentType === 'selling' ? 0.7 : contentType === 'chaotic' ? 0.8 : 1;
   const random = keyedRandomMultiplier(state.seed, config, cohortId, 'traffic', occurrenceIndex);
+  
+  if (sourceType === 'contacts') {
+    return state.audience.contactsCount;
+  }
   if (sourceType === 'reels') {
-    const reels = hasSuperpower(state, 'energy') ? 8 : 7;
-    return state.player.averageReelViews * reels * contentReach * lowEnergyContentMultiplier(state) * random;
+    return state.audience.averageReelViews * 7 * contentReach * lowEnergyContentMultiplier(state) * random;
   }
   if (sourceType === 'stories') {
     const sellingCycles = state.history.filter((entry) => entry.type === 'action_completed' && entry.payload?.actionId === 'stories_3d').length;
     const sellingPenalty = contentType === 'selling' ? 0.8 * Math.pow(0.85, sellingCycles) : 1;
-    return state.player.averageStoryViews * 2.25 * contentReach * sellingPenalty * lowEnergyContentMultiplier(state) * random;
+    return state.audience.averageStoryViews * 2.25 * contentReach * sellingPenalty * lowEnergyContentMultiplier(state) * random;
   }
-  if (sourceType === 'telegram') return (state.player.averageTelegramViews ?? 150) * 5 * lowEnergyContentMultiplier(state) * random;
-  if (sourceType === 'live') return Math.max(state.player.averageStoryViews * 1.5, 50) * random;
-  return Math.max(state.player.averageStoryViews * 2, 100) * random;
+  if (sourceType === 'telegram') return (state.audience.averageTelegramViews ?? 150) * 5 * lowEnergyContentMultiplier(state) * random;
+  if (sourceType === 'live') return Math.max(state.audience.averageStoryViews * 1.5, 50) * random;
+  return Math.max(state.audience.averageStoryViews * 2, 100) * random;
 }
 
 function getResponseRate(sourceType: SourceType, contentType: ContentType): number {
@@ -88,5 +100,6 @@ function getSourceType(actionId: string): SourceType | null {
   if (actionId === 'telegram_warmup') return 'telegram';
   if (actionId === 'live_stream') return 'live';
   if (actionId === 'webinar') return 'webinar';
+  if (actionId === 'contacts_outreach') return 'contacts';
   return null;
 }

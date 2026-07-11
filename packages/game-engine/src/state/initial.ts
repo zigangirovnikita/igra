@@ -1,18 +1,48 @@
-import type { GameConfig, GameState, SetupInput } from '../types';
-import { calculateTargets } from './goals';
+import type { GameConfig, GameState, PlayerProfile } from '../types';
 import { assertStateInvariants } from './invariants';
 
-export function createInitialState(setup: SetupInput, config: GameConfig, seed: string): GameState {
+export function createInitialState(setup: PlayerProfile, config: GameConfig, seed: string): GameState {
   const state: GameState = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     sessionId: seed,
     configVersion: config.version,
     seed,
     stateVersion: 0,
     appliedCommandIds: [],
-    status: 'active',
+    status: 'setup',
     player: setup,
-    targets: calculateTargets(setup, config),
+    launchPlan: {
+      productType: null,
+      productName: '',
+      productPrice: null,
+      plannedSaleMethod: null,
+      plannedEntry: null,
+      plannedNurture: [],
+      nurtureUncertain: false,
+      dreams: [],
+      confirmed: false
+    },
+    audience: {
+      channels: [],
+      averageReelViews: 0,
+      averageStoryViews: 0,
+      averageTelegramViews: 0,
+      contactsCount: 0,
+      confirmed: false
+    },
+    flow: {
+      stage: 'intro',
+      step: 'intro_budget',
+      selectedIntent: null,
+      selectedGroup: null,
+      goalPromptHandled: false,
+      backStep: null
+    },
+    targets: {
+      targetSales: 0,
+      targetRevenue: 0,
+      personalGoal: 0
+    },
     resources: {
       day: 1,
       bank: config.startingBank,
@@ -36,7 +66,6 @@ export function createInitialState(setup: SetupInput, config: GameConfig, seed: 
       saleMethod: 'manual_chat',
       followup: 'none'
     },
-    initialPlan: undefined,
     scheduledActions: [],
     cohorts: [],
     metrics: {
@@ -57,7 +86,14 @@ export function createInitialState(setup: SetupInput, config: GameConfig, seed: 
     },
     flags: {},
     history: [],
-    diagnostics: null
+    diagnostics: null,
+    
+    pendingAction: null,
+    pendingDecision: null,
+    lastOutcome: null,
+    currentDayReport: null,
+    dayReports: [],
+    endingReason: null
   };
 
   assertStateInvariants(state, config);

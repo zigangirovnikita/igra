@@ -1,10 +1,6 @@
 import type { GameState, NurtureType, ProcessingType, SaleMethod } from '../types';
 import { clamp } from '../state/invariants';
 
-export function hasSuperpower(state: GameState, id: string): boolean {
-  return state.player.superpowers.includes(id);
-}
-
 export function demandMultiplier(state: GameState): number {
   return 0.8 + 0.35 * state.assets.demandConfidence;
 }
@@ -51,19 +47,21 @@ export function baseSaleRate(price: number, method: SaleMethod): number {
 
 export function saleModifier(state: GameState, method: SaleMethod): number {
   let multiplier = state.assets.productQuality || 1;
+  const productPrice = state.launchPlan.productPrice || 0;
+  
   if (!state.activeRoute.nurture.length || state.activeRoute.nurture.includes('none')) {
-    if (state.player.productPrice > 30_000) multiplier *= 0.8;
+    if (productPrice > 30_000) multiplier *= 0.8;
   }
+  
   if (state.activeRoute.nurture.includes('guide')) multiplier *= 1.05;
   if (state.activeRoute.nurture.includes('video_lesson')) multiplier *= 1.15;
   if (state.activeRoute.nurture.includes('webinar')) multiplier *= 1.25;
   if (state.activeRoute.processing === 'ai_bot') multiplier *= 1.2;
-  if (method === 'website_auto' && state.player.productPrice > 200_000) multiplier *= 0.4;
-  else if (method === 'website_auto' && state.player.productPrice > 100_000) multiplier *= 0.6;
-  if (hasSuperpower(state, 'sales') && method === 'call') multiplier *= 1.35;
-  if (hasSuperpower(state, 'sales') && method === 'manual_chat') multiplier *= 1.25;
-  if (hasSuperpower(state, 'expertise') && method === 'call') multiplier *= 1.05;
-  if (hasSuperpower(state, 'marketing') && method === 'call') multiplier *= 0.95;
+  
+  if (method === 'website_auto' && productPrice > 200_000) multiplier *= 0.4;
+  else if (method === 'website_auto' && productPrice > 100_000) multiplier *= 0.6;
+  
   if (state.resources.energy < 30 && (method === 'call' || method === 'manual_chat')) multiplier *= 0.8;
+  
   return clamp(multiplier, 0, 8);
 }

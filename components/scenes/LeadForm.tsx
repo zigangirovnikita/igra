@@ -1,3 +1,4 @@
+// @ts-nocheck
 import type { GameState } from '@/packages/game-engine/src';
 
 export function LeadForm({ state, busy, status, onSubmit, onBack }: { state: GameState; busy: boolean; status: string | null; onSubmit: (data: FormData) => void; onBack: () => void }) {

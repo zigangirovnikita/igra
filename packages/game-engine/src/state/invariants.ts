@@ -11,7 +11,7 @@ export function assertStateInvariants(state: GameState, config: GameConfig): voi
   if (state.configVersion !== config.version) {
     throw new Error('Invariant violation: configVersion changed');
   }
-  if (state.metrics.revenue !== state.metrics.sales * state.player.productPrice) {
+  if (state.metrics.revenue !== state.metrics.sales * (state.launchPlan.productPrice || 0)) {
     throw new Error('Invariant violation: revenue does not match sales');
   }
   for (const value of Object.values(state.metrics)) {

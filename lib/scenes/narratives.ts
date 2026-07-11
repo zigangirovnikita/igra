@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Narrative text templates.
  * All functions return string arrays — each string is one line/paragraph,

@@ -4,19 +4,6 @@ export const setupSchema = z.object({
   avatarGender: z.enum(['female', 'male']),
   name: z.string().trim().min(2).max(30),
   niche: z.string().trim().min(2).max(120),
-  productName: z.string().trim().min(2).max(160).optional(),
-  superpowers: z.array(z.string()).length(2).refine((items) => new Set(items).size === 2, 'Выберите две разные суперсилы'),
-  productType: z.string().min(1),
-  productPrice: z.coerce.number().int().min(100).max(5_000_000),
-  averageReelViews: z.coerce.number().int().min(0).max(10_000_000),
-  averageStoryViews: z.coerce.number().int().min(0).max(10_000_000),
-  telegramStatus: z.enum(['none', 'known', 'unknown']),
-  averageTelegramViews: z.coerce.number().int().min(0).max(10_000_000).nullable(),
-  dreams: z.array(z.string()).min(1)
-}).superRefine((value, ctx) => {
-  if (value.telegramStatus === 'known' && value.averageTelegramViews === null) {
-    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['averageTelegramViews'], message: 'Укажите просмотры Telegram' });
-  }
 });
 
 export const commandRequestSchema = z.object({

@@ -5,5 +5,6 @@ export { createInitialState } from './state/initial';
 export { calculateTargets, getBucketTargetSales } from './state/goals';
 export { assertStateInvariants } from './state/invariants';
 export { hashToUnitInterval, keyedRandomMultiplier, stochasticRound } from './random/keyed';
-export { advanceDays, runDailyTick } from './time/ticks';
+export { recalculateMetrics } from './time/ticks';
 export { calculateDiagnostics } from './diagnostics/report';
+export { deriveNextPendingDecision, resolvePendingDecision } from './flow/pending-decisions';

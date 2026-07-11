@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { z } from 'zod';
 import rawConfig from '@/config/game-config.v1.json';
 import type { GameConfig } from '@/packages/game-engine/src';

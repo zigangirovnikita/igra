@@ -11,9 +11,8 @@ export function applyEntry(state: GameState, config: GameConfig, cohort: LeadCoh
   const route = next.routeSnapshot;
   const entryRate = route.entry === 'direct_messages' ? 1 : route.entry === 'website' ? 0.6 : 0.7;
   next.activated = stochasticRound(next.responses * entryRate, `${state.seed}|${next.id}|activated`);
-  next.unprocessedWarm = next.activated;
+  next.unprocessedInbound = next.activated;
 
-  // Auto-process bots immediately if configured
   if (route.processing !== 'manual') {
     return applyProcessing(state, config, next, 'auto');
   }
@@ -27,22 +26,22 @@ export function applyProcessing(
   mode: 'auto' | 'manual', 
   manualAmount?: number
 ): LeadCohort {
-  if (cohort.unprocessedWarm <= 0) return cohort;
+  if (cohort.unprocessedInbound <= 0) return cohort;
   const next = { ...cohort };
   const route = next.routeSnapshot;
   
   let toProcess = 0;
   if (mode === 'auto') {
-    toProcess = next.unprocessedWarm;
+    toProcess = next.unprocessedInbound;
   } else {
-    toProcess = Math.min(next.unprocessedWarm, (manualAmount ?? 0) * lowEnergyManualMultiplier(state));
+    toProcess = Math.min(next.unprocessedInbound, (manualAmount ?? 0) * lowEnergyManualMultiplier(state));
   }
   
   const processingRate = route.processing === 'simple_bot' ? 0.8 : route.processing === 'ai_bot' ? 0.99 : route.processing === 'manager' ? 0.95 : 1;
   
   const successfullyProcessed = stochasticRound(toProcess * processingRate, `${state.seed}|${next.id}|processed_${state.resources.day}`);
   
-  next.unprocessedWarm = Math.max(0, next.unprocessedWarm - toProcess);
+  next.unprocessedInbound = Math.max(0, next.unprocessedInbound - toProcess);
   next.processed += successfullyProcessed;
   
   const applicationRate = clamp(
@@ -59,7 +58,6 @@ export function applyProcessing(
   next.applications += newApplications;
   next.unprocessedApplications += newApplications;
   
-  // Auto-apply sales if method is automatic
   if (route.saleMethod !== 'manual_chat' && route.saleMethod !== 'call') {
     return applySales(state, config, next, route.saleMethod, newApplications);
   }
@@ -76,8 +74,9 @@ export function applySales(
 ): LeadCohort {
   if (applicationsToProcess <= 0) return cohort;
   const next = { ...cohort };
+  const productPrice = state.launchPlan.productPrice || 0;
   const rate = clamp(
-    baseSaleRate(state.player.productPrice, method) *
+    baseSaleRate(productPrice, method) *
       saleModifier(state, method) *
       keyedRandomMultiplier(state.seed, config, cohort.id, `sale_${method}_${state.resources.day}`),
     0,
@@ -93,30 +92,30 @@ export function applySales(
     next.heldCalls += held;
     const sales = stochasticRound(held * rate, `${state.seed}|${next.id}|round_call_sales_${state.resources.day}`);
     next.sales += sales;
-    next.considering += Math.max(0, held - sales) * 0.35;
+    next.pendingFollowup += Math.max(0, held - sales) * 0.35;
   } else {
     const sales = stochasticRound(applicationsToProcess * rate, `${state.seed}|${next.id}|round_${method}_sales_${state.resources.day}`);
     next.sales += sales;
-    next.considering += Math.max(0, applicationsToProcess - sales) * 0.35;
+    next.pendingFollowup += Math.max(0, applicationsToProcess - sales) * 0.35;
   }
   return applyCapacity(state, config, next);
 }
 
 export function applyFollowup(state: GameState, config: GameConfig, cohort: LeadCohort): LeadCohort {
-  if (cohort.followedUp || cohort.considering <= 0 || cohort.routeSnapshot.followup === 'none') return cohort;
+  if (cohort.followedUp || cohort.pendingFollowup <= 0 || cohort.routeSnapshot.followup === 'none') return cohort;
   const next = { ...cohort, followedUp: true };
   const returnRate =
-    next.routeSnapshot.followup === 'manual' && state.player.superpowers.includes('sales') ? 0.13 :
     next.routeSnapshot.followup === 'manual' ? 0.1 :
     next.routeSnapshot.followup === 'bot' ? 0.15 :
     0.01;
-  const returned = next.considering * returnRate;
+  const returned = next.pendingFollowup * returnRate;
   const before = next.sales;
   const method = next.routeSnapshot.saleMethod;
-  const rate = clamp(baseSaleRate(state.player.productPrice, method) * saleModifier(state, method) * 1.25, 0, 0.6);
+  const productPrice = state.launchPlan.productPrice || 0;
+  const rate = clamp(baseSaleRate(productPrice, method) * saleModifier(state, method) * 1.25, 0, 0.6);
   next.sales += stochasticRound(returned * rate, `${state.seed}|${next.id}|followup_sales`);
   if (next.sales > before) {
-    next.considering = Math.max(0, next.considering - returned);
+    next.pendingFollowup = Math.max(0, next.pendingFollowup - returned);
   }
   return applyCapacity(state, config, next);
 }
@@ -134,12 +133,12 @@ function processWebinar(state: GameState, config: GameConfig, cohort: LeadCohort
   next.applications = newApplications;
   next.unprocessedApplications = newApplications;
   next.sales = directSales;
-  next.considering = Math.max(0, remainingAttendees - next.applications) * 0.35;
+  next.pendingFollowup = Math.max(0, remainingAttendees - next.applications) * 0.35;
   return applyCapacity(state, config, next);
 }
 
 function applyCapacity(state: GameState, config: GameConfig, cohort: LeadCohort): LeadCohort {
-  const product = config.productTypes.find((item) => item.id === state.player.productType);
+  const product = config.productTypes.find((item) => item.id === state.launchPlan.productType);
   const capacity = product?.capacity ?? null;
   if (capacity === null) return cohort;
   const existingSales = state.cohorts.filter((item) => item.id !== cohort.id).reduce((sum, item) => sum + item.sales, 0);

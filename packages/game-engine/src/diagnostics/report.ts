@@ -34,7 +34,7 @@ export function calculateDiagnostics(state: GameState, config: GameConfig): Diag
 
 function buildDreamResults(state: GameState, config: GameConfig, money: number) {
   let remaining = money;
-  return state.player.dreams.map((id) => {
+  return state.launchPlan.dreams.map((id) => {
     const dream = config.dreams.find((item) => item.id === id);
     const price = dream?.price ?? 0;
     const affordable = remaining >= price;
@@ -69,11 +69,12 @@ function detectStrongDecisions(state: GameState): string[] {
 }
 
 function detectBottlenecks(state: GameState): Array<{ category: string; expectedLoss: number }> {
+  const price = state.launchPlan.productPrice || 0;
   const items = [
     { category: 'processing', expectedLoss: state.metrics.expectedLostRevenue },
-    { category: 'capacity', expectedLoss: state.metrics.capacityLostLeads * state.player.productPrice * 0.5 },
+    { category: 'capacity', expectedLoss: state.metrics.capacityLostLeads * price * 0.5 },
     { category: 'energy', expectedLoss: state.resources.energy < 30 ? state.metrics.revenue * 0.15 : 0 },
-    { category: 'traffic', expectedLoss: state.metrics.impressions < 1_000 ? state.player.productPrice * 3 : 0 }
+    { category: 'traffic', expectedLoss: state.metrics.impressions < 1_000 ? price * 3 : 0 }
   ];
   return items.filter((item) => item.expectedLoss > 0).sort((a, b) => b.expectedLoss - a.expectedLoss).slice(0, 3);
 }
@@ -98,7 +99,7 @@ function buildCounterfactuals(state: GameState): Array<{ change: string; expecte
     },
     {
       change: 'Продажа дорогого продукта напрямую -> созвон',
-      expectedProfitDelta: state.player.productPrice > 50_000 && state.activeRoute.saleMethod !== 'call' ? state.metrics.applications * state.player.productPrice * 0.08 : 0
+      expectedProfitDelta: (state.launchPlan.productPrice || 0) > 50_000 && state.activeRoute.saleMethod !== 'call' ? state.metrics.applications * (state.launchPlan.productPrice || 0) * 0.08 : 0
     }
   ];
   return items.filter((item) => item.expectedProfitDelta > 0).sort((a, b) => b.expectedProfitDelta - a.expectedProfitDelta).slice(0, 3);

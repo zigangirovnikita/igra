@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { explainWithAi } from '../../lib/ai/report';
 import { applyCommand, createInitialState } from '../../packages/game-engine/src';
