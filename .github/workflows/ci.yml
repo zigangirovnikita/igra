@@ -12,13 +12,45 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 jobs:
-  validate:
+  quality:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 15
+    env:
+      DATABASE_URL: postgresql://launch_game:launch_game@localhost:5432/launch_game
+      SESSION_SECRET: ci-session-secret-at-least-32-bytes
+      LEAD_ENCRYPTION_KEY: MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
+      LEAD_WEBHOOK_URL: https://example.invalid/lead
+      LEAD_WEBHOOK_SECRET: ci-webhook-secret
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.7.0
+          run_install: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --reporter=silent
+      - run: pnpm exec prisma generate
+      - run: pnpm lint
+      - run: pnpm typecheck --pretty false
+      - run: pnpm test
+      - run: pnpm validate:config
+      - run: pnpm build
+
+  database:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      DATABASE_URL: postgresql://launch_game:launch_game@localhost:5432/launch_game
     services:
       postgres:
-        image: postgres:15
+        image: postgres:15-alpine
         env:
           POSTGRES_USER: launch_game
           POSTGRES_PASSWORD: launch_game
@@ -27,67 +59,79 @@ jobs:
           - 5432:5432
         options: >-
           --health-cmd pg_isready
-          --health-interval 10s
+          --health-interval 5s
           --health-timeout 5s
-          --health-retries 5
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.7.0
+          run_install: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --reporter=silent
+      - run: pnpm exec prisma generate
+      - run: pnpm db:validate
+      - run: pnpm db:migrate:test
+      - run: pnpm exec prisma migrate deploy
 
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
     env:
       DATABASE_URL: postgresql://launch_game:launch_game@localhost:5432/launch_game
       SESSION_SECRET: ci-session-secret-at-least-32-bytes
       LEAD_ENCRYPTION_KEY: MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
       LEAD_WEBHOOK_URL: https://example.invalid/lead
       LEAD_WEBHOOK_SECRET: ci-webhook-secret
-
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: launch_game
+          POSTGRES_PASSWORD: launch_game
+          POSTGRES_DB: launch_game
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - uses: actions/checkout@v4
-
-      - name: Install pnpm
-        uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v4
         with:
           version: 11.7.0
           run_install: false
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: pnpm
+      - run: pnpm install --frozen-lockfile --reporter=silent
+      - run: pnpm exec prisma generate
+      - run: pnpm exec prisma migrate deploy
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm test:e2e
 
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Generate Prisma client
-        run: pnpm exec prisma generate
-
-      - name: Run lint
-        run: pnpm lint
-
-      - name: Run typecheck
-        run: pnpm typecheck
-
-      - name: Run unit and integration tests
-        run: pnpm test
-
-      - name: Validate config
-        run: pnpm validate:config
-
-      - name: Validate DB schema
-        run: pnpm db:validate
-
-      - name: Test DB migrations
-        run: pnpm db:migrate:test
-
-      - name: Deploy DB migrations
-        run: pnpm exec prisma migrate deploy
-
-      - name: Build Next.js
-        run: pnpm build
-
-      - name: Install Playwright Chromium
-        run: pnpm exec playwright install --with-deps chromium
-
-      - name: Run E2E tests
-        run: pnpm test:e2e
-
-      - name: Run release balance simulation
-        run: pnpm simulate:balance:release
+  balance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      DATABASE_URL: postgresql://launch_game:launch_game@localhost:5432/launch_game
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.7.0
+          run_install: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --reporter=silent
+      - run: pnpm exec prisma generate
+      - run: pnpm simulate:balance:release
