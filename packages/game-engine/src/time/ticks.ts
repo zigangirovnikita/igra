@@ -6,7 +6,7 @@ export function recalculateMetrics(state: GameState): void {
   state.metrics = {
     ...state.metrics,
     impressions: sum(state.cohorts, 'impressions'),
-    responses: sum(state.cohorts, 'responses'),
+    inbound: sum(state.cohorts, 'inbound'),
     activated: sum(state.cohorts, 'activated'),
     processed: sum(state.cohorts, 'processed'),
     applications: sum(state.cohorts, 'applications'),
@@ -16,8 +16,8 @@ export function recalculateMetrics(state: GameState): void {
     revenue: sum(state.cohorts, 'sales') * (state.launchPlan.productPrice || 0),
     expenses,
     capacityLostLeads: sum(state.cohorts, 'capacityLostLeads'),
-    lostLeads: sum(state.cohorts, 'lost'),
-    expectedLostRevenue: sum(state.cohorts, 'lost') * expectedDownstreamSaleProbability(state) * (state.launchPlan.productPrice || 0)
+    lostLeads: state.cohorts.reduce((acc, c) => acc + c.losses.entry + c.losses.processing + c.losses.qualification + c.losses.callBooking + c.losses.callNoShow + c.losses.sale + c.losses.followup, 0),
+    expectedLostRevenue: state.cohorts.reduce((acc, c) => acc + c.losses.entry + c.losses.processing + c.losses.qualification + c.losses.callBooking + c.losses.callNoShow + c.losses.sale + c.losses.followup, 0) * expectedDownstreamSaleProbability(state) * (state.launchPlan.productPrice || 0)
   };
 }
 

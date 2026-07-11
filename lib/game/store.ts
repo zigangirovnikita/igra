@@ -25,27 +25,39 @@ export type StoredLead = {
 export async function saveSession(session: StoredSession): Promise<StoredSession> {
   const updatedDate = new Date();
   
-  await prisma.gameSession.upsert({
-    where: { id: session.id },
-    update: {
-      stateVersion: session.state.stateVersion,
-      currentState: session.state as any,
-      updatedAt: updatedDate,
-      status: session.state.status,
-    },
-    create: {
-      id: session.id,
-      anonymousId: session.id, // using session ID as anonymous ID for now
-      status: session.state.status,
-      configVersion: session.state.configVersion,
-      seedEncrypted: null,
-      stateVersion: session.state.stateVersion,
-      setup: session.setup as any,
-      currentState: session.state as any,
-      createdAt: new Date(session.createdAt),
-      updatedAt: updatedDate,
+  if (session.state.stateVersion === 0) {
+    await prisma.gameSession.create({
+      data: {
+        id: session.id,
+        anonymousId: session.id,
+        status: session.state.status,
+        configVersion: session.state.configVersion,
+        seedEncrypted: null,
+        stateVersion: session.state.stateVersion,
+        setup: session.setup as any,
+        currentState: session.state as any,
+        createdAt: new Date(session.createdAt),
+        updatedAt: updatedDate,
+      }
+    });
+  } else {
+    const result = await prisma.gameSession.updateMany({
+      where: { 
+        id: session.id, 
+        stateVersion: session.state.stateVersion - 1 
+      },
+      data: {
+        stateVersion: session.state.stateVersion,
+        currentState: session.state as any,
+        updatedAt: updatedDate,
+        status: session.state.status,
+      }
+    });
+    
+    if (result.count === 0) {
+      throw new Error('Optimistic concurrency error: session version mismatch');
     }
-  });
+  }
   
   session.updatedAt = updatedDate.toISOString();
   return session;

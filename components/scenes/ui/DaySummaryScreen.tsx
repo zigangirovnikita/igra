@@ -9,8 +9,8 @@ type Props = {
     inboundDelta: number;
     salesDelta: number;
     revenueDelta: number;
-    bankDelta: number;
-    energyDelta: number;
+    bankSpent: number;
+    energySpent: number;
   };
   onNext: () => void;
   busy?: boolean;
@@ -54,14 +54,14 @@ export function DaySummaryScreen({ day, title, summaryText, metrics, onNext, bus
             <span className="metric-label">Выручка</span>
           </div>
         )}
-        {metrics.bankDelta < 0 && (
+        {metrics.bankSpent > 0 && (
           <div className="metric-box">
-            <span className="metric-value">{metrics.bankDelta.toLocaleString('ru-RU')} ₽</span>
+            <span className="metric-value">-{metrics.bankSpent.toLocaleString('ru-RU')} ₽</span>
             <span className="metric-label">Расходы</span>
           </div>
         )}
         <div className="metric-box">
-          <span className="metric-value">{metrics.energyDelta > 0 ? '+' : ''}{metrics.energyDelta} ⚡</span>
+          <span className="metric-value">-{-metrics.energySpent} ⚡</span>
           <span className="metric-label">Энергии</span>
         </div>
       </div>

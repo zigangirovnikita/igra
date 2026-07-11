@@ -1,5 +1,7 @@
 import type { GameState, GameConfig, DailyIntent, RouteSelection, ContentType } from '../types';
 import { getActionAvailability, findAction } from '../actions/availability';
+import { deriveNextPendingDecision } from './pending-decisions';
+import { generateMiniGameSession } from '../calculations/minigame';
 
 export function chooseIntent(state: GameState, config: GameConfig, intent: DailyIntent | null): GameState {
   if (!intent) {
@@ -11,7 +13,7 @@ export function chooseIntent(state: GameState, config: GameConfig, intent: Daily
 
   state.flow.selectedIntent = intent;
   if (intent === 'finish') {
-    state.pendingDecision = { type: 'finish_confirmation' };
+    state.pendingDecision = { type: 'finish_confirmation', returnStep: state.flow.step };
     state.flow.backStep = state.flow.step;
     state.flow.step = 'finish_confirmation';
   } else if (intent === 'repeat_last') {
@@ -75,7 +77,13 @@ export function configureAction(
   if (state.flow.step !== 'action_configuration') throw new Error('Invalid step for action configuration');
   if (!state.pendingAction) throw new Error('No pending action to configure');
   if (payload.contentType) state.pendingAction.contentType = payload.contentType;
-  if (payload.route) state.pendingAction.temporaryRoute = payload.route;
+  
+  if (payload.route) {
+    const assetError = validateRouteAssets(state, payload.route);
+    if (assetError) throw new Error(assetError);
+    state.pendingAction.temporaryRoute = payload.route;
+  }
+  
   if (payload.targetCohortId) state.pendingAction.targetCohortId = payload.targetCohortId;
 
   const actionNeedsDestination = Boolean(payload.contentType) && !payload.route;
@@ -114,8 +122,6 @@ export function completeDay(state: GameState, config: GameConfig): GameState {
     return state;
   }
 
-  state.resources.day += 1;
-
   state.flow.step = 'daily_intro';
 
   // Advance pending decisions / deferred cohorts
@@ -128,5 +134,31 @@ export function completeDay(state: GameState, config: GameConfig): GameState {
     }
   }
 
+  // Enforce pending decisions order at the start of the day
+  state.pendingDecision = deriveNextPendingDecision(state);
+  if (state.pendingDecision?.type === 'mini_game') {
+    state.miniGame = generateMiniGameSession(state, state.pendingDecision.cohortId);
+  }
+
   return state;
+}
+
+export function validateRouteAssets(state: GameState, route: RouteSelection): string | null {
+  if (route.entry === 'guide' && !state.assets.guide) return 'Нет ассета: Гайд';
+  if (route.entry === 'video_lesson' && !state.assets.videoLesson) return 'Нет ассета: Видеоурок';
+  if (route.entry === 'website' && !state.assets.website) return 'Нет ассета: Сайт';
+  
+  if (route.nurture.includes('guide') && !state.assets.guide) return 'Нет ассета: Гайд';
+  if (route.nurture.includes('video_lesson') && !state.assets.videoLesson) return 'Нет ассета: Видеоурок';
+  
+  if (route.processing === 'simple_bot' && !state.assets.simpleBot) return 'Нет ассета: Простой бот';
+  if (route.processing === 'ai_bot' && !state.assets.aiBot) return 'Нет ассета: ИИ Бот';
+  if (route.processing === 'manager' && !state.assets.manager) return 'Нет ассета: Менеджер';
+  if (route.processing === 'website_auto' && !state.assets.website) return 'Нет ассета: Сайт';
+  
+  if (route.saleMethod === 'website_auto' && !state.assets.website) return 'Нет ассета: Сайт';
+  
+  if (route.followup === 'bot' && !state.assets.simpleBot && !state.assets.aiBot) return 'Нет ассета: Бот для дожимов';
+  
+  return null;
 }

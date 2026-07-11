@@ -69,6 +69,8 @@ export function ActionConfirmationScreen({
           className="btn-primary" 
           onClick={onConfirm}
           disabled={!canAfford || busy}
+          aria-busy={busy}
+          aria-disabled={!canAfford || busy}
         >
           {busy ? 'Загрузка...' : confirmText}
         </button>

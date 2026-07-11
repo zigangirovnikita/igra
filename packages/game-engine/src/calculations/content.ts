@@ -40,7 +40,7 @@ export function createContentCohort(
     deferredUntilDay: null,
     deferCount: 0,
 
-    responses,
+    inbound: responses,
     activated: 0,
     processed: 0,
     applications: 0,
@@ -49,9 +49,18 @@ export function createContentCohort(
     sales: 0,
     
     unprocessedApplications: 0,
-    lost: 0,
+    
+    losses: { entry: 0, processing: 0, qualification: 0, callBooking: 0, callNoShow: 0, sale: 0, followup: 0, capacity: 0 },
     capacityLostLeads: 0,
     routeSnapshot,
+    contextSnapshot: {
+      productPrice: state.launchPlan.productPrice ?? 0,
+      productType: state.launchPlan.productType ?? '',
+      demandConfidence: state.assets.demandConfidence,
+      productQuality: state.assets.productQuality,
+      energyAtCreation: state.resources.energy,
+      createdDay: state.resources.day
+    },
     followedUp: false
   };
 }

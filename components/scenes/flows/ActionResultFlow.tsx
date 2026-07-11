@@ -17,7 +17,7 @@ export function ActionResultFlow({ state, dispatch, busy }: FlowProps) {
         <div className="scene-text-block">
           {adviceParagraphs(outcome.actionId).map((line) => <p className="scene-paragraph" key={line}>{line}</p>)}
           <p className="scene-paragraph">
-            Потрачено: {outcome.finishedDay - outcome.startedDay + 1} дн., {Math.abs(outcome.bankDelta).toLocaleString('ru-RU')} ₽, {Math.abs(outcome.energyDelta)} энергии.
+            Потрачено: {outcome.finishedDay - outcome.startedDay + 1} дн., {Math.abs(outcome.bankSpent).toLocaleString('ru-RU')} ₽, {Math.abs(outcome.energySpent)} энергии.
           </p>
         </div>
         <div className="scene-actions">
@@ -44,8 +44,8 @@ export function ActionResultFlow({ state, dispatch, busy }: FlowProps) {
     `Продажи: ${formatDelta(outcome.salesDelta)}`,
     `Выручка: ${formatMoney(outcome.revenueDelta)}`,
     `Потеряно входящих/заявок: ${formatDelta(outcome.lostDelta)}`,
-    `Деньги: ${formatMoney(outcome.bankDelta)}`,
-    `Энергия: ${formatDelta(outcome.energyDelta)}`,
+    `Деньги: ${formatMoney(-outcome.bankSpent)}`,
+    `Энергия: ${formatDelta(-outcome.energySpent)}`,
   ] : ['Действие завершено.'];
 
   return (

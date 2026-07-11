@@ -5,10 +5,17 @@ import { explainWithAi } from '@/lib/ai/report';
 import { loadGameConfig } from '@/lib/config/game-config';
 import { getSession, saveSession } from '@/lib/game/store';
 import { prisma } from '@/lib/db/client';
+import { globalRateLimiter } from '@/lib/api/rate-limit';
 
 type RouteContext = { params: Promise<{ id: string }> };
 
 export async function POST(_request: Request, context: RouteContext) {
+  const ip = _request.headers.get('x-forwarded-for') ?? 'anonymous';
+  const limit = globalRateLimiter.check(ip);
+  if (!limit.success) {
+    return NextResponse.json({ error: 'rate_limit_exceeded' }, { status: 429, headers: { 'Retry-After': Math.ceil((limit.reset - Date.now()) / 1000).toString() } });
+  }
+
   const { id } = await context.params;
   const body = await _request.json().catch(() => ({}));
 

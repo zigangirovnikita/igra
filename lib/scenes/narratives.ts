@@ -151,7 +151,7 @@ export function getActionStartNarrative(state: GameState, actionId: string): str
 export function getActionResultNarrative(state: GameState, actionId: string, prevState: GameState): string[] {
   const { name } = state.player;
   const newSales = state.metrics.sales - prevState.metrics.sales;
-  const newResponses = state.metrics.responses - prevState.metrics.responses;
+  const newResponses = state.metrics.inbound - prevState.metrics.inbound;
   const _newRevenue = state.metrics.revenue - prevState.metrics.revenue;
 
   // First sale reaction

@@ -70,7 +70,7 @@ export function createInitialState(setup: PlayerProfile, config: GameConfig, see
     cohorts: [],
     metrics: {
       impressions: 0,
-      responses: 0,
+      inbound: 0,
       activated: 0,
       processed: 0,
       applications: 0,
@@ -93,7 +93,9 @@ export function createInitialState(setup: PlayerProfile, config: GameConfig, see
     lastOutcome: null,
     currentDayReport: null,
     dayReports: [],
-    endingReason: null
+    endingReason: null,
+    miniGame: null,
+    decisionLog: [],
   };
 
   assertStateInvariants(state, config);

@@ -15,7 +15,7 @@ export function appendTriggeredEvents(previous: GameState, state: GameState, con
 
 function matches(id: string, previous: GameState, state: GameState, actionId?: string): boolean {
   const salesDelta = state.metrics.sales - previous.metrics.sales;
-  const responsesDelta = state.metrics.responses - previous.metrics.responses;
+  const inboundDelta = state.metrics.inbound - previous.metrics.inbound;
   const content = state.cohorts.at(-1);
   const isAction = (...ids: string[]) => Boolean(actionId && ids.includes(actionId));
   switch (id) {
@@ -24,10 +24,10 @@ function matches(id: string, previous: GameState, state: GameState, actionId?: s
     case 'first_sale': return previous.metrics.sales === 0 && state.metrics.sales > 0;
     case 'multiple_sales': return salesDelta > 1;
     case 'stories_without_warmup': return isAction('stories_3d') && content?.contentType === 'selling' && content.routeSnapshot.nurture.includes('none');
-    case 'ordinary_reel': return isAction('reels_7d', 'reels_stories_7d') && responsesDelta < 10;
-    case 'viral_reel_manual': return isAction('reels_7d', 'reels_stories_7d') && responsesDelta >= 20 && content?.routeSnapshot.processing === 'manual';
-    case 'viral_reel_simple_bot': return isAction('reels_7d', 'reels_stories_7d') && responsesDelta >= 20 && content?.routeSnapshot.processing === 'simple_bot';
-    case 'viral_reel_ai_bot': return isAction('reels_7d', 'reels_stories_7d') && responsesDelta >= 20 && content?.routeSnapshot.processing === 'ai_bot';
+    case 'ordinary_reel': return isAction('reels_7d', 'reels_stories_7d') && inboundDelta < 10;
+    case 'viral_reel_manual': return isAction('reels_7d', 'reels_stories_7d') && inboundDelta >= 20 && content?.routeSnapshot.processing === 'manual';
+    case 'viral_reel_simple_bot': return isAction('reels_7d', 'reels_stories_7d') && inboundDelta >= 20 && content?.routeSnapshot.processing === 'simple_bot';
+    case 'viral_reel_ai_bot': return isAction('reels_7d', 'reels_stories_7d') && inboundDelta >= 20 && content?.routeSnapshot.processing === 'ai_bot';
     case 'ai_bot_without_traffic': return actionId?.startsWith('ai_bot') === true && state.metrics.impressions === 0;
     case 'website_without_traffic': return actionId?.startsWith('website') === true && state.metrics.impressions === 0;
     case 'beautiful_site_before_demand': return actionId === 'website_beautiful' && state.assets.demandConfidence === 0;

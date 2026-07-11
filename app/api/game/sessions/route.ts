@@ -3,8 +3,15 @@ import { createInitialState } from '@/packages/game-engine/src';
 import { loadGameConfig } from '@/lib/config/game-config';
 import { saveSession } from '@/lib/game/store';
 import { setupSchema } from '@/lib/game/schemas';
+import { globalRateLimiter } from '@/lib/api/rate-limit';
 
 export async function POST(request: Request) {
+  const ip = request.headers.get('x-forwarded-for') ?? 'anonymous';
+  const limit = globalRateLimiter.check(ip);
+  if (!limit.success) {
+    return NextResponse.json({ error: 'rate_limit_exceeded' }, { status: 429, headers: { 'Retry-After': Math.ceil((limit.reset - Date.now()) / 1000).toString() } });
+  }
+
   const body = await request.json().catch(() => null);
   const parsed = setupSchema.safeParse(body);
   if (!parsed.success) {

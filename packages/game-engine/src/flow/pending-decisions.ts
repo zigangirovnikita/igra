@@ -1,30 +1,34 @@
 import type { GameState, GameConfig, ProcessingType, SaleMethod } from '../types';
 import { applyProcessing, applySales, applyFollowup } from '../calculations/funnel';
 import { recalculateMetrics } from '../time/ticks';
+import { generateMiniGameSession } from '../calculations/minigame';
 
 export function deriveNextPendingDecision(state: GameState): NonNullable<GameState['pendingDecision']> | null {
   for (const cohort of state.cohorts) {
+    if (cohort.unprocessedInbound > 5 && cohort.routeSnapshot.processing === 'manual' && cohort.inboundDecision === 'pending' && state.metrics.miniGameCount < 1) {
+      return { type: 'mini_game', cohortId: cohort.id, returnStep: 'daily_intro' };
+    }
     if (cohort.unprocessedInbound > 0 && cohort.routeSnapshot.processing === 'manual' && cohort.inboundDecision === 'pending') {
-      return { type: 'inbound', cohortId: cohort.id };
+      return { type: 'inbound', cohortId: cohort.id, returnStep: 'daily_intro' };
     }
   }
 
   for (const cohort of state.cohorts) {
     if (cohort.unprocessedApplications > 0 && ['manual_chat', 'call'].includes(cohort.routeSnapshot.saleMethod) && cohort.salesDecision === 'pending') {
-      return { type: 'sales', cohortId: cohort.id };
+      return { type: 'sales', cohortId: cohort.id, returnStep: 'daily_intro' };
     }
   }
 
   for (const cohort of state.cohorts) {
     if (cohort.pendingFollowup > 0 && cohort.routeSnapshot.followup === 'manual' && cohort.followupDecision === 'pending' && !cohort.followedUp) {
-      return { type: 'followup', cohortId: cohort.id };
+      return { type: 'followup', cohortId: cohort.id, returnStep: 'daily_intro' };
     }
   }
 
-  if (state.resources.energy <= 0) return { type: 'energy_crisis' };
-  if (state.resources.bank <= 0 && !state.flags.budgetNoticeHandled) return { type: 'budget_notice' };
+  if (state.resources.energy <= 0) return { type: 'energy_crisis', returnStep: 'daily_intro' };
+  if (state.resources.bank <= 0 && !state.flags.budgetNoticeHandled) return { type: 'budget_notice', returnStep: 'daily_intro' };
   if (!state.flow.goalPromptHandled && state.targets.targetRevenue > 0 && state.metrics.revenue >= state.targets.targetRevenue) {
-    return { type: 'goal_reached' };
+    return { type: 'goal_reached', returnStep: 'daily_intro' };
   }
 
   return null;
@@ -144,8 +148,30 @@ export function resolvePendingDecision(state: GameState, config: GameConfig, pay
       state.cohorts[cohortIndex].deferCount += 1;
     } else {
       state.cohorts[cohortIndex].inboundDecision = 'ignored';
-      state.cohorts[cohortIndex].lost += state.cohorts[cohortIndex].unprocessedInbound;
+      state.cohorts[cohortIndex].losses.processing += state.cohorts[cohortIndex].unprocessedInbound;
       state.cohorts[cohortIndex].unprocessedInbound = 0;
+    }
+  } else if (currentDecision.type === 'mini_game') {
+    if (payload.action === 'process_mini_game') {
+      const amount = payload.amount || Math.min(cohort.unprocessedInbound, 15);
+      // Mini-game bonus: slightly higher processing and application rates
+      const originalProcessing = cohort.routeSnapshot.processing;
+      cohort.routeSnapshot.processing = 'ai_bot'; // Simulate high quality processing
+      state.cohorts[cohortIndex] = applyProcessing(state, config, cohort, 'manual', amount);
+      cohort.routeSnapshot.processing = originalProcessing; // Restore
+      
+      state.resources.energy = Math.max(0, state.resources.energy - amount * 0.3);
+      if (state.cohorts[cohortIndex].unprocessedInbound <= 0) {
+        state.cohorts[cohortIndex].inboundDecision = 'resolved';
+      }
+      state.metrics.miniGameCount += 1;
+      state.miniGame = null;
+    } else if (payload.action === 'skip_mini_game') {
+      state.cohorts[cohortIndex].inboundDecision = 'ignored';
+      state.cohorts[cohortIndex].losses.processing += state.cohorts[cohortIndex].unprocessedInbound;
+      state.cohorts[cohortIndex].unprocessedInbound = 0;
+      state.metrics.miniGameCount += 1;
+      state.miniGame = null;
     }
   } else if (currentDecision.type === 'sales') {
     if (['process', 'sell_chat', 'sell_call', 'sell_website', 'sell_bot', 'sell_webinar'].includes(payload.action)) {
@@ -162,7 +188,7 @@ export function resolvePendingDecision(state: GameState, config: GameConfig, pay
       state.cohorts[cohortIndex].deferCount += 1;
     } else {
       state.cohorts[cohortIndex].salesDecision = 'ignored';
-      state.cohorts[cohortIndex].lost += state.cohorts[cohortIndex].unprocessedApplications;
+      state.cohorts[cohortIndex].losses.sale += state.cohorts[cohortIndex].unprocessedApplications;
       state.cohorts[cohortIndex].unprocessedApplications = 0;
     }
   } else if (currentDecision.type === 'followup') {
@@ -179,7 +205,7 @@ export function resolvePendingDecision(state: GameState, config: GameConfig, pay
       state.cohorts[cohortIndex].deferCount += 1;
     } else {
       state.cohorts[cohortIndex].followupDecision = 'ignored';
-      state.cohorts[cohortIndex].lost += state.cohorts[cohortIndex].pendingFollowup;
+      state.cohorts[cohortIndex].losses.followup += state.cohorts[cohortIndex].pendingFollowup;
       state.cohorts[cohortIndex].pendingFollowup = 0;
     }
   }
@@ -192,6 +218,10 @@ export function resolvePendingDecision(state: GameState, config: GameConfig, pay
   }
 
   state.pendingDecision = deriveNextPendingDecision(state);
+  if (state.pendingDecision?.type === 'mini_game') {
+    state.miniGame = generateMiniGameSession(state, state.pendingDecision.cohortId);
+  }
+
   if (!state.pendingDecision) {
     if (state.flow.step === 'post_action') {
       state.flow.step = 'day_summary';

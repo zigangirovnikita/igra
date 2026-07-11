@@ -115,6 +115,17 @@ export type ActionOutcome = {
   startedDay: number;
   finishedDay: number;
 
+  bankBefore: number;
+  bankAfter: number;
+  bankSpent: number;
+
+  energyBefore: number;
+  energyAfter: number;
+  energySpent: number;
+
+  metricsBefore: GameMetrics;
+  metricsAfter: GameMetrics;
+
   impressionsDelta: number;
   inboundDelta: number;
   processedDelta: number;
@@ -124,9 +135,6 @@ export type ActionOutcome = {
   salesDelta: number;
   revenueDelta: number;
   lostDelta: number;
-
-  bankDelta: number;
-  energyDelta: number;
 
   createdCohortIds: string[];
   narrativeKeys: string[];
@@ -145,37 +153,60 @@ export type DayReport = {
   }>;
 };
 
+type PendingReturnStep = 'daily_intro' | 'day_summary';
+
 export type PendingDecision =
-  | {
-      type: 'inbound';
-      cohortId: string;
-    }
-  | {
-      type: 'sales';
-      cohortId: string;
-    }
-  | {
-      type: 'followup';
-      cohortId: string;
-    }
-  | {
-      type: 'energy_crisis';
-    }
-  | {
-      type: 'budget_notice';
-    }
-  | {
-      type: 'goal_reached';
-    }
-  | {
-      type: 'finish_confirmation';
-    };
+  | { type: 'inbound'; cohortId: string; returnStep: PendingReturnStep }
+  | { type: 'mini_game'; cohortId: string; returnStep: PendingReturnStep }
+  | { type: 'sales'; cohortId: string; returnStep: PendingReturnStep }
+  | { type: 'followup'; cohortId: string; returnStep: PendingReturnStep }
+  | { type: 'energy_crisis'; returnStep: PendingReturnStep }
+  | { type: 'budget_notice'; returnStep: PendingReturnStep }
+  | { type: 'goal_reached'; returnStep: PendingReturnStep }
+  | { type: 'finish_confirmation'; returnStep: FlowStep };
 
 export type EndingReason =
   | 'time_finished'
   | 'goal_finished'
   | 'manual_finished'
   | 'resource_finished';
+
+export type MiniGameMessageKind =
+  | 'payment_ready'
+  | 'price_question'
+  | 'program_question'
+  | 'doubt'
+  | 'installment_question'
+  | 'irrelevant'
+  | 'unusual'
+  | 'call_ready';
+
+export type MiniGameMessage = {
+  id: string;
+  kind: MiniGameMessageKind;
+  text: string;
+  qualityWeight: number;
+  applicationModifier: number;
+  saleModifier: number;
+  displayOrder: number;
+};
+
+export type MiniGameSession = {
+  id: string;
+  cohortId: string;
+  startedAt: string;
+  expiresAt: string;
+  durationSeconds: 60;
+  messages: MiniGameMessage[];
+  status: 'active' | 'resolved';
+};
+
+export type DecisionRecord = {
+  sequence: number;
+  day: number;
+  commandType: GameCommand['type'];
+  payload: Record<string, unknown>;
+};
 
 export type NamedConfig = {
   id: Id;
@@ -271,15 +302,44 @@ export type RouteSnapshot = RouteSelection & {
   capturedDay: number;
 };
 
+export type LossBreakdown = {
+  entry: number;
+  processing: number;
+  qualification: number;
+  callBooking: number;
+  callNoShow: number;
+  sale: number;
+  followup: number;
+  capacity: number;
+};
+
+export type CohortContextSnapshot = {
+  productPrice: number;
+  productType: string;
+  demandConfidence: number;
+  productQuality: number;
+  energyAtCreation: number;
+  createdDay: number;
+};
+
 export type LeadCohort = {
   id: string;
   createdDay: number;
   sourceActionId: string;
   sourceType: SourceType;
   contentType: ContentType;
+
   impressions: number;
+  inbound: number;
+  activated: number;
+  processed: number;
+  applications: number;
+  bookedCalls: number;
+  heldCalls: number;
+  sales: number;
 
   unprocessedInbound: number;
+  unprocessedApplications: number;
   pendingFollowup: number;
 
   inboundDecision: 'pending' | 'resolved' | 'deferred' | 'ignored';
@@ -289,19 +349,11 @@ export type LeadCohort = {
   deferredUntilDay: number | null;
   deferCount: number;
 
-  responses: number;
-  activated: number;
-  processed: number;
-  applications: number;
-  bookedCalls: number;
-  heldCalls: number;
-  sales: number;
-
-  unprocessedApplications: number;
-  lost: number;
+  losses: LossBreakdown;
   capacityLostLeads: number;
 
   routeSnapshot: RouteSnapshot;
+  contextSnapshot: CohortContextSnapshot;
   followedUp: boolean;
 };
 
@@ -316,7 +368,7 @@ export type ScheduledAction = {
 
 export type GameMetrics = {
   impressions: number;
-  responses: number;
+  inbound: number;
   activated: number;
   processed: number;
   applications: number;
@@ -398,6 +450,8 @@ export type GameState = {
   currentDayReport: DayReport | null;
   dayReports: DayReport[];
   endingReason: EndingReason | null;
+  miniGame: MiniGameSession | null;
+  decisionLog: DecisionRecord[];
 };
 
 export type GameCommand =
@@ -442,4 +496,5 @@ export type GameCommand =
   | { commandId: string; type: 'resolve_mini_game'; payload: { cohortId: string; mode: 'manual' | 'auto'; processed?: number } }
   | { commandId: string; type: 'start_parallel'; payload: { actionAId: string; actionBId: string; contentType?: ContentType; route?: RouteSelection } }
   | { commandId: string; type: 'record_reflection'; payload: { eventId: string; answer: string } }
-  | { commandId: string; type: 'set_route'; payload: RouteSelection };
+  | { commandId: string; type: 'set_route'; payload: RouteSelection }
+  | { commandId: string; type: 'acknowledge_event'; payload: Record<string, never> };

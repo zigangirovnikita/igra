@@ -6,6 +6,7 @@ import * as SetupTransitions from '../flow/transitions';
 import * as DailyTransitions from '../flow/daily';
 import * as OutcomeTransitions from '../flow/outcome';
 import * as PendingDecisions from '../flow/pending-decisions';
+import { applyEffect } from './dsl';
 
 export function applyCommand(input: GameState, config: GameConfig, command: GameCommand): GameState {
   if (input.appliedCommandIds.includes(command.commandId)) return input;
@@ -128,7 +129,7 @@ export function applyCommand(input: GameState, config: GameConfig, command: Game
       state = PendingDecisions.resolvePendingDecision(state, config, command.payload);
       break;
     case 'resolve_inbound':
-      state.pendingDecision = { type: 'inbound', cohortId: command.payload.cohortId };
+      state.pendingDecision = { type: 'inbound', cohortId: command.payload.cohortId, returnStep: 'daily_intro' };
       state = PendingDecisions.resolvePendingDecision(state, config, {
         cohortId: command.payload.cohortId,
         action: command.payload.mode === 'defer' ? 'defer' : command.payload.mode === 'none' ? 'ignore' : 'process',
@@ -136,15 +137,15 @@ export function applyCommand(input: GameState, config: GameConfig, command: Game
       });
       break;
     case 'defer_inbound':
-      state.pendingDecision = { type: 'inbound', cohortId: command.payload.cohortId };
+      state.pendingDecision = { type: 'inbound', cohortId: command.payload.cohortId, returnStep: 'daily_intro' };
       state = PendingDecisions.resolvePendingDecision(state, config, { cohortId: command.payload.cohortId, action: 'defer' });
       break;
     case 'resolve_sales':
-      state.pendingDecision = { type: 'sales', cohortId: command.payload.cohortId };
+      state.pendingDecision = { type: 'sales', cohortId: command.payload.cohortId, returnStep: 'daily_intro' };
       state = PendingDecisions.resolvePendingDecision(state, config, command.payload);
       break;
     case 'resolve_followup':
-      state.pendingDecision = { type: 'followup', cohortId: command.payload.cohortId };
+      state.pendingDecision = { type: 'followup', cohortId: command.payload.cohortId, returnStep: 'daily_intro' };
       state = PendingDecisions.resolvePendingDecision(state, config, command.payload);
       break;
 
@@ -154,7 +155,7 @@ export function applyCommand(input: GameState, config: GameConfig, command: Game
       break;
     case 'request_finish':
       state.flow.backStep = state.flow.step;
-      state.pendingDecision = { type: 'finish_confirmation' };
+      state.pendingDecision = { type: 'finish_confirmation', returnStep: state.flow.step };
       state.flow.step = 'finish_confirmation';
       break;
     case 'cancel_finish':
@@ -180,6 +181,33 @@ export function applyCommand(input: GameState, config: GameConfig, command: Game
       state.history.push({ day: state.resources.day, type: 'reflection', message: command.payload.answer, payload: { eventId: command.payload.eventId } });
       break;
 
+    case 'resolve_mini_game':
+      if (state.pendingDecision?.type === 'mini_game') {
+        const action = command.payload.mode === 'manual' ? 'process_mini_game' : 'skip_mini_game';
+        state = PendingDecisions.resolvePendingDecision(state, config, { 
+          cohortId: command.payload.cohortId, 
+          action, 
+          amount: command.payload.processed 
+        });
+      }
+      break;
+
+    case 'acknowledge_event': {
+      const eventId = command.payload.eventId as string;
+      const template = config.events.find(e => e.id === eventId);
+      if (template && template.effects) {
+        for (const effect of template.effects) {
+          state = applyEffect(state, effect);
+        }
+      }
+      break;
+    }
+    
+    case 'start_parallel':
+    case 'set_route':
+      // Developer commands, skip strict handling
+      break;
+
     default:
       throw new Error(`Unhandled command: ${(command as { type: string }).type}`);
   }
@@ -187,6 +215,17 @@ export function applyCommand(input: GameState, config: GameConfig, command: Game
   const actionId = ['select_action', 'confirm_action'].includes(command.type) ? (command.payload as { actionId?: string }).actionId : undefined;
   state = appendTriggeredEvents(input, state, config, actionId);
   state.appliedCommandIds.push(command.commandId);
+  
+  if (command.type !== 'repair_flow' && command.type !== 'acknowledge_event') {
+    state.decisionLog = state.decisionLog || [];
+    state.decisionLog.push({
+      sequence: state.decisionLog.length,
+      day: state.resources.day,
+      commandType: command.type,
+      payload: command.payload,
+    });
+  }
+
   state.stateVersion += 1;
   assertStateInvariants(state, config);
   return state;

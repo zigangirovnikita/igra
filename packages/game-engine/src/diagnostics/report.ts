@@ -32,6 +32,28 @@ export function calculateDiagnostics(state: GameState, config: GameConfig): Diag
   };
 }
 
+export function buildAIDiagnosticContext(state: GameState, config: GameConfig): Record<string, unknown> {
+  const diagnostics = calculateDiagnostics(state, config);
+  return {
+    version: config.version,
+    finalStatus: diagnostics.finalStatus,
+    financials: diagnostics.financials,
+    mistakes: diagnostics.mistakes.map(m => m.message),
+    strongDecisions: diagnostics.strongDecisions,
+    bottlenecks: diagnostics.bottlenecks,
+    counterfactuals: diagnostics.counterfactuals,
+    metrics: {
+      sales: state.metrics.sales,
+      revenue: state.metrics.revenue,
+      expenses: state.metrics.expenses,
+      inbound: state.metrics.inbound,
+      lostLeads: state.metrics.lostLeads,
+    },
+    daysPlayed: state.resources.day,
+    endingReason: state.endingReason,
+  };
+}
+
 function buildDreamResults(state: GameState, config: GameConfig, money: number) {
   let remaining = money;
   return state.launchPlan.dreams.map((id) => {
@@ -51,7 +73,7 @@ function detectMistakes(state: GameState): Array<{ day: number; message: string;
   if (fullProduct && (!demand || fullProduct.day < demand.day)) result.push({ day: fullProduct.day, category: 'sequence', message: `На ${fullProduct.day}-й день вы начали полный продукт до проверки спроса.` });
   const earlySelling = state.cohorts.find((cohort) => cohort.contentType === 'selling' && cohort.routeSnapshot.nurture.includes('none'));
   if (earlySelling) result.push({ day: earlySelling.createdDay, category: 'nurture', message: `На ${earlySelling.createdDay}-й день вы начали продавать без прогрева.` });
-  const lost = state.cohorts.find((cohort) => cohort.lost > 0);
+  const lost = state.cohorts.find((cohort) => cohort.losses.processing + cohort.losses.sale + cohort.losses.followup > 0);
   if (lost) result.push({ day: lost.createdDay, category: 'processing', message: `После контента на ${lost.createdDay}-й день часть входящих была потеряна без обработки.` });
   const reflection = state.history.find((entry) => entry.type === 'reflection' && entry.message === 'audience');
   if (reflection) result.push({ day: reflection.day, category: 'diagnosis', message: `На ${reflection.day}-й день вы объяснили слабый результат только размером аудитории и не проверили маршрут.` });

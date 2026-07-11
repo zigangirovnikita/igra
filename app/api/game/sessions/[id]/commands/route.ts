@@ -4,10 +4,17 @@ import { loadGameConfig } from '@/lib/config/game-config';
 import { commandRequestSchema } from '@/lib/game/schemas';
 import { getSession, saveSession } from '@/lib/game/store';
 import { prisma } from '@/lib/db/client';
+import { globalRateLimiter } from '@/lib/api/rate-limit';
 
 type RouteContext = { params: Promise<{ id: string }> };
 
 export async function POST(request: Request, context: RouteContext) {
+  const ip = request.headers.get('x-forwarded-for') ?? 'anonymous';
+  const limit = globalRateLimiter.check(ip);
+  if (!limit.success) {
+    return NextResponse.json({ error: 'rate_limit_exceeded' }, { status: 429, headers: { 'Retry-After': Math.ceil((limit.reset - Date.now()) / 1000).toString() } });
+  }
+
   const { id } = await context.params;
   const session = await getSession(id);
   if (!session) return NextResponse.json({ error: 'session_not_found' }, { status: 404 });
@@ -48,6 +55,9 @@ export async function POST(request: Request, context: RouteContext) {
     
     return NextResponse.json({ state: session.state });
   } catch (error) {
+    if (error instanceof Error && error.message.includes('Optimistic concurrency error')) {
+      return NextResponse.json({ error: 'version_conflict', state: session.state }, { status: 409 });
+    }
     return NextResponse.json({ error: 'command_rejected', message: error instanceof Error ? error.message : 'unknown' }, { status: 400 });
   }
 }

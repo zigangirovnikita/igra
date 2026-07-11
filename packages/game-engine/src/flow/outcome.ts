@@ -37,8 +37,8 @@ export function confirmAction(state: GameState, config: GameConfig): GameState {
   const startedDay = state.resources.day;
   const finishedDay = Math.min(config.totalDays, startedDay + Math.max(0, action.days - 1));
 
-  // Spend time immediately
-  state.resources.day = finishedDay;
+  // Spend time immediately (advance to the next day after the action)
+  state.resources.day = Math.min(config.totalDays, startedDay + action.days);
 
   // Execute effects immediately
   const report = executeActionEffects(state, config, action, startedDay, finishedDay, state.pendingAction.contentType);
@@ -122,8 +122,19 @@ export function executeActionEffects(
     startedDay,
     finishedDay,
 
+    bankBefore: beforeBank,
+    bankAfter: state.resources.bank,
+    bankSpent: beforeBank - state.resources.bank,
+
+    energyBefore: beforeEnergy,
+    energyAfter: state.resources.energy,
+    energySpent: beforeEnergy - state.resources.energy,
+
+    metricsBefore: beforeMetrics,
+    metricsAfter: state.metrics,
+
     impressionsDelta: state.metrics.impressions - beforeMetrics.impressions,
-    inboundDelta: state.metrics.responses - beforeMetrics.responses,
+    inboundDelta: state.metrics.inbound - beforeMetrics.inbound,
     processedDelta: state.metrics.processed - beforeMetrics.processed,
     applicationsDelta: state.metrics.applications - beforeMetrics.applications,
     bookedCallsDelta: state.metrics.bookedCalls - beforeMetrics.bookedCalls,
@@ -131,9 +142,6 @@ export function executeActionEffects(
     salesDelta: state.metrics.sales - beforeMetrics.sales,
     revenueDelta: state.metrics.revenue - beforeMetrics.revenue,
     lostDelta: state.metrics.lostLeads - beforeMetrics.lostLeads,
-
-    bankDelta: state.resources.bank - beforeBank,
-    energyDelta: state.resources.energy - beforeEnergy,
 
     createdCohortIds: createdCohorts,
     narrativeKeys: []
@@ -174,10 +182,13 @@ function runPilotOffer(state: GameState, config: GameConfig, finishedDay: number
   const id = `pilot_offer_${finishedDay}`;
   let cohort: LeadCohort = {
     id, createdDay: state.resources.day, sourceActionId: 'demand_pilot_offer', sourceType: 'stories', contentType: 'selling',
-    impressions: 3, responses: 3, activated: 3, processed: 3, applications: 3, bookedCalls: 0, heldCalls: 0, sales: 0,
+    impressions: 3, inbound: 3, activated: 3, processed: 3, applications: 3, bookedCalls: 0, heldCalls: 0, sales: 0,
     unprocessedInbound: 0, pendingFollowup: 0, inboundDecision: 'resolved', salesDecision: 'pending', followupDecision: 'not_ready',
-    deferredUntilDay: null, deferCount: 0, unprocessedApplications: 3, lost: 0, capacityLostLeads: 0,
-    routeSnapshot: { ...state.activeRoute, capturedDay: state.resources.day }, followedUp: false,
+    deferredUntilDay: null, deferCount: 0, unprocessedApplications: 3, capacityLostLeads: 0,
+    losses: { entry: 0, processing: 0, qualification: 0, callBooking: 0, callNoShow: 0, sale: 0, followup: 0, capacity: 0 },
+    routeSnapshot: { ...state.activeRoute, capturedDay: state.resources.day }, 
+    contextSnapshot: { productPrice: state.launchPlan.productPrice || 0, productType: state.launchPlan.productType || '', demandConfidence: 0, productQuality: 0, energyAtCreation: state.resources.energy, createdDay: state.resources.day },
+    followedUp: false,
   };
   const productPrice = state.launchPlan.productPrice || 0;
   cohort = applySales(state, config, cohort, productPrice > 50_000 ? 'call' : 'manual_chat', 3);
