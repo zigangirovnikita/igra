@@ -5,6 +5,7 @@ import { advanceDays, completeAction, recalculateMetrics } from '../time/ticks';
 import { applyProcessing } from '../calculations/funnel';
 import { findAction, getActionAvailability } from './availability';
 import { createInitialState } from '../state/initial';
+import { appendTriggeredEvents } from '../events/dispatcher';
 
 export function applyCommand(input: GameState, config: GameConfig, command: GameCommand): GameState {
   if (input.appliedCommandIds.includes(command.commandId)) return input;
@@ -38,6 +39,8 @@ export function applyCommand(input: GameState, config: GameConfig, command: Game
     state = finishGame(state, config);
   }
 
+  const actionId = command.type === 'start_action' ? command.payload.actionId : command.type === 'start_parallel' ? command.payload.actionAId : undefined;
+  state = appendTriggeredEvents(input, state, config, actionId);
   state.appliedCommandIds.push(command.commandId);
   state.stateVersion += 1;
   assertStateInvariants(state, config);
@@ -104,6 +107,16 @@ function replayCounterfactuals(input: GameState, config: GameConfig): Array<{ ch
     { from: (id) => id === 'website_basic' || id === 'website_beautiful', to: 'video_specialist', change: 'Сайт → видеоурок' },
     { from: (id) => id === 'stories_3d', to: 'reels_stories_7d', change: 'Повторные сторис → рилсы + сторис' },
   ];
+  if (input.cohorts.some((cohort) => cohort.routeSnapshot.processing === 'manual' && cohort.lost > 0)) {
+    candidates.push(
+      { from: (id) => id.startsWith('reels') || id === 'stories_3d', to: 'ai_bot_specialist', change: 'Ручная обработка → ИИ-бот' },
+      { from: (id) => id.startsWith('reels') || id === 'stories_3d', to: 'hire_manager', change: 'Ручная обработка → менеджер' },
+    );
+  }
+  if (input.player.productPrice > 50_000 && input.activeRoute.saleMethod !== 'call') {
+    candidates.push({ from: (id) => id === 'manual_chat' || id.includes('auto_sale'), to: 'calls', change: 'Прямая продажа дорогого продукта → созвон' });
+  }
+  if (input.resources.energy < 15) candidates.push({ from: (id) => ['reels_stories_7d', 'webinar'].includes(id), to: 'rest_two_days', change: 'Работа на нулевой энергии → отдых' });
   if (!actions.some((item) => item.actionId.startsWith('demand_'))) candidates.push({ from: () => false, to: 'demand_pilot_offer', change: 'Без проверки спроса → пилотное предложение', insert: true });
   if (!actions.some((item) => item.actionId.includes('followup'))) candidates.push({ from: () => false, to: 'manual_followup', change: 'Без дожима → ручной дожим', insert: true });
 

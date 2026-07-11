@@ -14,6 +14,7 @@ RUN pnpm run build
 
 FROM node:22-alpine AS runner
 WORKDIR /app
+RUN corepack enable
 ENV NODE_ENV=production
 COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/public ./public

@@ -1,41 +1,18 @@
 'use client';
 
-import { useCallback, useRef, useState } from 'react';
-import { getActionAvailability, type GameConfig, type GameState, type SetupInput } from '@/packages/game-engine/src';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { getActionAvailability, type GameConfig, type GameState } from '@/packages/game-engine/src';
 import type { ChoiceOption, Scene, SetupDraft } from '@/lib/scenes/types';
 import { actionToChoice, buildFinalScenes, buildInitialGameScenes, buildMainChoiceScene, buildPostActionScenes } from '@/lib/scenes/script';
 import { buildCategoryScene, buildContentTypeScene, buildInitialPlanScenes, buildParallelContentTypeScene, buildParallelScene, CONTENT_ACTIONS, initialPlanSummary, operationalRoute, routeFromPlan, type DecisionCategory } from '@/lib/scenes/decisionFlow';
 import { getActionStartNarrative, getDirectMiniGameResult } from '@/lib/scenes/narratives';
 import { SetupScene } from './SetupScene';
-import { NarrativeScreen } from './NarrativeScreen';
-import { ChoiceScreen } from './ChoiceScreen';
-import { ResultScreen } from './ResultScreen';
-import { MetricsScreen } from './MetricsScreen';
-import { DirectMiniGame } from './DirectMiniGame';
-import { DiagnosisScreen } from './DiagnosisScreen';
-import { CtaScene } from './CtaScene';
 import { GameHud } from './GameHud';
-
-function commandId(prefix: string) {
-  return `${prefix}-${Date.now()}`;
-}
-
-function draftToSetupInput(draft: SetupDraft): SetupInput {
-  return {
-    avatarGender: draft.gender,
-    name: draft.name,
-    niche: draft.niche,
-    productName: draft.productName,
-    superpowers: draft.superpowers,
-    productType: draft.productType,
-    productPrice: draft.productPrice,
-    telegramStatus: draft.channelMode === 'telegram' || draft.channelMode === 'instagram_telegram' ? 'known' : 'none',
-    averageTelegramViews: draft.channelMode === 'telegram' || draft.channelMode === 'instagram_telegram' ? draft.averageTelegramViews : 0,
-    averageReelViews: draft.channelMode === 'telegram' || draft.channelMode === 'contacts' || draft.channelMode === 'none' ? 0 : draft.averageReelViews,
-    averageStoryViews: draft.channelMode === 'telegram' || draft.channelMode === 'contacts' || draft.channelMode === 'none' ? 0 : draft.averageStoryViews,
-    dreams: draft.dreams,
-  };
-}
+import { ResumePrompt } from './ResumePrompt';
+import { LeadForm } from './LeadForm';
+import { SceneContent } from './SceneContent';
+import { commandId, draftToSetupInput, readCachedGame } from '@/lib/scenes/setupMapping';
+import { submitLead } from '@/lib/game/leadClient';
 
 function defaultRouteFor(state: GameState) {
   return operationalRoute(state);
@@ -51,10 +28,19 @@ export function SceneEngine({ config }: Props) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [leadStatus, setLeadStatus] = useState<string | null>(null);
+  const [resumeCandidate, setResumeCandidate] = useState<GameState | null>(null);
   const prevStateRef = useRef<GameState | null>(null);
   const planRef = useRef<Record<string, string>>({});
 
-  // ── Queue helpers ────────────────────────────────────────────────
+  useEffect(() => {
+    const cached = readCachedGame();
+    if (!cached) return;
+    fetch(`/api/game/sessions/${cached.state.sessionId}`).then(async (response) => {
+      if (!response.ok) throw new Error('resume_unavailable');
+      const data = await response.json() as { state: GameState };
+      setResumeCandidate(data.state);
+    }).catch(() => setResumeCandidate(cached.state));
+  }, []);
 
   const pushScenes = useCallback((scenes: Scene[]) => {
     setQueue((prev) => [...scenes, ...prev]);
@@ -63,8 +49,6 @@ export function SceneEngine({ config }: Props) {
   const advanceQueue = useCallback(() => {
     setQueue((prev) => prev.slice(1));
   }, []);
-
-  // ── Setup complete: create session ───────────────────────────────
 
   async function handleSetupComplete(draft: SetupDraft) {
     setSetupDraft(draft);
@@ -91,8 +75,6 @@ export function SceneEngine({ config }: Props) {
       setBusy(false);
     }
   }
-
-  // ── Action chosen ────────────────────────────────────────────────
 
   async function handleActionChosen(option: ChoiceOption) {
     if (!gameState) return;
@@ -277,8 +259,6 @@ export function SceneEngine({ config }: Props) {
     }
   }
 
-  // ── Mini-game resolved ───────────────────────────────────────────
-
   async function handleMiniGameResolved(cohortId: string, mode: 'manual' | 'auto', processed?: number) {
     if (!gameState) return;
     setBusy(true);
@@ -287,7 +267,7 @@ export function SceneEngine({ config }: Props) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          commandId: commandId('mini_game'),
+          commandId: `mini-game-${cohortId}`,
           expectedVersion: gameState.stateVersion,
           type: 'resolve_mini_game',
           payload: { cohortId, mode, processed },
@@ -324,8 +304,6 @@ export function SceneEngine({ config }: Props) {
     }
   }
 
-  // ── Finish game ──────────────────────────────────────────────────
-
   async function finishGame(state: GameState) {
     setBusy(true);
     setError(null);
@@ -346,32 +324,12 @@ export function SceneEngine({ config }: Props) {
     }
   }
 
-  // ── Lead form submit ─────────────────────────────────────────────
-
   async function handleLeadSubmit(formData: FormData) {
     if (!gameState) return;
     setBusy(true);
     setLeadStatus(null);
-    const payload = {
-      sessionId: gameState.sessionId,
-      name: String(formData.get('name') ?? ''),
-      contact: String(formData.get('contact') ?? ''),
-      product: String(formData.get('product') ?? ''),
-      productPrice: Number(formData.get('productPrice') ?? gameState.player.productPrice),
-      socialLink: String(formData.get('socialLink') ?? ''),
-      comment: String(formData.get('comment') ?? ''),
-      privacyConsent: formData.get('privacyConsent') === 'on',
-      marketingConsent: formData.get('marketingConsent') === 'on',
-      website: String(formData.get('website') ?? ''),
-    };
     try {
-      const res = await fetch('/api/leads', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? 'Заявка не отправлена');
+      await submitLead(gameState, formData);
       setLeadStatus('success');
     } catch (err) {
       setLeadStatus(err instanceof Error ? err.message : 'Ошибка отправки');
@@ -387,15 +345,22 @@ export function SceneEngine({ config }: Props) {
     setPhase('setup');
     setError(null);
     localStorage.removeItem('launch-game-cache');
+    setResumeCandidate(null);
   }
 
-  // ── Current scene ────────────────────────────────────────────────
+  function handleResume() {
+    if (!resumeCandidate) return;
+    setGameState(resumeCandidate);
+    prevStateRef.current = resumeCandidate;
+    setQueue([buildMainChoiceScene(resumeCandidate, config)]);
+    setPhase('game');
+    setResumeCandidate(null);
+  }
 
   const currentScene = queue[0];
 
-  // ── Render ───────────────────────────────────────────────────────
-
   if (phase === 'setup') {
+    if (resumeCandidate) return <main className="scene-shell"><ResumePrompt state={resumeCandidate} onResume={handleResume} onRestart={handleRestart} /></main>;
     return (
       <main className="scene-shell">
         {error && <div className="scene-error" role="alert">{error}</div>}
@@ -428,103 +393,8 @@ export function SceneEngine({ config }: Props) {
         </div>
       )}
 
-      {!currentScene && gameState && (
-        // Fallback: show choice screen if queue is empty
-        <ChoiceScreen
-          scene={buildMainChoiceScene(gameState, config)}
-          onChoice={handleActionChosen}
-          busy={busy}
-        />
-      )}
-
-      {currentScene?.type === 'narrative' && (
-        <NarrativeScreen scene={currentScene} onAdvance={advanceQueue} />
-      )}
-
-      {currentScene?.type === 'choice' && (
-        <ChoiceScreen scene={currentScene} onChoice={(opt) => { advanceQueue(); handleActionChosen(opt); }} busy={busy} />
-      )}
-
-      {currentScene?.type === 'result' && (
-        <ResultScreen scene={currentScene} onNext={advanceQueue} />
-      )}
-
-      {currentScene?.type === 'metrics' && (
-        <MetricsScreen scene={currentScene} onNext={advanceQueue} />
-      )}
-
-      {currentScene?.type === 'mini_game_direct' && (
-        <DirectMiniGame
-          scene={currentScene}
-          onResolve={(mode, processed) => { advanceQueue(); handleMiniGameResolved(currentScene.cohortId, mode, processed); }}
-          busy={busy}
-        />
-      )}
-
-      {currentScene?.type === 'diagnosis' && (
-        <DiagnosisScreen
-          scene={currentScene}
-          onCta={() => { advanceQueue(); setPhase('lead'); }}
-          onRestart={() => { advanceQueue(); handleRestart(); }}
-        />
-      )}
-
-      {currentScene?.type === 'cta' && (
-        <CtaScene
-          scene={currentScene}
-          onCta={() => { advanceQueue(); setPhase('lead'); }}
-          onRestart={() => { advanceQueue(); handleRestart(); }}
-        />
-      )}
+      {gameState && <SceneContent scene={currentScene} fallback={buildMainChoiceScene(gameState, config)} busy={busy} advance={advanceQueue}
+        choose={handleActionChosen} miniGame={handleMiniGameResolved} cta={() => setPhase('lead')} restart={handleRestart} />}
     </main>
-  );
-}
-
-// ── Lead form ────────────────────────────────────────────────────────────────
-
-function LeadForm({
-  state,
-  busy,
-  status,
-  onSubmit,
-  onBack,
-}: {
-  state: GameState;
-  busy: boolean;
-  status: string | null;
-  onSubmit: (formData: FormData) => void;
-  onBack: () => void;
-}) {
-  return (
-    <div className="scene-screen">
-      <div className="scene-image scene-image--character_happy" aria-hidden="true" />
-      <form className="lead-form" action={onSubmit}>
-        <h2 className="lead-form-title">Получить бесплатную консультацию</h2>
-        <p className="lead-form-sub">Оставьте контакт — мы разберём вашу ситуацию и найдём, где теряются заявки.</p>
-        <label className="setup-field-label">Имя <input name="name" defaultValue={state.player.name} required /></label>
-        <label className="setup-field-label">Telegram / телефон <input name="contact" required placeholder="@username" /></label>
-        <label className="setup-field-label">Ваш продукт <input name="product" defaultValue={state.player.productName ?? state.player.niche} required /></label>
-        <label className="setup-field-label">Чек <input name="productPrice" type="number" defaultValue={state.player.productPrice} required /></label>
-        <label className="setup-field-label">Соцсеть / ссылка <input name="socialLink" /></label>
-        <label className="setup-field-label">Комментарий <textarea name="comment" maxLength={1000} /></label>
-        <input className="hidden-field" name="website" tabIndex={-1} autoComplete="off" />
-        <label className="setup-checkbox">
-          <input name="privacyConsent" type="checkbox" required />
-          Согласен(на) на обработку персональных данных
-        </label>
-        <label className="setup-checkbox">
-          <input name="marketingConsent" type="checkbox" />
-          Согласен(на) получать полезные материалы
-        </label>
-        <div className="scene-btn-row">
-          <button className="btn-primary" type="submit" disabled={busy}>
-            {busy ? 'Отправляем…' : 'Отправить заявку'}
-          </button>
-          <button className="btn-secondary" type="button" onClick={onBack}>← Назад</button>
-        </div>
-        {status === 'success' && <p className="lead-success" role="status">✅ Заявка доставлена! Мы скоро свяжемся.</p>}
-        {status && status !== 'success' && <p className="lead-error" role="alert">⚠️ {status}</p>}
-      </form>
-    </div>
   );
 }

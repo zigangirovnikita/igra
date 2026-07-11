@@ -63,6 +63,14 @@ describe('commands and invariants', () => {
     expect(next.history.at(-1)).toMatchObject({ type: 'reflection', message: 'audience' });
   });
 
+  it('dispatches conditional game events once', () => {
+    const state = createInitialState(setup, config, 'event_seed');
+    const first = applyCommand(state, config, { commandId: 'consult', type: 'start_action', payload: { actionId: 'consultation_basic' } });
+    expect(first.history.some((entry) => entry.type === 'game_event' && entry.payload?.eventId === 'consultation_risk_reveal')).toBe(true);
+    const second = applyCommand(first, config, { commandId: 'rest', type: 'start_action', payload: { actionId: 'rest_one_day' } });
+    expect(second.history.filter((entry) => entry.payload?.eventId === 'consultation_risk_reveal')).toHaveLength(1);
+  });
+
   it('does not apply the same command twice', () => {
     const state = createInitialState(setup, config, 'idempotent_seed');
     const command = { commandId: 'same', type: 'start_action' as const, payload: { actionId: 'demand_poll' } };

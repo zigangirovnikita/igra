@@ -61,7 +61,7 @@ export async function explainWithAi(state: GameState, diagnostics: Diagnostics):
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 12_000);
   try {
-    const response = await fetch('https://api.openai.com/v1/responses', {
+    const request = () => fetch('https://api.openai.com/v1/responses', {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${apiKey}`,
@@ -88,6 +88,8 @@ export async function explainWithAi(state: GameState, diagnostics: Diagnostics):
         }
       })
     });
+    let response = await request();
+    if (response.status === 429 || response.status >= 500) response = await request();
     if (!response.ok) throw new Error(`OpenAI status ${response.status}`);
     const data = await response.json() as ResponsesPayload;
     const raw = extractOutputText(data);

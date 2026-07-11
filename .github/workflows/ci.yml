@@ -8,6 +8,20 @@ on:
 jobs:
   verify:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: launch_game
+          POSTGRES_USER: launch_game
+          POSTGRES_PASSWORD: launch_game
+        ports: ["5433:5432"]
+        options: >-
+          --health-cmd "pg_isready -U launch_game -d launch_game"
+          --health-interval 10s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgresql://launch_game:launch_game@127.0.0.1:5433/launch_game
+      SESSION_SECRET: ci-session-secret-at-least-32-bytes
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -22,6 +36,7 @@ jobs:
       - run: pnpm run typecheck
       - run: pnpm run test
       - run: pnpm run validate:config
+      - run: pnpm exec prisma migrate deploy
       - run: pnpm run build
       - run: pnpm exec playwright install --with-deps chromium
       - run: pnpm run test:e2e -- --project=chromium

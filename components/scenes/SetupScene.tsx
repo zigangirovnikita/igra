@@ -2,7 +2,8 @@
 
 import { useState } from 'react';
 import type { GameConfig } from '@/packages/game-engine/src';
-import type { FamilyType, SetupDraft } from '@/lib/scenes/types';
+import type { SetupDraft } from '@/lib/scenes/types';
+import { defaultDraft, familyOptions, getLegendText, productTypeLabels, SETUP_STEPS, type SetupStep } from '@/lib/scenes/setupCopy';
 
 type Props = {
   config: GameConfig;
@@ -11,88 +12,11 @@ type Props = {
   initialDraft?: SetupDraft;
 };
 
-type Step =
-  | 'welcome'
-  | 'gender'
-  | 'name'
-  | 'niche'
-  | 'superpowers'
-  | 'product'
-  | 'product_name'
-  | 'price'
-  | 'family'
-  | 'legend'
-  | 'dreams'
-  | 'channels'
-  | 'reach'
-  | 'summary';
-
-const STEPS: Step[] = [
-  'welcome', 'gender', 'name', 'niche', 'superpowers',
-  'product', 'product_name', 'price', 'family', 'dreams', 'legend',
-  'channels', 'reach', 'summary',
-];
-
-const defaultDraft: SetupDraft = {
-  gender: 'female',
-  name: '',
-  niche: '',
-  productName: '',
-  superpowers: [],
-  productType: 'recorded_course',
-  productPrice: 30000,
-  familyType: 'couple_no_kids',
-  dreams: [],
-  channelMode: 'instagram',
-  averageReelViews: 1500,
-  averageStoryViews: 200,
-  averageTelegramViews: 150,
-};
-
-const productTypeLabels: Record<string, string> = {
-  consultation: 'Консультации',
-  service: 'Услуга',
-  recorded_course: 'Обучение в записи',
-  live_course: 'Живое обучение',
-  mentorship: 'Наставничество',
-  membership: 'Клуб / подписка',
-};
-
-const familyOptions: { id: FamilyType; label: string }[] = [
-  { id: 'couple_no_kids', label: 'Детей нет, партнёр есть' },
-  { id: 'couple_kids', label: 'Дети есть, партнёр есть' },
-  { id: 'single_no_kids', label: 'Детей нет, без партнёра' },
-  { id: 'single_kids', label: 'Дети есть, без партнёра' },
-];
-
-
-
 const rub = (n: number) =>
   n.toLocaleString('ru-RU', { style: 'currency', currency: 'RUB', maximumFractionDigits: 0 });
 
-function getLegendText(draft: SetupDraft): string[] {
-  const { name, familyType, productType } = draft;
-  const productWord = productTypeLabels[productType]?.toLowerCase() ?? 'свой продукт';
-
-  if (familyType === 'couple_no_kids' || familyType === 'couple_kids') {
-    return [
-      `${name}, поздравляем — у вас отличные стартовые условия!`,
-      `Ваш партнёр поддержал идею и выделил 100 000 ₽ на запуск.`,
-      `Он взял на себя бытовые расходы и сказал:`,
-      `«Ты давно ${draft.gender === 'female' ? 'хотела' : 'хотел'} запустить ${draft.productName || productWord}. У тебя как раз есть месяц. Попробуй!»`,
-      `И вот вы остались с идеей, деньгами и мечтой: ${draft.dreams.length > 1 ? 'осуществить выбранные цели' : 'осуществить выбранную цель'}.`,
-    ];
-  }
-  return [
-    `${name}, поздравляем — у вас отличные стартовые условия!`,
-    `У вас есть 100 000 ₽, которые вы готовы вложить в запуск.`,
-    `Бытовые расходы закрыты. Впереди 30 дней, чтобы превратить ${productWord} в систему продаж.`,
-    `Сейчас всё зависит только от вас.`,
-  ];
-}
-
 export function SetupScene({ config, onComplete, busy, initialDraft }: Props) {
-  const [step, setStep] = useState<Step>('welcome');
+  const [step, setStep] = useState<SetupStep>('welcome');
   const [draft, setDraft] = useState<SetupDraft>(initialDraft ?? defaultDraft);
   const [legendLine, setLegendLine] = useState(0);
 
@@ -111,13 +35,13 @@ export function SetupScene({ config, onComplete, busy, initialDraft }: Props) {
   };
 
   const next = () => {
-    const i = STEPS.indexOf(step);
-    if (i < STEPS.length - 1) setStep(STEPS[i + 1]);
+    const i = SETUP_STEPS.indexOf(step);
+    if (i < SETUP_STEPS.length - 1) setStep(SETUP_STEPS[i + 1]);
   };
 
   const back = () => {
-    const i = STEPS.indexOf(step);
-    if (i > 0) setStep(STEPS[i - 1]);
+    const i = SETUP_STEPS.indexOf(step);
+    if (i > 0) setStep(SETUP_STEPS[i - 1]);
   };
 
   const legendLines = getLegendText(draft);

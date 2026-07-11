@@ -54,16 +54,19 @@ export async function POST(request: Request) {
 
   const serialized = JSON.stringify(payload);
   try {
-    lead.attempts += 1;
-    const response = await fetch(webhookUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Launch-Game-Signature': signPayload(serialized, webhookSecret)
-      },
-      body: serialized
-    });
-    if (!response.ok) throw new Error(`Webhook status ${response.status}`);
+    let lastStatus = 0;
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      lead.attempts = attempt;
+      const response = await fetch(webhookUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Launch-Game-Signature': signPayload(serialized, webhookSecret) },
+        body: serialized
+      });
+      lastStatus = response.status;
+      if (response.ok) break;
+      if (response.status < 500 && response.status !== 429) throw new Error(`Webhook status ${response.status}`);
+    }
+    if (lastStatus < 200 || lastStatus >= 300) throw new Error(`Webhook status ${lastStatus}`);
     lead.status = 'delivered';
     await saveLead(lead);
     return NextResponse.json({ ok: true, leadId });
