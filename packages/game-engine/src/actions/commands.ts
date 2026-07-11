@@ -41,8 +41,14 @@ export function applyCommand(input: GameState, config: GameConfig, command: Game
     case 'advance_day1_goal':
       state = SetupTransitions.advanceDay1Goal(state);
       break;
+    case 'back_to_day1_price':
+      state = SetupTransitions.backToDay1Price(state);
+      break;
     case 'set_dreams':
       state = SetupTransitions.setDreams(state, config, command.payload.dreams);
+      break;
+    case 'edit_day1_plan':
+      state = SetupTransitions.editDay1Plan(state);
       break;
     case 'complete_day_one':
       state = SetupTransitions.completeDayOne(state);
@@ -58,6 +64,9 @@ export function applyCommand(input: GameState, config: GameConfig, command: Game
     case 'set_audience_metrics':
       state = SetupTransitions.setAudienceMetrics(state, command.payload);
       break;
+    case 'edit_day2_resources':
+      state = SetupTransitions.editDay2Resources(state);
+      break;
     case 'complete_day_two':
       state = SetupTransitions.completeDayTwo(state);
       break;
@@ -68,7 +77,7 @@ export function applyCommand(input: GameState, config: GameConfig, command: Game
       state.flow.step = 'daily_intent';
       break;
     case 'choose_intent':
-      state = DailyTransitions.chooseIntent(state, command.payload.intent);
+      state = DailyTransitions.chooseIntent(state, config, command.payload.intent);
       break;
     case 'choose_action_group':
       state = DailyTransitions.chooseActionGroup(state, command.payload.group);
@@ -100,6 +109,18 @@ export function applyCommand(input: GameState, config: GameConfig, command: Game
       state.flow.step = 'post_action';
       state.pendingDecision = PendingDecisions.deriveNextPendingDecision(state);
       if (!state.pendingDecision) state.flow.step = 'day_summary';
+      break;
+    case 'follow_advice':
+      if (state.flow.step !== 'action_result') throw new Error('Invalid step');
+      if (state.currentDayReport && !state.dayReports.some((report) => report.id === state.currentDayReport?.id)) {
+        state.dayReports.push(state.currentDayReport);
+      }
+      state.currentDayReport = null;
+      state.lastOutcome = null;
+      state.pendingDecision = null;
+      state.flow.selectedIntent = 'fix_system';
+      state.flow.selectedGroup = adviceGroupForAction(input.lastOutcome?.actionId);
+      state.flow.step = 'action_list';
       break;
 
     // Mini-games
@@ -178,4 +199,11 @@ export function finishGame(input: GameState, config: GameConfig): GameState {
   state.flow.step = 'final_diagnosis';
   state.diagnostics = calculateDiagnostics(state, config);
   return state;
+}
+
+function adviceGroupForAction(actionId?: string): string {
+  if (actionId === 'smm_advice') return 'route';
+  if (actionId === 'consultation_detailed') return 'processing';
+  if (actionId === 'consultation_basic') return 'nurture';
+  return 'demand';
 }

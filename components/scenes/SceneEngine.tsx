@@ -23,6 +23,7 @@ import { ActionResultFlow } from './flows/ActionResultFlow';
 import { PendingDecisionFlow } from './flows/PendingDecisionFlow';
 import { DayCompletionFlow } from './flows/DayCompletionFlow';
 import { EnergyCrisisFlow } from './flows/EnergyCrisisFlow';
+import { BudgetCrisisFlow } from './flows/BudgetCrisisFlow';
 import { FinishedFlow } from './flows/FinishedFlow';
 
 type Props = { config: GameConfig };
@@ -160,6 +161,7 @@ export function SceneEngine({ config }: Props) {
       {scene === 'day_completion' && <DayCompletionFlow {...commonProps} />}
 
       {scene === 'energy_crisis' && <EnergyCrisisFlow {...commonProps} />}
+      {scene === 'budget_notice' && <BudgetCrisisFlow {...commonProps} />}
       {scene === 'finished' && <FinishedFlow {...commonProps} />}
 
       {scene === 'unknown' && (

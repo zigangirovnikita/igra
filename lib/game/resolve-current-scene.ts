@@ -10,6 +10,7 @@ export function resolveCurrentScene(state: GameState): { scene: string; props?: 
   const step = state.flow.step;
 
   if (state.pendingDecision?.type === 'energy_crisis') return { scene: 'energy_crisis' };
+  if (state.pendingDecision?.type === 'budget_notice') return { scene: 'budget_notice' };
   if (state.pendingDecision && !['finish_confirmation', 'goal_reached'].includes(step)) {
     return { scene: 'pending_decision' };
   }
@@ -43,7 +44,7 @@ export function resolveCurrentScene(state: GameState): { scene: string; props?: 
     case 'energy_crisis':
       return { scene: 'energy_crisis' };
     case 'budget_notice':
-      return { scene: 'energy_crisis' }; // Re-use crisis screen
+      return { scene: 'budget_notice' };
     case 'goal_reached':
     case 'finish_confirmation':
     case 'final_reason':

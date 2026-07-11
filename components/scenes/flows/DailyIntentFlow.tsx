@@ -10,10 +10,14 @@ type FlowProps = {
 
 export function DailyIntentFlow({ state, dispatch, busy }: FlowProps) {
   let introText = `День ${state.resources.day}. Что будем делать?`;
+  const previousReport = state.dayReports.at(-1);
+  const hadRecentSales = previousReport ? previousReport.outcome.salesDelta > 0 : false;
 
-  if (state.lastOutcome) {
-    if (state.lastOutcome.salesDelta > 0) {
+  if (previousReport) {
+    if (previousReport.outcome.salesDelta > 0) {
       introText = 'Вчера пришли оплаты. Продолжить эту схему или усилить её?';
+    } else if (previousReport.outcome.lostDelta > 0) {
+      introText = 'Часть людей ушла без ответа. Нужно решить, как не повторить это.';
     } else {
       introText = 'Вчера продаж не было. Что попробовать теперь?';
     }
@@ -23,6 +27,10 @@ export function DailyIntentFlow({ state, dispatch, busy }: FlowProps) {
     <MultiChoiceScreen
       title={introText}
       choices={[
+        ...(hadRecentSales ? [
+          { id: 'repeat_last', label: 'Повторить успешное действие' },
+          { id: 'automate', label: 'Автоматизировать процесс' },
+        ] : []),
         { id: 'get_sales', label: 'Попробовать получить продажи' },
         { id: 'fix_system', label: 'Исправить систему запуска' },
         { id: 'get_advice', label: 'Получить совет' },

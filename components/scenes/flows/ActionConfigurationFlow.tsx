@@ -18,6 +18,7 @@ export function ActionConfigurationFlow({ state, config, dispatch, busy }: FlowP
       { id: 'useful', label: 'Полезный контент' },
       { id: 'storytelling', label: 'Сторителлинг' },
       { id: 'selling', label: 'Продающий контент' },
+      { id: 'chaotic', label: 'Сделать всё по настроению' },
     ]} onConfirm={(contentType) => dispatch('configure_action', { contentType })} busy={busy} />;
   }
 
@@ -25,7 +26,10 @@ export function ActionConfigurationFlow({ state, config, dispatch, busy }: FlowP
   const routes: Array<{ id: string; label: string; route: RouteSelection }> = [
     { id: 'current', label: 'Использовать текущий маршрут', route },
     { id: 'direct', label: 'Вести в директ', route: { ...route, entry: 'direct_messages' } },
+    { id: 'guide', label: 'Вести через гайд', route: { ...route, entry: 'guide', nurture: ['guide'] } },
+    { id: 'video', label: 'Вести через видеоурок', route: { ...route, entry: 'video_lesson', nurture: ['video_lesson'] } },
     { id: 'website', label: 'Вести на сайт', route: { ...route, entry: 'website' } },
+    { id: 'bot', label: 'Вести в бота', route: { ...route, entry: 'direct_messages', processing: 'simple_bot', saleMethod: 'bot_auto' } },
     { id: 'webinar', label: 'Вести на вебинар', route: { ...route, entry: 'webinar_registration' } },
   ];
   return <MultiChoiceScreen title="Куда вести людей?" choices={routes.map(({ id, label }) => ({ id, label }))}

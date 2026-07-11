@@ -43,7 +43,7 @@ export function SetupScene({ config: _config, onComplete, busy, initialDraft }: 
           <div className="scene-image scene-image--welcome" aria-hidden="true" />
           <h1 className="setup-headline">Проживи 30 дней запуска за 10 минут</h1>
           <p className="setup-subtext">
-            Собери персонажа, выбери продукт — и посмотри, что получится из вашего запуска.
+            У вас будет 100 000 ₽, ограниченное количество сил и одна попытка построить продажи.
           </p>
           <p className="setup-subtext">
             Принимайте решения. Смотрите на последствия. Узнайте, где теряются деньги.

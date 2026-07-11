@@ -1,6 +1,5 @@
 import type { GameState, GameConfig } from '@/packages/game-engine/src';
-
-import { useEffect } from 'react';
+import { NarrativeScreen } from '../ui';
 
 type FlowProps = {
   state: GameState;
@@ -9,21 +8,19 @@ type FlowProps = {
   busy: boolean;
 };
 
-export function ActionProcessFlow({ state: _state, dispatch, busy }: FlowProps) {
-  useEffect(() => {
-    // Automatically acknowledge process and move to result after a short delay
-    const timer = setTimeout(() => {
-      if (!busy) {
-        dispatch('acknowledge_action_process');
-      }
-    }, 1500);
-    return () => clearTimeout(timer);
-  }, [dispatch, busy]);
+export function ActionProcessFlow({ state, config, dispatch, busy }: FlowProps) {
+  const action = config.actions.find((item) => item.id === state.lastOutcome?.actionId);
 
   return (
-    <div style={{ padding: '20px', color: 'white', textAlign: 'center' }}>
-      <h2>Выполняем действие...</h2>
-      <p>Пожалуйста, подождите.</p>
-    </div>
+    <NarrativeScreen
+      title="Действие в процессе"
+      paragraphs={[
+        `${state.player.name} весь день занимается задачей: ${state.lastOutcome?.title ?? action?.title ?? 'действие'}.`,
+        action?.description ?? 'Сейчас станет понятно, что это принесло запуску.'
+      ]}
+      buttonText="Посмотреть результат"
+      onNext={() => dispatch('acknowledge_action_process')}
+      busy={busy}
+    />
   );
 }

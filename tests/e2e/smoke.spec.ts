@@ -12,7 +12,7 @@ async function completeOnboarding(page: Page) {
 
   // 2. Intro Phase
   await page.getByRole('button', { name: 'Дальше →' }).click();
-  await page.getByRole('button', { name: 'Создать продукт →' }).click();
+  await page.getByRole('button', { name: 'Начать первый день' }).click();
 
   // 3. Day 1 Phase
   // day1_product_type
@@ -25,30 +25,30 @@ async function completeOnboarding(page: Page) {
   await page.locator('input').fill('5000');
   await page.getByRole('button', { name: 'Дальше' }).click();
   // day1_sale_method
-  await page.getByRole('button', { name: 'В переписке лично' }).click();
+  await page.getByRole('button', { name: 'В переписке' }).click();
   await page.getByRole('button', { name: 'Дальше →' }).click();
   // day1_nurture
-  await page.getByRole('button', { name: 'Без прогрева' }).click();
+  await page.getByRole('button', { name: 'Нет, сразу приглашать' }).click();
   await page.getByRole('button', { name: 'Дальше →' }).click();
   // day1_entry_point
-  await page.getByRole('button', { name: 'В директ' }).click();
+  await page.getByRole('button', { name: 'Напишет в директ' }).click();
   await page.getByRole('button', { name: 'Дальше →' }).click();
   // day1_business_goal
-  await page.getByRole('button', { name: 'Понятно' }).click();
+  await page.getByRole('button', { name: 'Цель понятна' }).click();
   // day1_dreams
   await page.locator('.scene-choice-btn').first().click(); // changed from setup-dream-btn to scene-choice-btn
   await page.getByRole('button', { name: 'Дальше →' }).click();
 
   // day1 finish
-  await page.getByRole('button', { name: 'Завершить день' }).click();
+  await page.getByRole('button', { name: 'Завершить первый день' }).click();
 
   // Day 2
-  await page.getByRole('button', { name: 'Дальше' }).click(); // day2_audience_intro
+  await page.getByRole('button', { name: 'Посмотреть свои ресурсы' }).click(); // day2_audience_intro
   await page.getByRole('button', { name: 'Telegram' }).click(); // day2_audience_channels
   await page.getByRole('button', { name: 'Дальше →' }).click();
   await page.locator('input').fill('100'); // day2_telegram_views
   await page.getByRole('button', { name: 'Дальше' }).click();
-  await page.getByRole('button', { name: 'В бой' }).click();
+  await page.getByRole('button', { name: 'Начать запуск' }).click();
   await expect(page.getByRole('heading', { name: 'День 3' })).toBeVisible();
 }
 

@@ -1,4 +1,4 @@
-import type { GameState, GameConfig } from '../types';
+import type { GameState, GameConfig, ProcessingType, SaleMethod } from '../types';
 import { applyProcessing, applySales, applyFollowup } from '../calculations/funnel';
 import { recalculateMetrics } from '../time/ticks';
 
@@ -15,15 +15,16 @@ export function deriveNextPendingDecision(state: GameState): NonNullable<GameSta
     }
   }
 
-  if (state.resources.energy <= 0) return { type: 'energy_crisis' };
-  if (!state.flow.goalPromptHandled && state.targets.targetRevenue > 0 && state.metrics.revenue >= state.targets.targetRevenue) {
-    return { type: 'goal_reached' };
-  }
-
   for (const cohort of state.cohorts) {
     if (cohort.pendingFollowup > 0 && cohort.routeSnapshot.followup === 'manual' && cohort.followupDecision === 'pending' && !cohort.followedUp) {
       return { type: 'followup', cohortId: cohort.id };
     }
+  }
+
+  if (state.resources.energy <= 0) return { type: 'energy_crisis' };
+  if (state.resources.bank <= 0 && !state.flags.budgetNoticeHandled) return { type: 'budget_notice' };
+  if (!state.flow.goalPromptHandled && state.targets.targetRevenue > 0 && state.metrics.revenue >= state.targets.targetRevenue) {
+    return { type: 'goal_reached' };
   }
 
   return null;
@@ -77,11 +78,33 @@ export function resolvePendingDecision(state: GameState, config: GameConfig, pay
       state.resources.energy = 10;
     } else if (payload.action === 'push_through') {
       state.resources.energy = 1;
+    } else if (payload.action === 'confirm') {
+      state.flow.stage = 'final';
+      state.endingReason = 'resource_finished';
+      state.flow.step = 'final_reason';
+      state.pendingDecision = null;
+      return state;
     } else {
       throw new Error('Invalid energy crisis action');
     }
     state.pendingDecision = null;
     state.flow.step = 'day_summary';
+    return state;
+  }
+
+  if (currentDecision.type === 'budget_notice') {
+    if (payload.action === 'continue_without_budget' || payload.action === 'cancel') {
+      state.flags.budgetNoticeHandled = true;
+      state.pendingDecision = null;
+      state.flow.step = 'day_summary';
+    } else if (payload.action === 'confirm') {
+      state.flow.stage = 'final';
+      state.endingReason = 'resource_finished';
+      state.flow.step = 'final_reason';
+      state.pendingDecision = null;
+    } else {
+      throw new Error('Invalid budget action');
+    }
     return state;
   }
 
@@ -92,11 +115,28 @@ export function resolvePendingDecision(state: GameState, config: GameConfig, pay
   const cohort = state.cohorts[cohortIndex];
 
   if (currentDecision.type === 'inbound') {
-    if (payload.action === 'process') {
-      const amount = payload.amount || Math.min(cohort.unprocessedInbound, 15);
+    if (['process', 'process_all', 'process_available', 'process_selected'].includes(payload.action)) {
+      const amount = payload.action === 'process_all'
+        ? cohort.unprocessedInbound
+        : payload.action === 'process_available'
+          ? Math.min(cohort.unprocessedInbound, Math.max(5, Math.floor(state.resources.energy / 0.3)))
+          : payload.amount || Math.min(cohort.unprocessedInbound, 15);
       state.cohorts[cohortIndex] = applyProcessing(state, config, cohort, 'manual', amount);
       state.resources.energy = Math.max(0, state.resources.energy - amount * 0.3);
       if (state.cohorts[cohortIndex].unprocessedInbound <= 0) state.cohorts[cohortIndex].inboundDecision = 'resolved';
+    } else if (payload.action === 'connect_manager' || payload.action === 'connect_bot') {
+      const processing: ProcessingType = payload.action === 'connect_manager' ? 'manager' : 'simple_bot';
+      if (payload.action === 'connect_manager') {
+        if (state.resources.bank < 30_000) throw new Error('Not enough money to hire manager');
+        state.resources.bank -= 30_000;
+        state.metrics.expenses += 30_000;
+        state.assets.manager = 'urgent';
+      } else {
+        state.assets.simpleBot = 'urgent';
+      }
+      state.activeRoute = { ...state.activeRoute, processing };
+      state.cohorts[cohortIndex] = applyProcessing(state, config, { ...cohort, routeSnapshot: { ...cohort.routeSnapshot, processing } }, 'auto');
+      state.cohorts[cohortIndex].inboundDecision = 'resolved';
     } else if (payload.action === 'defer') {
       if (cohort.deferCount >= 1) throw new Error('This cohort has already been deferred');
       state.cohorts[cohortIndex].inboundDecision = 'deferred';
@@ -108,9 +148,11 @@ export function resolvePendingDecision(state: GameState, config: GameConfig, pay
       state.cohorts[cohortIndex].unprocessedInbound = 0;
     }
   } else if (currentDecision.type === 'sales') {
-    if (payload.action === 'process') {
+    if (['process', 'sell_chat', 'sell_call', 'sell_website', 'sell_bot', 'sell_webinar'].includes(payload.action)) {
       const amount = payload.amount || Math.min(cohort.unprocessedApplications, 10);
-      state.cohorts[cohortIndex] = applySales(state, config, cohort, cohort.routeSnapshot.saleMethod, amount);
+      const method = saleMethodForAction(payload.action, cohort.routeSnapshot.saleMethod);
+      state.activeRoute = { ...state.activeRoute, saleMethod: method };
+      state.cohorts[cohortIndex] = applySales(state, config, { ...cohort, routeSnapshot: { ...cohort.routeSnapshot, saleMethod: method } }, method, amount);
       state.resources.energy = Math.max(0, state.resources.energy - amount * 0.5);
       if (state.cohorts[cohortIndex].unprocessedApplications <= 0) state.cohorts[cohortIndex].salesDecision = 'resolved';
     } else if (payload.action === 'defer') {
@@ -124,8 +166,10 @@ export function resolvePendingDecision(state: GameState, config: GameConfig, pay
       state.cohorts[cohortIndex].unprocessedApplications = 0;
     }
   } else if (currentDecision.type === 'followup') {
-    if (payload.action === 'process') {
-      state.cohorts[cohortIndex] = applyFollowup(state, config, cohort);
+    if (['process', 'followup_message', 'followup_call', 'followup_case', 'followup_discount', 'followup_bot'].includes(payload.action)) {
+      const followup = payload.action === 'followup_bot' ? 'bot' : 'manual';
+      state.activeRoute = { ...state.activeRoute, followup };
+      state.cohorts[cohortIndex] = applyFollowup(state, config, { ...cohort, routeSnapshot: { ...cohort.routeSnapshot, followup } });
       state.resources.energy = Math.max(0, state.resources.energy - 5);
       state.cohorts[cohortIndex].followupDecision = 'resolved';
     } else if (payload.action === 'defer') {
@@ -155,4 +199,13 @@ export function resolvePendingDecision(state: GameState, config: GameConfig, pay
   }
   recalculateMetrics(state);
   return state;
+}
+
+function saleMethodForAction(action: string, fallback: SaleMethod): SaleMethod {
+  if (action === 'sell_chat') return 'manual_chat';
+  if (action === 'sell_call') return 'call';
+  if (action === 'sell_website') return 'website_auto';
+  if (action === 'sell_bot') return 'bot_auto';
+  if (action === 'sell_webinar') return 'webinar_direct';
+  return fallback;
 }

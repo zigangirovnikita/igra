@@ -12,9 +12,12 @@ export function Day2Flow({ state, config: _config, dispatch, busy }: FlowProps) 
   if (state.flow.step === 'day2_intro') {
     return (
       <NarrativeScreen
-        title="День 2. Охваты"
-        paragraphs={['Оценим вашу аудиторию.']}
-        buttonText="Дальше"
+        title="День 2. Стартовые ресурсы"
+        paragraphs={[
+          `${state.player.name} проснулась и подумала: «План есть. Теперь нужно понять, с чего я начинаю».`,
+          'Сейчас игра зафиксирует только те площадки, которые уже есть.'
+        ]}
+        buttonText="Посмотреть свои ресурсы"
         onNext={() => dispatch('advance_day2_intro')}
         busy={busy}
       />
@@ -24,15 +27,17 @@ export function Day2Flow({ state, config: _config, dispatch, busy }: FlowProps) 
   if (state.flow.step === 'day2_channels') {
     return (
       <MultiChoiceScreen
-        title="Где у вас аудитория?"
+        title="Какие площадки уже есть?"
         choices={[
           { id: 'instagram', label: 'Instagram' },
           { id: 'telegram', label: 'Telegram' },
-          { id: 'contacts', label: 'Телефонная книга' }
+          { id: 'contacts', label: 'База клиентов / контактов' },
+          { id: 'none', label: 'Пока ничего нет' }
         ]}
         isMulti={true}
         onConfirm={(ids) => {
-          dispatch('set_channels', { channels: Array.isArray(ids) ? ids : [ids] });
+          const selected = Array.isArray(ids) ? ids : [ids];
+          dispatch('set_channels', { channels: selected.includes('none') ? [] : selected });
         }}
         busy={busy}
       />
@@ -53,13 +58,23 @@ export function Day2Flow({ state, config: _config, dispatch, busy }: FlowProps) 
     }
 
     if (fields.length === 0) {
-      // Fallback
-      fields.push({ id: 'contacts', label: 'Количество контактов', type: 'number' });
+      return (
+        <NarrativeScreen
+          title="Площадок пока нет"
+          paragraphs={[
+            'Это допустимый старт. В игре будут доступны бесплатные способы получить первые контакты и проверить спрос.',
+          ]}
+          buttonText="Продолжить"
+          onNext={() => dispatch('set_audience_metrics', {})}
+          busy={busy}
+        />
+      );
     }
 
     return (
       <MultiInputScreen
-        title="Охваты"
+        title="Размер текущей аудитории"
+        description="Можно ввести ноль, если площадка есть, но стабильных просмотров пока нет."
         fields={fields}
         buttonText="Дальше"
         onSubmit={(values) => dispatch('set_audience_metrics', values)}
@@ -68,13 +83,32 @@ export function Day2Flow({ state, config: _config, dispatch, busy }: FlowProps) 
     );
   }
 
+  const summary: string[] = [];
+  if (state.audience.channels.includes('instagram')) {
+    summary.push(`Instagram: рилсы в среднем ${state.audience.averageReelViews.toLocaleString('ru-RU')} просмотров, сторис ${state.audience.averageStoryViews.toLocaleString('ru-RU')}.`);
+  }
+  if (state.audience.channels.includes('telegram')) {
+    summary.push(`Telegram: около ${state.audience.averageTelegramViews.toLocaleString('ru-RU')} просмотров публикации.`);
+  }
+  if (state.audience.channels.includes('contacts')) {
+    summary.push(`База контактов: ${state.audience.contactsCount.toLocaleString('ru-RU')} человек.`);
+  }
+  if (summary.length === 0) summary.push('Готовых площадок и базы пока нет. Запуск начнётся с поиска первых контактов.');
+
   return (
-    <NarrativeScreen
-      title="Итог старта"
-      paragraphs={['Всё готово, начинаем.']}
-      buttonText="В бой"
-      onNext={() => dispatch('complete_day_two')}
-      busy={busy}
-    />
+    <div className="scene-step scene-step--center">
+      <h2 className="scene-headline">Итог стартовых условий</h2>
+      <div className="scene-text-block">
+        {summary.map((line) => <p className="scene-paragraph" key={line}>{line}</p>)}
+      </div>
+      <div className="scene-actions">
+        <button className="btn-primary" disabled={busy} onClick={() => dispatch('complete_day_two')}>
+          Начать запуск
+        </button>
+        <button className="btn-secondary" disabled={busy} onClick={() => dispatch('edit_day2_resources')}>
+          Изменить данные
+        </button>
+      </div>
+    </div>
   );
 }

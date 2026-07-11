@@ -65,11 +65,24 @@ export function advanceDay1Goal(state: GameState): GameState {
   return state;
 }
 
+export function backToDay1Price(state: GameState): GameState {
+  requireStep(state, 'day1_business_goal');
+  state.flow.step = 'day1_product_price';
+  return state;
+}
+
 export function setDreams(state: GameState, config: GameConfig, dreams: string[]): GameState {
   requireStep(state, 'day1_dreams');
   state.launchPlan.dreams = dreams;
   state.targets = calculateTargets(state.launchPlan.productPrice || 0, dreams, config);
   state.flow.step = 'day1_summary';
+  return state;
+}
+
+export function editDay1Plan(state: GameState): GameState {
+  requireStep(state, 'day1_summary');
+  state.launchPlan.confirmed = false;
+  state.flow.step = 'day1_product_type';
   return state;
 }
 
@@ -99,7 +112,7 @@ export function advanceDay2Intro(state: GameState): GameState {
 
 export function setChannels(state: GameState, channels: AudienceChannel[]): GameState {
   requireStep(state, 'day2_channels');
-  state.audience.channels = channels;
+  state.audience.channels = channels.filter((channel, index, arr) => arr.indexOf(channel) === index);
   state.flow.step = 'day2_metrics';
   return state;
 }
@@ -111,6 +124,13 @@ export function setAudienceMetrics(state: GameState, metrics: { reels?: number; 
   if (metrics.telegram !== undefined) state.audience.averageTelegramViews = metrics.telegram;
   if (metrics.contacts !== undefined) state.audience.contactsCount = metrics.contacts;
   state.flow.step = 'day2_summary';
+  return state;
+}
+
+export function editDay2Resources(state: GameState): GameState {
+  requireStep(state, 'day2_summary');
+  state.audience.confirmed = false;
+  state.flow.step = 'day2_channels';
   return state;
 }
 

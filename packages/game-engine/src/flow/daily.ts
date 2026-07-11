@@ -1,7 +1,7 @@
 import type { GameState, GameConfig, DailyIntent, RouteSelection, ContentType } from '../types';
 import { getActionAvailability, findAction } from '../actions/availability';
 
-export function chooseIntent(state: GameState, intent: DailyIntent | null): GameState {
+export function chooseIntent(state: GameState, config: GameConfig, intent: DailyIntent | null): GameState {
   if (!intent) {
     state.flow.selectedIntent = null;
     state.flow.step = 'daily_intent';
@@ -14,6 +14,18 @@ export function chooseIntent(state: GameState, intent: DailyIntent | null): Game
     state.pendingDecision = { type: 'finish_confirmation' };
     state.flow.backStep = state.flow.step;
     state.flow.step = 'finish_confirmation';
+  } else if (intent === 'repeat_last') {
+    const lastActionId = [...state.history]
+      .reverse()
+      .find((entry) => entry.type === 'action_completed' && typeof entry.payload?.actionId === 'string')
+      ?.payload?.actionId;
+    if (!lastActionId) throw new Error('Нет действия для повтора');
+    state.flow.step = 'action_list';
+    return selectAction(state, config, String(lastActionId));
+  } else if (intent === 'automate') {
+    state.flow.selectedIntent = 'fix_system';
+    state.flow.selectedGroup = 'processing';
+    state.flow.step = 'action_list';
   } else {
     state.flow.step = 'action_list';
   }

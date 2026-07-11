@@ -162,6 +162,9 @@ export type PendingDecision =
       type: 'energy_crisis';
     }
   | {
+      type: 'budget_notice';
+    }
+  | {
       type: 'goal_reached';
     }
   | {
@@ -407,10 +410,13 @@ export type GameCommand =
   | { commandId: string; type: 'set_entry_point'; payload: { entryPoint: EntryPoint } }
   | { commandId: string; type: 'set_dreams'; payload: { dreams: string[] } }
   | { commandId: string; type: 'advance_day1_goal'; payload: Record<string, never> }
+  | { commandId: string; type: 'back_to_day1_price'; payload: Record<string, never> }
+  | { commandId: string; type: 'edit_day1_plan'; payload: Record<string, never> }
   | { commandId: string; type: 'complete_day_one'; payload: Record<string, never> }
   | { commandId: string; type: 'advance_day2_intro'; payload: Record<string, never> }
   | { commandId: string; type: 'set_channels'; payload: { channels: AudienceChannel[] } }
   | { commandId: string; type: 'set_audience_metrics'; payload: { reels?: number; stories?: number; telegram?: number; contacts?: number } }
+  | { commandId: string; type: 'edit_day2_resources'; payload: Record<string, never> }
   | { commandId: string; type: 'complete_day_two'; payload: Record<string, never> }
   | { commandId: string; type: 'advance_daily_intro'; payload: Record<string, never> }
   | { commandId: string; type: 'choose_intent'; payload: { intent: DailyIntent | null } }
@@ -421,11 +427,12 @@ export type GameCommand =
   | { commandId: string; type: 'confirm_action'; payload: Record<string, never> }
   | { commandId: string; type: 'acknowledge_action_process'; payload: Record<string, never> }
   | { commandId: string; type: 'acknowledge_action_result'; payload: Record<string, never> }
+  | { commandId: string; type: 'follow_advice'; payload: Record<string, never> }
   | { commandId: string; type: 'resolve_inbound'; payload: { cohortId: string; mode: 'all' | 'manual' | 'bot' | 'manager' | 'none' | 'defer'; processed?: number } }
   | { commandId: string; type: 'defer_inbound'; payload: { cohortId: string } }
   | { commandId: string; type: 'resolve_sales'; payload: { cohortId: string; action: 'process' | 'defer' | 'ignore'; amount?: number } }
   | { commandId: string; type: 'resolve_followup'; payload: { cohortId: string; action: 'process' | 'defer' | 'ignore' } }
-  | { commandId: string; type: 'resolve_pending_decision'; payload: { cohortId?: string; action: 'process' | 'defer' | 'ignore' | 'confirm' | 'cancel' | 'rest_day' | 'rest_two_days' | 'delegate' | 'push_through'; amount?: number } }
+  | { commandId: string; type: 'resolve_pending_decision'; payload: { cohortId?: string; action: 'process' | 'process_all' | 'process_available' | 'process_selected' | 'defer' | 'ignore' | 'connect_manager' | 'connect_bot' | 'sell_chat' | 'sell_call' | 'sell_website' | 'sell_bot' | 'sell_webinar' | 'followup_message' | 'followup_call' | 'followup_case' | 'followup_discount' | 'followup_bot' | 'confirm' | 'cancel' | 'rest_day' | 'rest_two_days' | 'delegate' | 'push_through' | 'continue_without_budget'; amount?: number } }
   | { commandId: string; type: 'complete_day'; payload: Record<string, never> }
   | { commandId: string; type: 'continue_after_goal'; payload: Record<string, never> }
   | { commandId: string; type: 'request_finish'; payload: Record<string, never> }
