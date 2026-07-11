@@ -1,4 +1,4 @@
-import type { GameState, GameConfig, GameCommand } from '../types';
+import type { GameCommand, GameConfig, GameState } from '../types';
 import { assertStateInvariants } from '../state/invariants';
 import { calculateDiagnostics } from '../diagnostics/report';
 import { appendTriggeredEvents } from '../events/dispatcher';
@@ -17,7 +17,6 @@ export function applyCommand(input: GameState, config: GameConfig, command: Game
   let state = structuredClone(input);
 
   switch (command.type) {
-    // Setup - Intro & Day 1
     case 'advance_intro':
       state = SetupTransitions.advanceIntro(state);
       break;
@@ -54,8 +53,6 @@ export function applyCommand(input: GameState, config: GameConfig, command: Game
     case 'complete_day_one':
       state = SetupTransitions.completeDayOne(state);
       break;
-
-    // Setup - Day 2
     case 'advance_day2_intro':
       state = SetupTransitions.advanceDay2Intro(state);
       break;
@@ -72,7 +69,6 @@ export function applyCommand(input: GameState, config: GameConfig, command: Game
       state = SetupTransitions.completeDayTwo(state);
       break;
 
-    // Daily Flow
     case 'advance_daily_intro':
       if (state.flow.step !== 'daily_intro') throw new Error('Invalid step');
       state.flow.step = 'daily_intent';
@@ -96,14 +92,9 @@ export function applyCommand(input: GameState, config: GameConfig, command: Game
       state = OutcomeTransitions.confirmAction(state, config);
       break;
 
-    // Action progression
     case 'acknowledge_action_process':
       if (state.flow.step !== 'action_process') throw new Error('Invalid step');
-      if (state.lastOutcome) {
-        state.flow.step = 'action_result';
-      } else {
-        state.flow.step = 'day_summary';
-      }
+      state.flow.step = state.lastOutcome ? 'action_result' : 'day_summary';
       break;
     case 'acknowledge_action_result':
       if (state.flow.step !== 'action_result') throw new Error('Invalid step');
@@ -121,10 +112,9 @@ export function applyCommand(input: GameState, config: GameConfig, command: Game
       state.pendingDecision = null;
       state.flow.selectedIntent = 'fix_system';
       state.flow.selectedGroup = adviceGroupForAction(input.lastOutcome?.actionId);
-      state.flow.step = 'action_list';
+      state.flow.step = 'day_summary';
       break;
 
-    // Mini-games
     case 'resolve_pending_decision':
       state = PendingDecisions.resolvePendingDecision(state, config, command.payload);
       break;
@@ -149,7 +139,6 @@ export function applyCommand(input: GameState, config: GameConfig, command: Game
       state = PendingDecisions.resolvePendingDecision(state, config, command.payload);
       break;
 
-    // Day end
     case 'complete_day':
       state = DailyTransitions.completeDay(state, config);
       break;
@@ -174,6 +163,7 @@ export function applyCommand(input: GameState, config: GameConfig, command: Game
     case 'repair_flow':
       state.pendingAction = null;
       state.pendingDecision = null;
+      state.miniGame = null;
       state.flow.step = state.flow.stage === 'daily' ? 'daily_intro' : state.flow.step;
       break;
 
@@ -182,40 +172,43 @@ export function applyCommand(input: GameState, config: GameConfig, command: Game
       break;
 
     case 'resolve_mini_game':
-      if (state.pendingDecision?.type === 'mini_game') {
-        const action = command.payload.mode === 'manual' ? 'process_mini_game' : 'skip_mini_game';
-        state = PendingDecisions.resolvePendingDecision(state, config, { 
-          cohortId: command.payload.cohortId, 
-          action, 
-          amount: command.payload.processed 
-        });
-      }
+      if (state.pendingDecision?.type !== 'mini_game') throw new Error('No active mini-game decision');
+      state = PendingDecisions.resolvePendingDecision(state, config, {
+        cohortId: command.payload.cohortId,
+        action: command.payload.mode === 'manual' ? 'process_mini_game' : 'skip_mini_game',
+        amount: command.payload.processed,
+      });
       break;
 
     case 'acknowledge_event': {
       const eventId = command.payload.eventId as string;
-      const template = config.events.find(e => e.id === eventId);
-      if (template && template.effects) {
-        for (const effect of template.effects) {
-          state = applyEffect(state, effect);
-        }
-      }
+      if (!eventId) throw new Error('eventId required');
+      if (state.flags[`event_ack:${eventId}`]) break;
+      const historyEvent = state.history.find((entry) => entry.type === 'game_event' && entry.payload?.eventId === eventId);
+      if (!historyEvent) throw new Error('Event is not pending');
+      const template = config.events.find((event) => event.id === eventId);
+      if (!template) throw new Error('Unknown event');
+      for (const effect of template.effects) state = applyEffect(state, effect);
+      state.flags[`event_ack:${eventId}`] = true;
       break;
     }
-    
+
     case 'start_parallel':
     case 'set_route':
-      // Developer commands, skip strict handling
-      break;
+      throw new Error('Developer command is disabled in public game API');
 
     default:
       throw new Error(`Unhandled command: ${(command as { type: string }).type}`);
   }
 
-  const actionId = ['select_action', 'confirm_action'].includes(command.type) ? (command.payload as { actionId?: string }).actionId : undefined;
+  const actionId = command.type === 'confirm_action'
+    ? input.pendingAction?.actionId
+    : command.type === 'select_action'
+      ? command.payload.actionId
+      : undefined;
   state = appendTriggeredEvents(input, state, config, actionId);
   state.appliedCommandIds.push(command.commandId);
-  
+
   if (command.type !== 'repair_flow' && command.type !== 'acknowledge_event') {
     state.decisionLog = state.decisionLog || [];
     state.decisionLog.push({
