@@ -96,6 +96,31 @@ describe('commands and invariants', () => {
     if (!availability.available) expect(availability.reason).toMatch(/энергии/i);
   });
 
+  it('counts one-day and two-day rest exactly once', () => {
+    for (const [action, expectedDay] of [['rest_day', 11], ['rest_two_days', 12]] as const) {
+      let state = createInitialState(setup, config, `rest_${action}`);
+      state.status = 'active';
+      state.flow.stage = 'daily';
+      state.flow.step = 'energy_crisis';
+      state.resources.day = 10;
+      state.resources.energy = 0;
+      state.pendingDecision = { type: 'energy_crisis', returnStep: 'daily_intro' };
+
+      state = applyCommand(state, config, {
+        commandId: `resolve_${action}`,
+        type: 'resolve_pending_decision',
+        payload: { action },
+      });
+      expect(state.flow.step).toBe('day_summary');
+      state = applyCommand(state, config, {
+        commandId: `complete_${action}`,
+        type: 'complete_day',
+        payload: {},
+      });
+      expect(state.resources.day).toBe(expectedDay);
+    }
+  });
+
   it('keeps finished sessions immutable', () => {
     let state = createInitialState(setup, config, 'finished_seed');
     state = finishGame(state, config);
