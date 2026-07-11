@@ -57,6 +57,9 @@ export function applyProcessing(
   const newApplications = stochasticRound(successfullyProcessed * applicationRate, `${state.seed}|${next.id}|apps_${state.resources.day}`);
   next.applications += newApplications;
   next.unprocessedApplications += newApplications;
+  if (newApplications > 0 && ['manual_chat', 'call'].includes(route.saleMethod)) {
+    next.salesDecision = 'pending';
+  }
   
   if (route.saleMethod !== 'manual_chat' && route.saleMethod !== 'call') {
     return applySales(state, config, next, route.saleMethod, newApplications);
@@ -98,6 +101,7 @@ export function applySales(
     next.sales += sales;
     next.pendingFollowup += Math.max(0, applicationsToProcess - sales) * 0.35;
   }
+  if (next.pendingFollowup > 0) next.followupDecision = 'pending';
   return applyCapacity(state, config, next);
 }
 

@@ -14,12 +14,18 @@ export function ActionConfirmationFlow({ state, config, dispatch, busy }: FlowPr
   
   const action = config.actions.find(a => a.id === pending.actionId);
   if (!action) return null;
+  let displayedCost = action.cost;
+  if (action.repeatPolicy === 'upgrade' && action.upgradeCost !== undefined && action.upgradeGroup) {
+    const hasPrevious = state.history.some((entry) => entry.type === 'action_completed' && config.actions.some((candidate) =>
+      candidate.id === entry.payload?.actionId && candidate.upgradeGroup === action.upgradeGroup));
+    if (hasPrevious) displayedCost = action.upgradeCost;
+  }
 
   return (
     <ActionConfirmationScreen
       title={action.title}
       description={action.description || 'Вы уверены, что хотите запустить это действие?'}
-      cost={action.cost}
+      cost={displayedCost}
       energyCost={action.energyCost}
       days={action.days}
       currentBank={state.resources.bank}

@@ -52,7 +52,7 @@ function detectMistakes(state: GameState): Array<{ day: number; message: string;
   const earlySelling = state.cohorts.find((cohort) => cohort.contentType === 'selling' && cohort.routeSnapshot.nurture.includes('none'));
   if (earlySelling) result.push({ day: earlySelling.createdDay, category: 'nurture', message: `На ${earlySelling.createdDay}-й день вы начали продавать без прогрева.` });
   const lost = state.cohorts.find((cohort) => cohort.lost > 0);
-  if (lost) result.push({ day: lost.createdDay, category: 'processing', message: `После контента на ${lost.createdDay}-й день часть входящих остыла без обработки.` });
+  if (lost) result.push({ day: lost.createdDay, category: 'processing', message: `После контента на ${lost.createdDay}-й день часть входящих была потеряна без обработки.` });
   const reflection = state.history.find((entry) => entry.type === 'reflection' && entry.message === 'audience');
   if (reflection) result.push({ day: reflection.day, category: 'diagnosis', message: `На ${reflection.day}-й день вы объяснили слабый результат только размером аудитории и не проверили маршрут.` });
   if (state.resources.energy < 30) result.push({ day: state.resources.day, category: 'energy', message: 'К концу запуска энергия упала ниже безопасного уровня и ограничила ручную работу.' });

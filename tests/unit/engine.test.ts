@@ -58,6 +58,7 @@ describe('commands and invariants', () => {
           });
         }
       }
+      if (state.flow.step === 'final_reason') state = finishGame(state, config);
       assertStateInvariants(state, config);
       expect(state.status).toBe('finished');
       expect(state.metrics.revenue).toBe(state.metrics.sales * (state.launchPlan.productPrice ?? 0));

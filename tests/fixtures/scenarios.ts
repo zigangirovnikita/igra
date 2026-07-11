@@ -16,6 +16,7 @@ const baseSetup: SetupInput = {
 export const scenarios: ScenarioFixture[] = [
   scenario('basic_win', baseSetup, [
     { commandId: 'c1', type: 'advance_intro', payload: {} },
+    { commandId: 'c1b', type: 'advance_intro', payload: {} },
     { commandId: 'c2', type: 'set_product_type', payload: { productType: 'consultation' } },
     { commandId: 'c3', type: 'set_product_name', payload: { productName: 'My Consult' } },
     { commandId: 'c4', type: 'set_product_price', payload: { productPrice: 10_000 } },
@@ -45,6 +46,7 @@ export const scenarios: ScenarioFixture[] = [
     { commandId: 'c21', type: 'choose_action_group', payload: { group: 'traffic' } },
     { commandId: 'c22', type: 'select_action', payload: { actionId: 'stories_3d' } },
     { commandId: 'c23', type: 'configure_action', payload: { contentType: 'selling' } },
+    { commandId: 'c23b', type: 'configure_action', payload: { route: { entry: 'direct_messages', nurture: ['none'], processing: 'manual', saleMethod: 'manual_chat', followup: 'none' } } },
     { commandId: 'c24', type: 'confirm_action', payload: {} },
     { commandId: 'c25', type: 'acknowledge_action_process', payload: {} },
     { commandId: 'c26', type: 'acknowledge_action_result', payload: {} },

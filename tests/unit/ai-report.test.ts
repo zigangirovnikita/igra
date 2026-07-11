@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { explainWithAi } from '../../lib/ai/report';
-import { applyCommand, createInitialState } from '../../packages/game-engine/src';
+import { applyCommand, createInitialState, finishGame } from '../../packages/game-engine/src';
 import { loadGameConfig } from '../../lib/config/game-config';
 import { scenarios } from '../fixtures/scenarios';
 
@@ -23,6 +23,7 @@ function buildFinishedState() {
       });
     }
   }
+  if (state.flow.step === 'final_reason') state = finishGame(state, config);
   return state;
 }
 

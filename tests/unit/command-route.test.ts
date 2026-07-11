@@ -36,4 +36,19 @@ describe('command API concurrency', () => {
     expect(duplicate.status).toBe(200);
     expect(session.state.stateVersion).toBe(version);
   });
+
+  it('accepts advance_daily_intro through the HTTP schema', async () => {
+    const state = createInitialState(scenarios[0].setup, config, crypto.randomUUID());
+    state.flow.stage = 'daily';
+    state.flow.step = 'daily_intro';
+    state.resources.day = 3;
+    const session = { id: state.sessionId, state, setup: state.player };
+    mocks.getSession.mockResolvedValue(session);
+    const { POST } = await import('../../app/api/game/sessions/[id]/commands/route');
+    const response = await POST(new Request('http://localhost', { method: 'POST', body: JSON.stringify({
+      commandId: 'day3', expectedVersion: 0, type: 'advance_daily_intro', payload: {},
+    }) }), { params: Promise.resolve({ id: state.sessionId }) });
+    expect(response.status).toBe(200);
+    expect(session.state.flow.step).toBe('daily_intent');
+  });
 });

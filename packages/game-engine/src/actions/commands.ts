@@ -160,7 +160,7 @@ export function applyCommand(input: GameState, config: GameConfig, command: Game
       break;
 
     default:
-      console.warn(`Unknown command type`);
+      throw new Error(`Unhandled command: ${(command as { type: string }).type}`);
   }
 
   const actionId = ['select_action', 'confirm_action'].includes(command.type) ? (command.payload as { actionId?: string }).actionId : undefined;

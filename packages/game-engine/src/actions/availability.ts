@@ -28,6 +28,9 @@ export function getActionAvailability(state: GameState, action: ActionConfig, co
   if (state.resources.day + action.days - 1 > config.totalDays) {
     return { available: false, reason: 'Не хватает игровых дней' };
   }
+  if (action.group === 'instagram' && !state.audience.channels.includes('instagram')) return { available: false, reason: 'Нет Instagram' };
+  if (action.group === 'telegram' && !state.audience.channels.includes('telegram')) return { available: false, reason: 'Нет Telegram' };
+  if (action.group === 'contacts' && !state.audience.channels.includes('contacts')) return { available: false, reason: 'Нет базы контактов' };
   if (!action.requirements.every((condition) => evaluateCondition(state, condition))) {
     return { available: false, reason: 'Не выполнены условия действия' };
   }
@@ -66,6 +69,9 @@ export function getActionAvailability(state: GameState, action: ActionConfig, co
 
     if (action.upgradeLevel !== undefined && maxExecutedLevel >= action.upgradeLevel) {
       return { available: false, reason: 'Уже выполнено или есть уровень выше' };
+    }
+    if (action.upgradeLevel !== undefined && action.upgradeLevel > maxExecutedLevel + 1) {
+      return { available: false, reason: 'Сначала выполните предыдущий уровень' };
     }
   }
   return { available: true };

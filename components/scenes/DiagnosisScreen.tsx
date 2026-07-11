@@ -4,9 +4,10 @@ type Props = {
   state: GameState;
   diagnostics: Diagnostics;
   onRestart: () => void;
+  onLead: () => void;
 };
 
-export function DiagnosisScreen({ state: _state, diagnostics, onRestart }: Props) {
+export function DiagnosisScreen({ state: _state, diagnostics, onRestart, onLead }: Props) {
   const formatMoney = (val: number) => val.toLocaleString('ru-RU') + ' ₽';
   
   return (
@@ -51,6 +52,7 @@ export function DiagnosisScreen({ state: _state, diagnostics, onRestart }: Props
       </div>
 
       <div style={{ marginTop: '32px', textAlign: 'center' }}>
+        <button className="btn-primary" onClick={onLead}>Получить разбор</button>
         <button className="btn-primary" onClick={onRestart}>
           Начать заново
         </button>

@@ -35,7 +35,7 @@ export function confirmAction(state: GameState, config: GameConfig): GameState {
   }
 
   const startedDay = state.resources.day;
-  const finishedDay = startedDay + action.days;
+  const finishedDay = Math.min(config.totalDays, startedDay + Math.max(0, action.days - 1));
 
   // Spend time immediately
   state.resources.day = finishedDay;
@@ -49,7 +49,7 @@ export function confirmAction(state: GameState, config: GameConfig): GameState {
     day: finishedDay,
     type: 'action_completed',
     message: `Завершено действие: ${action.title}`,
-    payload: { actionId: action.id }
+    payload: { actionId: action.id, cohortId: state.pendingAction.targetCohortId }
   });
 
   state.pendingAction = null;

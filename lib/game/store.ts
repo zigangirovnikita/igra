@@ -28,18 +28,18 @@ export async function saveSession(session: StoredSession): Promise<StoredSession
   await prisma.gameSession.upsert({
     where: { id: session.id },
     update: {
-      stateVersion: { increment: 1 },
+      stateVersion: session.state.stateVersion,
       currentState: session.state as any,
       updatedAt: updatedDate,
-      status: 'playing',
+      status: session.state.status,
     },
     create: {
       id: session.id,
       anonymousId: session.id, // using session ID as anonymous ID for now
-      status: 'playing',
+      status: session.state.status,
       configVersion: session.state.configVersion,
       seedEncrypted: null,
-      stateVersion: 1,
+      stateVersion: session.state.stateVersion,
       setup: session.setup as any,
       currentState: session.state as any,
       createdAt: new Date(session.createdAt),
@@ -63,7 +63,7 @@ export async function getSession(id: string): Promise<StoredSession | null> {
   });
 
   if (resultRecord) {
-    result = {
+    result = resultRecord.diagnostics ? resultRecord.diagnostics as unknown as Diagnostics : {
       finalStatus: resultRecord.finalStatus,
       financials: resultRecord.financials as any,
       strongDecisions: resultRecord.strongDecisions as any,
@@ -98,7 +98,7 @@ export async function saveLead(lead: StoredLead): Promise<StoredLead> {
       name: (lead.payload.name as string) || 'Lead',
       contactEncrypted: (lead.payload.contact as string) || '',
       product: (lead.payload.product as string) || '',
-      productPrice: (lead.payload.price as number) || 0,
+      productPrice: (lead.payload.productPrice as number) || 0,
       deliveryStatus: lead.status,
       deliveryAttempts: lead.attempts,
       webhookLastError: lead.lastError,

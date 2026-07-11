@@ -14,6 +14,9 @@ export async function POST(_request: Request, context: RouteContext) {
 
   const session = await getSession(id);
   if (!session) return NextResponse.json({ error: 'session_not_found' }, { status: 404 });
+  if (typeof body.expectedVersion === 'number' && body.expectedVersion !== session.state.stateVersion) {
+    return NextResponse.json({ error: 'version_conflict', state: session.state }, { status: 409 });
+  }
 
   if (session.state.status === 'finished') {
     // Already finished, but we might be submitting the lead form if they had final_reason
@@ -29,27 +32,6 @@ export async function POST(_request: Request, context: RouteContext) {
       return NextResponse.json({ error: 'missing_diagnostics' }, { status: 500 });
     }
     session.result = session.state.diagnostics;
-  }
-
-  if (body.lead) {
-    const { leadSchema } = await import('@/lib/game/schemas');
-    const parsed = leadSchema.safeParse({ ...body.lead, sessionId: id, privacyConsent: body.lead.privacyConsent === 'on' });
-    if (parsed.success) {
-      await prisma.lead.create({
-        data: {
-          sessionId: id,
-          name: parsed.data.name,
-          contactEncrypted: parsed.data.contact,
-          product: parsed.data.product,
-          productPrice: parsed.data.productPrice,
-          socialLink: parsed.data.socialLink,
-          comment: parsed.data.comment,
-          privacyConsentAt: new Date(),
-          marketingConsentAt: parsed.data.marketingConsent ? new Date() : null,
-          deliveryStatus: 'pending'
-        }
-      });
-    }
   }
 
   await saveSession(session);

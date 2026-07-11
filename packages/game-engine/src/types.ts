@@ -413,8 +413,8 @@ export type GameCommand =
   | { commandId: string; type: 'set_audience_metrics'; payload: { reels?: number; stories?: number; telegram?: number; contacts?: number } }
   | { commandId: string; type: 'complete_day_two'; payload: Record<string, never> }
   | { commandId: string; type: 'advance_daily_intro'; payload: Record<string, never> }
-  | { commandId: string; type: 'choose_intent'; payload: { intent: DailyIntent } }
-  | { commandId: string; type: 'choose_action_group'; payload: { group: string } }
+  | { commandId: string; type: 'choose_intent'; payload: { intent: DailyIntent | null } }
+  | { commandId: string; type: 'choose_action_group'; payload: { group: string | null } }
   | { commandId: string; type: 'select_action'; payload: { actionId: string } }
   | { commandId: string; type: 'configure_action'; payload: { contentType?: ContentType; route?: RouteSelection; targetCohortId?: string } }
   | { commandId: string; type: 'cancel_pending_action'; payload: Record<string, never> }
@@ -425,7 +425,7 @@ export type GameCommand =
   | { commandId: string; type: 'defer_inbound'; payload: { cohortId: string } }
   | { commandId: string; type: 'resolve_sales'; payload: { cohortId: string; action: 'process' | 'defer' | 'ignore'; amount?: number } }
   | { commandId: string; type: 'resolve_followup'; payload: { cohortId: string; action: 'process' | 'defer' | 'ignore' } }
-  | { commandId: string; type: 'resolve_pending_decision'; payload: { cohortId?: string; action: 'process' | 'defer' | 'ignore' | 'confirm'; amount?: number } }
+  | { commandId: string; type: 'resolve_pending_decision'; payload: { cohortId?: string; action: 'process' | 'defer' | 'ignore' | 'confirm' | 'cancel' | 'rest_day' | 'rest_two_days' | 'delegate' | 'push_through'; amount?: number } }
   | { commandId: string; type: 'complete_day'; payload: Record<string, never> }
   | { commandId: string; type: 'continue_after_goal'; payload: Record<string, never> }
   | { commandId: string; type: 'request_finish'; payload: Record<string, never> }

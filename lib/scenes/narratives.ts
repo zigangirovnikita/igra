@@ -249,7 +249,7 @@ export function getDirectMiniGameResult(processed: number, total: number, lostRe
   }
   return [
     `${name} ответила ${processed} из ${total}.`,
-    `${missed} ${missed === 1 ? 'человек' : 'человека'} так и не получили ответ. Они, скорее всего, уже остыли.`,
+    `${missed} ${missed === 1 ? 'человек' : 'человека'} так и не получили ответ и были потеряны.`,
     `Потенциальная потеря: ~${rub(lostRevenue)}.`,
     `«Мне нужен бот. Или хотя бы менеджер.»`,
   ];
@@ -272,7 +272,7 @@ export function getFinalInsight(state: GameState): string[] {
   const map: Record<string, string[]> = {
     processing: [
       `Главная потеря — обработка входящих.`,
-      `Люди писали, но не получали ответ вовремя. Интерес остыл раньше, чем дошло до продажи.`,
+      `Люди писали, но не получали ответ вовремя и уходили без ответа.`,
       `Это не проблема контента. Это проблема системы.`,
     ],
     traffic: [

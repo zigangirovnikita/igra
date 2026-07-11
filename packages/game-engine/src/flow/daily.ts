@@ -7,6 +7,7 @@ export function chooseIntent(state: GameState, intent: DailyIntent | null): Game
     state.flow.step = 'daily_intent';
     return state;
   }
+  if (state.flow.step !== 'daily_intent') throw new Error('Invalid step for intent selection');
 
   state.flow.selectedIntent = intent;
   if (intent === 'finish') {
@@ -25,12 +26,14 @@ export function chooseActionGroup(state: GameState, group: string | null): GameS
     // Keep on action_list to re-select group
     return state;
   }
+  if (state.flow.step !== 'action_list') throw new Error('Invalid step for action group selection');
   state.flow.selectedGroup = group;
   state.flow.step = 'action_list';
   return state;
 }
 
 export function selectAction(state: GameState, config: GameConfig, actionId: string): GameState {
+  if (state.flow.step !== 'action_list') throw new Error('Invalid step for action selection');
   const action = findAction(config, actionId);
   const availability = getActionAvailability(state, action, config);
   if (!availability.available) throw new Error(availability.reason);
@@ -57,11 +60,17 @@ export function configureAction(
   state: GameState,
   payload: { contentType?: ContentType; route?: RouteSelection; targetCohortId?: string }
 ): GameState {
+  if (state.flow.step !== 'action_configuration') throw new Error('Invalid step for action configuration');
   if (!state.pendingAction) throw new Error('No pending action to configure');
   if (payload.contentType) state.pendingAction.contentType = payload.contentType;
   if (payload.route) state.pendingAction.temporaryRoute = payload.route;
   if (payload.targetCohortId) state.pendingAction.targetCohortId = payload.targetCohortId;
 
+  const actionNeedsDestination = Boolean(payload.contentType) && !payload.route;
+  if (actionNeedsDestination) {
+    state.flow.step = 'action_configuration';
+    return state;
+  }
   state.pendingAction.confirmed = true;
   state.flow.step = 'action_confirmation';
   return state;
@@ -80,15 +89,20 @@ export function completeDay(state: GameState, config: GameConfig): GameState {
     throw new Error('Cannot complete day outside of day_summary');
   }
 
+  if (state.currentDayReport && !state.dayReports.some((report) => report.id === state.currentDayReport?.id)) {
+    state.dayReports.push(state.currentDayReport);
+  }
   state.currentDayReport = null;
   state.lastOutcome = null;
 
-  if (state.resources.day > config.totalDays) {
+  if (state.resources.day >= config.totalDays) {
     state.endingReason = 'time_finished';
     state.flow.stage = 'final';
     state.flow.step = 'final_reason';
     return state;
   }
+
+  state.resources.day += 1;
 
   state.flow.step = 'daily_intro';
 

@@ -13,7 +13,7 @@ export function ActionResultFlow({ state, dispatch, busy }: FlowProps) {
   
   const paragraphs = outcome ? [
     `Результат действия: ${outcome.title}`,
-    `Затрачено дней: ${outcome.finishedDay - outcome.startedDay}`,
+    `Затрачено дней: ${outcome.finishedDay - outcome.startedDay + 1}`,
     `Охваты: ${outcome.impressionsDelta > 0 ? '+' : ''}${outcome.impressionsDelta}`,
     `Продажи: ${outcome.salesDelta > 0 ? '+' : ''}${outcome.salesDelta}`,
   ] : ['Действие завершено.'];
