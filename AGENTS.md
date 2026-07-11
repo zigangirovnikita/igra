@@ -4,7 +4,7 @@
 
 Interactive mobile-first launch simulator «Проживи 30 дней запуска за 10 минут».
 
-The source of truth is `launch-game-tz.md`. If examples in older product notes conflict with it, follow the spec.
+The source of truth is `docs/game-flow-v2-tz.md`. If examples in older product notes conflict with it, follow the spec.
 
 ## Working rules
 
