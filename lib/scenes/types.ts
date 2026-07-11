@@ -8,12 +8,13 @@ export type SetupDraft = {
   gender: 'female' | 'male';
   name: string;
   niche: string;
+  productName: string;
   superpowers: string[];
   productType: string;
   productPrice: number;
   familyType: FamilyType;
   dreams: string[];
-  hasTelegram: boolean;
+  channelMode: 'instagram' | 'instagram_telegram' | 'telegram' | 'contacts' | 'none';
   averageReelViews: number;
   averageStoryViews: number;
   averageTelegramViews: number;
@@ -99,6 +100,8 @@ export type DirectMiniGameScene = {
   cohortId: string;
   totalInbound: number;
   messages: string[];
+  manualCapacity: number;
+  automation: 'none' | 'simple_bot' | 'ai_bot' | 'manager';
 };
 
 export type DiagnosisScene = {
@@ -110,6 +113,7 @@ export type DiagnosisScene = {
   targetRevenue: number;
   dreamsMet: boolean;
   resources: { bank: number; energy: number; day: number };
+  selectedDreams: string[];
 };
 
 export type CtaScene = {

@@ -14,6 +14,7 @@ export type SetupInput = {
   avatarGender: Gender;
   name: string;
   niche: string;
+  productName?: string;
   superpowers: Id[];
   productType: Id;
   productPrice: number;
@@ -182,6 +183,8 @@ export type Diagnostics = {
   strongDecisions: string[];
   bottlenecks: Array<{ category: string; expectedLoss: number }>;
   counterfactuals: Array<{ change: string; expectedProfitDelta: number }>;
+  mistakes: Array<{ day: number; message: string; category: string }>;
+  dreams: Array<{ id: string; title: string; price: number; affordable: boolean }>;
 };
 
 export type GameState = {
@@ -224,6 +227,8 @@ export type GameCommand =
   | { commandId: string; type: 'start_action'; payload: { actionId: string; contentType?: ContentType; route?: RouteSelection } }
   | { commandId: string; type: 'set_route'; payload: RouteSelection }
   | { commandId: string; type: 'set_plan'; payload: RouteSelection }
+  | { commandId: string; type: 'record_reflection'; payload: { eventId: string; answer: string } }
+  | { commandId: string; type: 'process_inbound'; payload: { cohortId: string; amount: number } }
   | { commandId: string; type: 'start_parallel'; payload: { actionAId: string; actionBId: string; contentType?: ContentType; route?: RouteSelection } }
   | { commandId: string; type: 'resolve_mini_game'; payload: { cohortId: string; mode: 'manual' | 'auto'; processed?: number } }
   | { commandId: string; type: 'finish_game'; payload?: { continueAfterGoal?: boolean } };

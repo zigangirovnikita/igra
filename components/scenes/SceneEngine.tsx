@@ -4,7 +4,7 @@ import { useCallback, useRef, useState } from 'react';
 import { getActionAvailability, type GameConfig, type GameState, type SetupInput } from '@/packages/game-engine/src';
 import type { ChoiceOption, Scene, SetupDraft } from '@/lib/scenes/types';
 import { actionToChoice, buildFinalScenes, buildInitialGameScenes, buildMainChoiceScene, buildPostActionScenes } from '@/lib/scenes/script';
-import { buildCategoryScene, buildContentTypeScene, buildInitialPlanScenes, CONTENT_ACTIONS, operationalRoute, routeFromPlan, type DecisionCategory } from '@/lib/scenes/decisionFlow';
+import { buildCategoryScene, buildContentTypeScene, buildInitialPlanScenes, buildParallelContentTypeScene, buildParallelScene, CONTENT_ACTIONS, initialPlanSummary, operationalRoute, routeFromPlan, type DecisionCategory } from '@/lib/scenes/decisionFlow';
 import { getActionStartNarrative, getDirectMiniGameResult } from '@/lib/scenes/narratives';
 import { SetupScene } from './SetupScene';
 import { NarrativeScreen } from './NarrativeScreen';
@@ -14,6 +14,7 @@ import { MetricsScreen } from './MetricsScreen';
 import { DirectMiniGame } from './DirectMiniGame';
 import { DiagnosisScreen } from './DiagnosisScreen';
 import { CtaScene } from './CtaScene';
+import { GameHud } from './GameHud';
 
 function commandId(prefix: string) {
   return `${prefix}-${Date.now()}`;
@@ -24,13 +25,14 @@ function draftToSetupInput(draft: SetupDraft): SetupInput {
     avatarGender: draft.gender,
     name: draft.name,
     niche: draft.niche,
+    productName: draft.productName,
     superpowers: draft.superpowers,
     productType: draft.productType,
     productPrice: draft.productPrice,
-    averageReelViews: draft.averageReelViews,
-    averageStoryViews: draft.averageStoryViews,
-    telegramStatus: draft.hasTelegram ? 'known' : 'none',
-    averageTelegramViews: draft.hasTelegram ? draft.averageTelegramViews : 0,
+    telegramStatus: draft.channelMode === 'telegram' || draft.channelMode === 'instagram_telegram' ? 'known' : 'none',
+    averageTelegramViews: draft.channelMode === 'telegram' || draft.channelMode === 'instagram_telegram' ? draft.averageTelegramViews : 0,
+    averageReelViews: draft.channelMode === 'telegram' || draft.channelMode === 'contacts' || draft.channelMode === 'none' ? 0 : draft.averageReelViews,
+    averageStoryViews: draft.channelMode === 'telegram' || draft.channelMode === 'contacts' || draft.channelMode === 'none' ? 0 : draft.averageStoryViews,
     dreams: draft.dreams,
   };
 }
@@ -79,7 +81,7 @@ export function SceneEngine({ config }: Props) {
       const newState: GameState = data.state;
       setGameState(newState);
       prevStateRef.current = newState;
-      const scenes = buildInitialPlanScenes();
+      const scenes = buildInitialPlanScenes(newState);
       setQueue(scenes);
       setPhase('game');
       localStorage.setItem('launch-game-cache', JSON.stringify({ expiresAt: Date.now() + 86_400_000, state: newState }));
@@ -109,6 +111,24 @@ export function SceneEngine({ config }: Props) {
       return;
     }
 
+    if (option.id === '__parallel_menu') {
+      const available = config.actions.filter((action) => action.enabled && getActionAvailability(gameState, action, config).available);
+      pushScenes([buildParallelScene(gameState, available)]);
+      return;
+    }
+
+    if (option.id.startsWith('__parallel:')) {
+      const [, actionAId, actionBId] = option.id.split(':');
+      pushScenes([buildParallelContentTypeScene(actionAId, actionBId)]);
+      return;
+    }
+
+    if (option.id.startsWith('__parallel_run:')) {
+      const [, contentType, actionAId, actionBId] = option.id.split(':');
+      await startParallel(gameState, actionAId, actionBId, contentType);
+      return;
+    }
+
     if (CONTENT_ACTIONS.has(option.id) && !option.payload?.contentType) {
       pushScenes([buildContentTypeScene(option)]);
       return;
@@ -116,6 +136,18 @@ export function SceneEngine({ config }: Props) {
 
     if (option.id.startsWith('__content:')) {
       option = { ...option, id: String(option.payload?.actionId ?? '') };
+    }
+
+    if (option.id.startsWith('__inbound:')) {
+      const [, cohortId, amount] = option.id.split(':');
+      await processInbound(gameState, cohortId, Number(amount));
+      return;
+    }
+
+    if (option.id.startsWith('__reflection:')) {
+      const [, eventId, answer] = option.id.split(':');
+      await recordReflection(gameState, eventId, answer);
+      return;
     }
 
     if (option.id === '__finish__') {
@@ -173,6 +205,57 @@ export function SceneEngine({ config }: Props) {
     }
   }
 
+  async function startParallel(state: GameState, actionAId: string, actionBId: string, contentType: string) {
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/game/sessions/${state.sessionId}/commands`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ commandId: commandId('parallel'), expectedVersion: state.stateVersion, type: 'start_parallel', payload: { actionAId, actionBId, contentType, route: defaultRouteFor(state) } }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message ?? data.error ?? 'Не удалось запустить задачи');
+      const newState: GameState = data.state;
+      const prev = prevStateRef.current ?? state;
+      setGameState(newState); prevStateRef.current = newState;
+      setQueue((current) => [...current, ...buildPostActionScenes(newState, prev, `${actionAId}+${actionBId}`, config)]);
+    } catch (err) { setError(err instanceof Error ? err.message : 'Ошибка параллельного действия'); }
+    finally { setBusy(false); }
+  }
+
+  async function recordReflection(state: GameState, eventId: string, answer: string) {
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/game/sessions/${state.sessionId}/commands`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ commandId: commandId('reflection'), expectedVersion: state.stateVersion, type: 'record_reflection', payload: { eventId, answer } }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message ?? data.error ?? 'Не удалось сохранить ответ');
+      const newState: GameState = data.state;
+      setGameState(newState); prevStateRef.current = newState;
+    } catch (err) { setError(err instanceof Error ? err.message : 'Ошибка сохранения ответа'); }
+    finally { setBusy(false); }
+  }
+
+  async function processInbound(state: GameState, cohortId: string, amount: number) {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/game/sessions/${state.sessionId}/commands`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ commandId: commandId('process-inbound'), expectedVersion: state.stateVersion, type: 'process_inbound', payload: { cohortId, amount } }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message ?? data.error ?? 'Не удалось обработать входящие');
+      const newState: GameState = data.state;
+      setGameState(newState);
+      prevStateRef.current = newState;
+      setQueue((current) => [...current, buildMainChoiceScene(newState, config)]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Ошибка обработки входящих');
+    } finally { setBusy(false); }
+  }
+
   async function saveInitialPlan(state: GameState) {
     setBusy(true);
     setError(null);
@@ -186,7 +269,7 @@ export function SceneEngine({ config }: Props) {
       const newState: GameState = data.state;
       setGameState(newState);
       prevStateRef.current = newState;
-      setQueue((current) => [...current, ...buildInitialGameScenes(newState, config)]);
+      setQueue((current) => [...current, { type: 'narrative', image: 'character_thinking', lines: initialPlanSummary(newState.player.name, planRef.current) }, ...buildInitialGameScenes(newState, config)]);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Ошибка сохранения плана');
     } finally {
@@ -337,6 +420,7 @@ export function SceneEngine({ config }: Props) {
 
   return (
     <main className="scene-shell">
+      {gameState && <GameHud state={gameState} />}
       {error && (
         <div className="scene-error" role="alert">
           {error}
@@ -415,11 +499,11 @@ function LeadForm({
     <div className="scene-screen">
       <div className="scene-image scene-image--character_happy" aria-hidden="true" />
       <form className="lead-form" action={onSubmit}>
-        <h2 className="lead-form-title">Разобрать мой запуск</h2>
+        <h2 className="lead-form-title">Получить бесплатную консультацию</h2>
         <p className="lead-form-sub">Оставьте контакт — мы разберём вашу ситуацию и найдём, где теряются заявки.</p>
         <label className="setup-field-label">Имя <input name="name" defaultValue={state.player.name} required /></label>
         <label className="setup-field-label">Telegram / телефон <input name="contact" required placeholder="@username" /></label>
-        <label className="setup-field-label">Ваш продукт <input name="product" defaultValue={state.player.niche} required /></label>
+        <label className="setup-field-label">Ваш продукт <input name="product" defaultValue={state.player.productName ?? state.player.niche} required /></label>
         <label className="setup-field-label">Чек <input name="productPrice" type="number" defaultValue={state.player.productPrice} required /></label>
         <label className="setup-field-label">Соцсеть / ссылка <input name="socialLink" /></label>
         <label className="setup-field-label">Комментарий <textarea name="comment" maxLength={1000} /></label>

@@ -35,7 +35,7 @@ export function applyProcessing(
   if (mode === 'auto') {
     toProcess = next.unprocessedWarm;
   } else {
-    toProcess = Math.min(next.unprocessedWarm, manualAmount ?? 0);
+    toProcess = Math.min(next.unprocessedWarm, (manualAmount ?? 0) * lowEnergyManualMultiplier(state));
   }
   
   const processingRate = route.processing === 'simple_bot' ? 0.8 : route.processing === 'ai_bot' ? 0.99 : route.processing === 'manager' ? 0.95 : 1;

@@ -54,6 +54,11 @@ export function buildPostActionScenes(
     deltas: resultDeltas,
   });
 
+  const reflection = buildReflectionScene(newState, prevState, actionId);
+  if (reflection) scenes.push(reflection);
+  const liveEvent = buildLiveEvent(newState, prevState, actionId);
+  if (liveEvent) scenes.push(liveEvent);
+
   // 2. Low energy warning (once per threshold)
   if (newState.resources.energy < 30 && prevState.resources.energy >= 30) {
     scenes.push({
@@ -81,7 +86,24 @@ export function buildPostActionScenes(
       type: 'mini_game_direct',
       cohortId: newCohort.id,
       totalInbound: Math.round(newCohort.responses),
-      messages: buildInboundMessages(Math.min(12, Math.round(newCohort.responses))),
+      messages: buildInboundMessages(Math.min(newState.player.superpowers.includes('energy') ? 25 : 15, Math.round(newCohort.responses))),
+      manualCapacity: newState.player.superpowers.includes('energy') ? 25 : 15,
+      automation: newState.assets.aiBot ? 'ai_bot' : newState.assets.simpleBot ? 'simple_bot' : newState.assets.manager ? 'manager' : 'none',
+    });
+  } else if (newCohort && newCohort.activated > 0 && newCohort.activated < 30 && newState.activeRoute.processing === 'manual') {
+    const count = Math.round(newCohort.activated);
+    const capacity = newState.player.superpowers.includes('energy') ? 25 : 15;
+    scenes.push({
+      type: 'choice', image: 'phone_direct',
+      question: count < 10 ? `Пришло ${count} сообщений. Ответите всем?` : `В директ пришло ${count} сообщений. Как разберёте поток?`,
+      subtext: count < 10 ? 'Это займёт немного энергии.' : `Вручную вы уверенно обработаете до ${capacity} сообщений.`,
+      options: count < 10
+        ? [{ id: `__inbound:${newCohort.id}:${count}`, icon: '💬', title: 'Ответить всем', description: 'Разобрать каждое сообщение вручную.' }]
+        : [
+            { id: `__inbound:${newCohort.id}:${Math.min(count, capacity)}`, icon: '⌨️', title: 'Ответить вручную', description: 'Обработать столько диалогов, сколько позволяет ресурс.' },
+            { id: `__inbound:${newCohort.id}:${Math.ceil(Math.min(count, capacity) * 0.6)}`, icon: '🔥', title: 'Выбрать самых горячих', description: 'Сконцентрироваться на части входящих.' },
+            { id: '__category:route', icon: '🤖', title: 'Срочно усилить обработку', description: 'Подключить менеджера или начать собирать бота; часть людей успеет остыть.' },
+          ],
     });
   }
 
@@ -115,6 +137,41 @@ export function buildPostActionScenes(
   }
 
   return scenes;
+}
+
+function buildLiveEvent(state: GameState, prev: GameState, actionId: string): NarrativeScene | null {
+  const responses = Math.round(state.metrics.responses - prev.metrics.responses);
+  const sales = state.metrics.sales - prev.metrics.sales;
+  const messages: Record<string, string[]> = {};
+  if (actionId === 'stories_3d' && sales === 0) messages.event = ['Сторис начали проседать.', responses > 0 ? 'Люди спрашивают цену и исчезают.' : 'Прямой оффер не дал входящих.'];
+  if (actionId.startsWith('reels') && responses === 0) messages.event = ['Рилсы набрали обычные просмотры.', 'Люди посмотрели, но не увидели понятного следующего шага.'];
+  if (actionId.startsWith('reels') && responses >= 20) messages.event = ['Один рилс залетел.', `За короткое время пришло ${responses} сообщений — теперь результат зависит от обработки.`];
+  if (actionId.startsWith('simple_bot') && state.metrics.impressions === 0) messages.event = ['Простой бот готов, но уведомлений нет.', 'Автоматизация не создаёт трафик сама по себе.'];
+  if (actionId.startsWith('ai_bot') && state.metrics.impressions === 0) messages.event = ['ИИ-бот готов, но вести в него пока некого.', 'Сильная обработка работает только после появления трафика.'];
+  if (actionId.startsWith('website') && state.metrics.responses === 0) messages.event = ['Сайт опубликован. Посетителей — ноль.', 'Сайт стал точкой маршрута, но не источником людей.'];
+  if (actionId === 'hire_manager' && state.cohorts.every((cohort) => cohort.routeSnapshot.nurture.includes('none'))) messages.event = ['Менеджер получил холодные диалоги.', 'Он отвечает быстрее, но не может заменить доверие и прогрев.'];
+  if (actionId === 'calls' && state.metrics.bookedCalls > prev.metrics.bookedCalls && state.metrics.heldCalls === prev.metrics.heldCalls) messages.event = ['Появились записи на созвон, но люди не пришли.', 'Одной записи недостаточно: часть заявок теряется на неявке.'];
+  if (sales > 0) messages.event = ['Пришло уведомление об оплате.', `Продаж за этот этап: ${sales}.`];
+  return messages.event ? { type: 'narrative', image: sales > 0 ? 'phone_payment' : 'phone_notification', lines: messages.event } : null;
+}
+
+function buildReflectionScene(state: GameState, prev: GameState, actionId: string): ChoiceScene | null {
+  const responses = state.metrics.responses - prev.metrics.responses;
+  const sales = state.metrics.sales - prev.metrics.sales;
+  const weakContent = ['stories_3d', 'reels_7d', 'reels_stories_7d'].includes(actionId) && sales === 0;
+  const weakTool = ['hire_manager', 'simple_bot_self', 'simple_bot_specialist', 'ai_bot_self', 'ai_bot_specialist', 'website_basic', 'website_beautiful'].includes(actionId) && sales === 0;
+  if (!weakContent && !weakTool) return null;
+  const eventId = `${actionId}_${state.resources.day}`;
+  return {
+    type: 'choice', image: 'character_thinking', question: 'Как думаете, почему так произошло?',
+    subtext: responses > 0 ? `Люди отреагировали, но продаж не случилось.` : 'Результат оказался слабее ожиданий.',
+    options: [
+      ['audience', '👥', 'Мало аудитории', 'Нужно просто нарастить охваты.'],
+      ['offer', '🧭', 'Непонятен оффер', 'Люди не увидели ценность или следующий шаг.'],
+      ['warmup', '🔥', 'Не хватило прогрева', 'До продажи было слишком мало доверия.'],
+      ['processing', '💬', 'Потерялись между этапами', 'Маршрут или обработка не довели людей до покупки.'],
+    ].map(([answer, icon, title, description]) => ({ id: `__reflection:${eventId}:${answer}`, icon, title, description })),
+  };
 }
 
 // ─── Main choice scene ────────────────────────────────────────────────────────
@@ -210,7 +267,7 @@ export function actionToChoice(state: GameState, action: ActionConfig): ChoiceOp
     id: action.id,
     icon: getActionIcon(action.id),
     title: action.title,
-    description: getActionDescription(action.id),
+    description: getActionDescription(state, action.id),
     costLabel: action.cost > 0 ? rub(action.cost) : 'бесплатно',
     daysLabel: action.days > 0 ? days(action.days) : 'сразу',
     energyLabel: action.energyCost > 0 ? `-${action.energyCost} ⚡` : undefined,
@@ -298,8 +355,9 @@ export function buildFinalScenes(state: GameState, config: GameConfig): Scene[] 
     productPrice: state.player.productPrice,
     personalGoal: state.targets.personalGoal,
     targetRevenue: state.targets.targetRevenue,
-    dreamsMet: state.metrics.revenue >= state.targets.personalGoal,
+    dreamsMet: Math.max(0, state.metrics.revenue - state.metrics.expenses) >= state.targets.personalGoal,
     resources: { bank: state.resources.bank, energy: state.resources.energy, day: state.resources.day },
+    selectedDreams: state.player.dreams,
   });
 
   return scenes;
@@ -402,7 +460,7 @@ function getActionIcon(actionId: string): string {
   return icons[actionId] ?? '▶️';
 }
 
-function getActionDescription(actionId: string): string {
+function getActionDescription(state: GameState, actionId: string): string {
   const desc: Record<string, string> = {
     demand_poll: 'Опросить аудиторию — хотят ли они продукт',
     demand_interviews: 'Провести 10 живых диалогов, узнать возражения',
@@ -433,7 +491,11 @@ function getActionDescription(actionId: string): string {
     rest_one_day: 'Восстановить 12 единиц энергии',
     rest_two_days: 'Восстановить 25 единиц энергии',
   };
-  return desc[actionId] ?? 'Следующий шаг в запуске';
+  const base = desc[actionId] ?? 'Следующий шаг в запуске';
+  if (actionId.startsWith('consultation_')) return base;
+  if (state.flags.detailedConsultation) return `${base} Примерная конверсия: 14–18%. Главный риск зависит от прогрева и способа продажи.`;
+  if (state.flags.basicConsultation) return `${base} Ориентир конверсии: 10–25%. Риск потери входящих: ${state.activeRoute.processing === 'manual' ? 'высокий' : 'средний'}.`;
+  return `${base} Может дать заявки; точный диапазон и главный риск пока неизвестны.`;
 }
 
 function buildInboundMessages(count: number): string[] {
@@ -451,5 +513,5 @@ function buildInboundMessages(count: number): string[] {
     'Сколько времени в неделю нужно?',
     'А есть обратная связь от вас?',
   ];
-  return pool.slice(0, Math.min(count, pool.length));
+  return Array.from({ length: count }, (_, index) => pool[index % pool.length]);
 }

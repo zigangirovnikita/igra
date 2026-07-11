@@ -69,6 +69,8 @@ export async function getSession(id: string): Promise<StoredSession | null> {
       strongDecisions: resultRecord.strongDecisions as any,
       bottlenecks: resultRecord.bottlenecks as any,
       counterfactuals: resultRecord.counterfactuals as any,
+      mistakes: [],
+      dreams: [],
     };
   }
 

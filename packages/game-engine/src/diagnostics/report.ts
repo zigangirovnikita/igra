@@ -26,8 +26,37 @@ export function calculateDiagnostics(state: GameState, config: GameConfig): Diag
     },
     strongDecisions: detectStrongDecisions(state),
     bottlenecks: detectBottlenecks(state),
-    counterfactuals: buildCounterfactuals(state)
+    counterfactuals: buildCounterfactuals(state),
+    mistakes: detectMistakes(state),
+    dreams: buildDreamResults(state, config, dreamMoney),
   };
+}
+
+function buildDreamResults(state: GameState, config: GameConfig, money: number) {
+  let remaining = money;
+  return state.player.dreams.map((id) => {
+    const dream = config.dreams.find((item) => item.id === id);
+    const price = dream?.price ?? 0;
+    const affordable = remaining >= price;
+    if (affordable) remaining -= price;
+    return { id, title: dream?.title ?? id, price, affordable };
+  });
+}
+
+function detectMistakes(state: GameState): Array<{ day: number; message: string; category: string }> {
+  const actions = state.history.filter((entry) => entry.type === 'action_started');
+  const result: Array<{ day: number; message: string; category: string }> = [];
+  const fullProduct = actions.find((entry) => ['product_self', 'product_home', 'product_studio'].includes(String(entry.payload?.actionId)));
+  const demand = actions.find((entry) => String(entry.payload?.actionId).startsWith('demand_'));
+  if (fullProduct && (!demand || fullProduct.day < demand.day)) result.push({ day: fullProduct.day, category: 'sequence', message: `На ${fullProduct.day}-й день вы начали полный продукт до проверки спроса.` });
+  const earlySelling = state.cohorts.find((cohort) => cohort.contentType === 'selling' && cohort.routeSnapshot.nurture.includes('none'));
+  if (earlySelling) result.push({ day: earlySelling.createdDay, category: 'nurture', message: `На ${earlySelling.createdDay}-й день вы начали продавать без прогрева.` });
+  const lost = state.cohorts.find((cohort) => cohort.lost > 0);
+  if (lost) result.push({ day: lost.createdDay, category: 'processing', message: `После контента на ${lost.createdDay}-й день часть входящих остыла без обработки.` });
+  const reflection = state.history.find((entry) => entry.type === 'reflection' && entry.message === 'audience');
+  if (reflection) result.push({ day: reflection.day, category: 'diagnosis', message: `На ${reflection.day}-й день вы объяснили слабый результат только размером аудитории и не проверили маршрут.` });
+  if (state.resources.energy < 30) result.push({ day: state.resources.day, category: 'energy', message: 'К концу запуска энергия упала ниже безопасного уровня и ограничила ручную работу.' });
+  return result.slice(0, 3);
 }
 
 function detectStrongDecisions(state: GameState): string[] {
@@ -62,6 +91,14 @@ function buildCounterfactuals(state: GameState): Array<{ change: string; expecte
     {
       change: 'Нет дожима -> подходящий дожим',
       expectedProfitDelta: state.activeRoute.followup === 'none' ? state.metrics.revenue * 0.08 : 0
+    },
+    {
+      change: 'Полный продукт до спроса -> быстрый пилот',
+      expectedProfitDelta: state.history.some((entry) => entry.type === 'action_started' && ['product_home', 'product_studio'].includes(String(entry.payload?.actionId))) && state.assets.demandConfidence < 0.7 ? 20_000 : 0
+    },
+    {
+      change: 'Продажа дорогого продукта напрямую -> созвон',
+      expectedProfitDelta: state.player.productPrice > 50_000 && state.activeRoute.saleMethod !== 'call' ? state.metrics.applications * state.player.productPrice * 0.08 : 0
     }
   ];
   return items.filter((item) => item.expectedProfitDelta > 0).sort((a, b) => b.expectedProfitDelta - a.expectedProfitDelta).slice(0, 3);

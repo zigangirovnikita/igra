@@ -1,7 +1,7 @@
-import type { ContentType, GameConfig, GameState, ScheduledAction } from '../types';
+import type { ContentType, GameConfig, GameState, ProcessingType, ScheduledAction } from '../types';
 import { applyEffect } from '../actions/dsl';
 import { createContentCohort } from '../calculations/content';
-import { applyFollowup, applyEntry, applySales } from '../calculations/funnel';
+import { applyFollowup, applyEntry, applyProcessing, applySales } from '../calculations/funnel';
 import { assertStateInvariants, clamp } from '../state/invariants';
 
 export function advanceDays(input: GameState, config: GameConfig, targetDay: number): GameState {
@@ -51,6 +51,13 @@ export function completeAction(input: GameState, config: GameConfig, scheduled: 
   for (const effect of action.effects) {
     state = applyEffect(state, effect);
   }
+  if (['simple_bot_self', 'simple_bot_specialist', 'ai_bot_self', 'ai_bot_specialist', 'hire_manager'].includes(action.id)) {
+    state = pickUpWarmBacklog(state, config, action.id);
+  }
+  state = activateRouteTool(state, action.id);
+  if (action.id === 'demand_pilot_offer') {
+    state = runPilotOffer(state, config);
+  }
   if (isContentAction(action.id)) {
     const contentType = (scheduled.payload.contentType ?? 'storytelling') as ContentType;
     let cohort = createContentCohort(state, config, action.id, contentType, state.cohorts.length);
@@ -60,7 +67,12 @@ export function completeAction(input: GameState, config: GameConfig, scheduled: 
     }
   }
   
-  if (action.category === 'sales') {
+  if (action.id === 'manual_followup' || action.id === 'bot_followup') {
+    state.cohorts = state.cohorts.map((cohort) => applyFollowup(state, config, {
+      ...cohort,
+      routeSnapshot: { ...cohort.routeSnapshot, followup: action.id === 'bot_followup' ? 'bot' : 'manual' },
+    }));
+  } else if (action.category === 'sales') {
     const saleMethod = action.id === 'calls' ? 'call' : 'manual_chat';
     for (let i = 0; i < state.cohorts.length; i++) {
       if (state.cohorts[i].unprocessedApplications > 0) {
@@ -75,6 +87,41 @@ export function completeAction(input: GameState, config: GameConfig, scheduled: 
     payload: { actionId: action.id }
   });
   recalculateMetrics(state);
+  return state;
+}
+
+function activateRouteTool(state: GameState, actionId: string): GameState {
+  if (actionId.startsWith('guide_')) state.activeRoute = { ...state.activeRoute, entry: 'guide', nurture: ['guide'] };
+  if (actionId.startsWith('video_')) state.activeRoute = { ...state.activeRoute, entry: 'video_lesson', nurture: ['video_lesson'] };
+  if (actionId.startsWith('website_')) state.activeRoute = { ...state.activeRoute, entry: 'website', processing: 'website_auto', saleMethod: 'website_auto' };
+  if (actionId === 'manual_chat') state.activeRoute = { ...state.activeRoute, saleMethod: 'manual_chat' };
+  if (actionId === 'calls') state.activeRoute = { ...state.activeRoute, saleMethod: 'call' };
+  if (actionId === 'manual_followup') state.activeRoute = { ...state.activeRoute, followup: 'manual' };
+  if (actionId === 'bot_followup') state.activeRoute = { ...state.activeRoute, followup: 'bot' };
+  return state;
+}
+
+function pickUpWarmBacklog(state: GameState, config: GameConfig, actionId: string): GameState {
+  const processing: ProcessingType = actionId.startsWith('ai_bot') ? 'ai_bot' : actionId.startsWith('simple_bot') ? 'simple_bot' : 'manager';
+  state.activeRoute = { ...state.activeRoute, processing };
+  state.cohorts = state.cohorts.map((cohort) => {
+    if (cohort.unprocessedWarm <= 0 || cohort.temperature <= 0) return cohort;
+    const updated = { ...cohort, routeSnapshot: { ...cohort.routeSnapshot, processing } };
+    return applyProcessing(state, config, updated, 'auto');
+  });
+  return state;
+}
+
+function runPilotOffer(state: GameState, config: GameConfig): GameState {
+  const id = `pilot_offer_${state.resources.day}`;
+  let cohort: GameState['cohorts'][number] = {
+    id, createdDay: state.resources.day, sourceActionId: 'demand_pilot_offer', sourceType: 'stories', contentType: 'selling',
+    impressions: 3, responses: 3, activated: 3, processed: 3, applications: 3, bookedCalls: 0, heldCalls: 0, sales: 0,
+    considering: 0, unprocessedWarm: 0, unprocessedApplications: 3, lost: 0, capacityLostLeads: 0, temperature: 1,
+    routeSnapshot: { ...state.activeRoute, capturedDay: state.resources.day }, followedUp: false,
+  };
+  cohort = applySales(state, config, cohort, state.player.productPrice > 50_000 ? 'call' : 'manual_chat', 3);
+  state.cohorts.push(cohort);
   return state;
 }
 
@@ -101,7 +148,7 @@ export function recalculateMetrics(state: GameState): void {
 function decayCohort(state: GameState, config: GameConfig, cohort: GameState['cohorts'][number]): GameState['cohorts'][number] {
   const age = state.resources.day - cohort.createdDay;
   const temperature = config.decay[Math.min(age, config.decay.length - 1)] ?? 0;
-  let cooled = { ...cohort, temperature };
+  const cooled = { ...cohort, temperature };
   
   if (temperature <= 0 && cooled.unprocessedWarm > 0) {
     cooled.lost += cooled.unprocessedWarm;

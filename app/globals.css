@@ -415,6 +415,23 @@ textarea {
   flex-direction: column;
 }
 
+.game-hud {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+  padding: 8px 10px;
+  background: var(--color-border);
+  color: white;
+  font-size: 11px;
+  text-align: center;
+}
+.game-hud span { display: flex; flex-direction: column; gap: 1px; }
+.game-hud strong { color: var(--color-yellow); font-size: 12px; }
+.game-hud + .scene-screen { min-height: calc(100vh - 48px); }
+
 .scene-screen {
   width: 100%;
   min-height: 100vh;
@@ -746,4 +763,3 @@ textarea {
 /* ── Error banner ── */
 .scene-error { position: fixed; top: 0; left: 50%; transform: translateX(-50%); width: min(100%, 420px); z-index: 100; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 14px; background: #c0392b; color: white; font-size: 13px; font-weight: 700; border-bottom: 3px solid #8f183d; }
 .scene-error-dismiss { background: none; border: none; color: white; font-size: 16px; cursor: pointer; }
-

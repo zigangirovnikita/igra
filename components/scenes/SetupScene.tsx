@@ -18,6 +18,7 @@ type Step =
   | 'niche'
   | 'superpowers'
   | 'product'
+  | 'product_name'
   | 'price'
   | 'family'
   | 'legend'
@@ -28,7 +29,7 @@ type Step =
 
 const STEPS: Step[] = [
   'welcome', 'gender', 'name', 'niche', 'superpowers',
-  'product', 'price', 'family', 'legend', 'dreams',
+  'product', 'product_name', 'price', 'family', 'dreams', 'legend',
   'channels', 'reach', 'summary',
 ];
 
@@ -36,12 +37,13 @@ const defaultDraft: SetupDraft = {
   gender: 'female',
   name: '',
   niche: '',
+  productName: '',
   superpowers: [],
   productType: 'recorded_course',
   productPrice: 30000,
   familyType: 'couple_no_kids',
   dreams: [],
-  hasTelegram: false,
+  channelMode: 'instagram',
   averageReelViews: 1500,
   averageStoryViews: 200,
   averageTelegramViews: 150,
@@ -77,8 +79,8 @@ function getLegendText(draft: SetupDraft): string[] {
       `${name}, поздравляем — у вас отличные стартовые условия!`,
       `Ваш партнёр поддержал идею и выделил 100 000 ₽ на запуск.`,
       `Он взял на себя бытовые расходы и сказал:`,
-      `«Ты давно хотел(а) продавать ${productWord}. У тебя как раз есть месяц. Попробуй!»`,
-      `И вот вы остались с идеей, деньгами и месяцем свободы.`,
+      `«Ты давно ${draft.gender === 'female' ? 'хотела' : 'хотел'} запустить ${draft.productName || productWord}. У тебя как раз есть месяц. Попробуй!»`,
+      `И вот вы остались с идеей, деньгами и мечтой: ${draft.dreams.length > 1 ? 'осуществить выбранные цели' : 'осуществить выбранную цель'}.`,
     ];
   }
   return [
@@ -253,6 +255,16 @@ export function SetupScene({ config, onComplete, busy, initialDraft }: Props) {
       )}
 
       {/* ── PRICE ── */}
+      {step === 'product_name' && (
+        <div className="setup-step">
+          <div className="scene-image scene-image--character_working" aria-hidden="true" />
+          <h2 className="setup-question">Как называется или чему посвящён продукт?</h2>
+          <input className="setup-input" value={draft.productName} onChange={(e) => set('productName', e.target.value)} placeholder="Например: обучение вышиванию крестиком" autoFocus />
+          <button className="btn-primary" disabled={draft.productName.trim().length < 2} onClick={next}>Дальше →</button>
+        </div>
+      )}
+
+      {/* ── PRICE ── */}
       {step === 'price' && (
         <div className="setup-step">
           <div className="scene-image scene-image--character_working" aria-hidden="true" />
@@ -355,6 +367,7 @@ export function SetupScene({ config, onComplete, busy, initialDraft }: Props) {
               Ваша личная цель: <strong>{rub(personalGoal)}</strong>
             </p>
           )}
+          {draft.dreams.length > 0 && <p className="setup-hint">В легенде: {draft.dreams.map((id) => config.dreams.find((d) => d.id === id)?.title).filter(Boolean).join(', ')}.</p>}
           <button className="btn-primary" disabled={draft.dreams.length === 0} onClick={next}>
             Дальше →
           </button>
@@ -367,18 +380,10 @@ export function SetupScene({ config, onComplete, busy, initialDraft }: Props) {
           <div className="scene-image scene-image--character_thinking" aria-hidden="true" />
           <h2 className="setup-question">Где вы уже присутствуете?</h2>
           <div className="setup-grid-2">
-            <button
-              className={`setup-choice-btn${!draft.hasTelegram ? ' setup-choice-btn--selected' : ''}`}
-              onClick={() => set('hasTelegram', false)}
-            >
-              📱 Только Instagram
-            </button>
-            <button
-              className={`setup-choice-btn${draft.hasTelegram ? ' setup-choice-btn--selected' : ''}`}
-              onClick={() => set('hasTelegram', true)}
-            >
-              📱 + ✈️ Instagram + Telegram
-            </button>
+            {([
+              ['instagram', '📱 Только Instagram'], ['instagram_telegram', '📱 + ✈️ Instagram + Telegram'],
+              ['telegram', '✈️ Только Telegram'], ['contacts', '📇 База контактов'], ['none', '🌱 Пока ничего нет'],
+            ] as const).map(([id, label]) => <button key={id} className={`setup-choice-btn${draft.channelMode === id ? ' setup-choice-btn--selected' : ''}`} onClick={() => set('channelMode', id)}>{label}</button>)}
           </div>
           <button className="btn-primary" onClick={next}>
             Дальше →
@@ -391,7 +396,7 @@ export function SetupScene({ config, onComplete, busy, initialDraft }: Props) {
         <div className="setup-step">
           <div className="scene-image scene-image--phone_notification" aria-hidden="true" />
           <h2 className="setup-question">Сколько у вас в среднем набирают?</h2>
-          <label className="setup-field-label">
+          {draft.channelMode !== 'telegram' && draft.channelMode !== 'contacts' && draft.channelMode !== 'none' && <label className="setup-field-label">
             🎵 Рилсы (просмотры):
             <input
               className="setup-input"
@@ -401,8 +406,8 @@ export function SetupScene({ config, onComplete, busy, initialDraft }: Props) {
               step={100}
               onChange={(e) => set('averageReelViews', Number(e.target.value))}
             />
-          </label>
-          <label className="setup-field-label">
+          </label>}
+          {draft.channelMode !== 'telegram' && draft.channelMode !== 'contacts' && draft.channelMode !== 'none' && <label className="setup-field-label">
             📱 Сторис (просмотры):
             <input
               className="setup-input"
@@ -412,8 +417,8 @@ export function SetupScene({ config, onComplete, busy, initialDraft }: Props) {
               step={10}
               onChange={(e) => set('averageStoryViews', Number(e.target.value))}
             />
-          </label>
-          {draft.hasTelegram && (
+          </label>}
+          {(draft.channelMode === 'telegram' || draft.channelMode === 'instagram_telegram') && (
             <label className="setup-field-label">
               ✈️ Telegram (просмотры):
               <input
@@ -441,8 +446,9 @@ export function SetupScene({ config, onComplete, busy, initialDraft }: Props) {
             <div className="summary-row"><span>Имя:</span> <strong>{draft.name}</strong></div>
             <div className="summary-row"><span>Ниша:</span> <strong>{draft.niche}</strong></div>
             <div className="summary-row"><span>Продукт:</span> <strong>{productTypeLabels[draft.productType]}</strong></div>
+            <div className="summary-row"><span>Название:</span> <strong>{draft.productName}</strong></div>
             <div className="summary-row"><span>Чек:</span> <strong>{rub(draft.productPrice)}</strong></div>
-            <div className="summary-row"><span>Суперсилы:</span> <strong>{draft.superpowers.join(', ')}</strong></div>
+            <div className="summary-row"><span>Суперсилы:</span> <strong>{draft.superpowers.map((id) => config.superpowers.find((s) => s.id === id)?.title ?? id).join(', ')}</strong></div>
             <div className="summary-row"><span>Рилсы:</span> <strong>{draft.averageReelViews.toLocaleString('ru-RU')} просм.</strong></div>
             <div className="summary-row"><span>Банк:</span> <strong>100 000 ₽</strong></div>
             <div className="summary-row"><span>Дней:</span> <strong>30</strong></div>

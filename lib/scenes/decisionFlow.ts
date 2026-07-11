@@ -33,8 +33,30 @@ const CONTENT_TYPES: Array<{ id: ContentType; icon: string; title: string; descr
 export function buildCategoryOptions(available: ActionConfig[], energy: number): ChoiceOption[] {
   const ids = new Set(available.map((action) => action.id));
   const order: DecisionCategory[] = energy < 35 ? ['recovery', 'demand', 'product', 'content', 'route', 'sales'] : ['demand', 'product', 'content', 'route', 'sales', 'recovery'];
-  return order.filter((category) => ACTIONS[category].some((id) => ids.has(id))).slice(0, 5)
+  const result: ChoiceOption[] = order.filter((category) => ACTIONS[category].some((id) => ids.has(id))).slice(0, energy >= 15 ? 4 : 5)
     .map((category) => ({ id: `__category:${category}`, ...COPY[category] }));
+  const canParallel = energy >= 15 && ACTIONS.content.some((id) => ids.has(id)) && ACTIONS.route.some((id) => ids.has(id));
+  if (canParallel) result.push({ id: '__parallel_menu', icon: '⏱️', title: 'Сделать параллельно', description: 'Совместить контент со сборкой бота или прогрева.' });
+  return result;
+}
+
+export function buildParallelScene(state: GameState, available: ActionConfig[]): ChoiceScene {
+  const ids = new Set(available.map((action) => action.id));
+  const pairs = [
+    ['reels_7d', 'simple_bot_specialist', 'Рилсы + простой бот'],
+    ['reels_7d', 'ai_bot_specialist', 'Рилсы + ИИ-бот'],
+    ['stories_3d', 'guide_specialist', 'Сторис + гайд'],
+    ['reels_7d', 'video_specialist', 'Рилсы + видеоурок'],
+    ['telegram_warmup', 'reels_7d', 'Telegram + рилсы'],
+  ].filter(([a, b]) => ids.has(a) && ids.has(b));
+  return { type: 'choice', image: 'character_working', question: 'Какие задачи запустите параллельно?',
+    subtext: 'Длительность — по самой долгой задаче плюс один день координации. Энергия расходуется сильнее.',
+    options: pairs.map(([a, b, title]) => ({ id: `__parallel:${a}:${b}`, icon: '⏱️', title, description: 'Разрешённая движком параллельная комбинация.' })) };
+}
+
+export function buildParallelContentTypeScene(actionAId: string, actionBId: string): ChoiceScene {
+  return { type: 'choice', image: 'character_thinking', question: 'О чём будет контент в этой связке?',
+    options: CONTENT_TYPES.map((content) => ({ ...content, id: `__parallel_run:${content.id}:${actionAId}:${actionBId}` })) };
 }
 
 export function buildCategoryScene(state: GameState, available: ActionConfig[], category: DecisionCategory, toChoice: (action: ActionConfig) => ChoiceOption): ChoiceScene {
@@ -49,9 +71,14 @@ export function buildContentTypeScene(action: ChoiceOption): ChoiceScene {
     options: CONTENT_TYPES.map((content) => ({ ...content, id: `__content:${content.id}`, payload: { actionId: action.id, contentType: content.id } })) };
 }
 
-export function buildInitialPlanScenes(): ChoiceScene[] {
+export function buildInitialPlanScenes(state: GameState): ChoiceScene[] {
+  const sources = [] as string[][];
+  if (state.player.averageReelViews > 0) sources.push(['reels', '🎥', 'Рилсы']);
+  if (state.player.averageStoryViews > 0) sources.push(['stories', '📱', 'Сторис']);
+  if (state.player.telegramStatus !== 'none') sources.push(['telegram', '✈️', 'Telegram']);
+  if (sources.length === 0) sources.push(['reels', '🌱', 'Начать с нуля']);
   return [
-    planScene('source', 'Где будете брать людей?', [['reels', '🎥', 'Рилсы'], ['stories', '📱', 'Сторис'], ['telegram', '✈️', 'Telegram']]),
+    planScene('source', 'Где будете брать людей?', sources),
     planScene('entry', 'Куда поведёте заинтересованных?', [['direct_messages', '💬', 'В директ'], ['guide', '📄', 'На гайд'], ['website', '🌐', 'На сайт']]),
     planScene('sale', 'Как будете продавать?', [['manual_chat', '⌨️', 'В переписке'], ['call', '📞', 'На созвоне'], ['website_auto', '🛒', 'Через сайт']]),
     planScene('processing', 'Кто будет отвечать людям?', [['manual', '🙋', 'Я сама / сам'], ['manager', '👩‍💼', 'Менеджер'], ['simple_bot', '🤖', 'Бот']]),
@@ -70,8 +97,15 @@ export function routeFromPlan(plan: Record<string, string>): RouteSelection {
     saleMethod: (plan.sale ?? 'manual_chat') as RouteSelection['saleMethod'], followup: (plan.followup ?? 'none') as RouteSelection['followup'] };
 }
 
+export function initialPlanSummary(name: string, plan: Record<string, string>): string[] {
+  const source = { reels: 'снимать рилсы', stories: 'выходить в сторис', telegram: 'писать в Telegram' }[plan.source] ?? 'делать контент';
+  const sale = { manual_chat: 'продавать в переписке', call: 'приглашать на созвон', website_auto: 'продавать через сайт' }[plan.sale] ?? 'продавать лично';
+  const processor = { manual: 'отвечать самостоятельно', manager: 'передать ответы менеджеру', simple_bot: 'подключить бота' }[plan.processing] ?? 'отвечать самостоятельно';
+  return [`${name} собирает первоначальный план.`, `«Я буду ${source}, ${sale} и ${processor}. Если схема не сработает — изменю её по ходу запуска.»`];
+}
+
 export function operationalRoute(state: GameState): RouteSelection {
-  const planned = state.initialPlan ?? state.activeRoute;
+  const planned = state.activeRoute;
   const entry = planned.entry === 'guide' && state.assets.guide ? 'guide'
     : planned.entry === 'video_lesson' && state.assets.videoLesson ? 'video_lesson'
       : planned.entry === 'website' && state.assets.website ? 'website' : 'direct_messages';

@@ -98,6 +98,10 @@ export function DiagnosisScreen({ scene, onCta, onRestart }: Props) {
             <span className="financial-value">{rub(diag.financials.bankRemaining)}</span>
           </div>
           <div className="financial-card">
+            <span className="financial-label">Расходы</span>
+            <span className="financial-value">{rub(diag.financials.expenses)}</span>
+          </div>
+          <div className="financial-card">
             <span className="financial-label">Доступные деньги</span>
             <span className="financial-value financial-value--up">{rub(diag.financials.totalLiquidity)}</span>
           </div>
@@ -117,7 +121,13 @@ export function DiagnosisScreen({ scene, onCta, onRestart }: Props) {
         </div>
 
         <div className={`dream-status${dreamsMet ? ' dream-status--met' : ' dream-status--missed'}`}>
-          {dreamsMet ? '🎯 Личная цель достигнута! Деньги на мечту есть.' : `📍 До личной цели не хватило ${rub(personalGoal - diag.financials.revenue)}`}
+          {dreamsMet ? '🎯 Личная цель достигнута! Деньги на мечты есть.' : `📍 До личной цели не хватило ${rub(Math.max(0, personalGoal - diag.financials.dreamMoney))}`}
+        </div>
+        <div className="insight-card">
+          <h3>Мечты после запуска</h3>
+          <ul>
+            {diag.dreams.map((dream) => <li key={dream.id}>{dream.affordable ? '✅' : '❌'} {dream.title} — {rub(dream.price)}</li>)}
+          </ul>
         </div>
 
         {/* Decisions and Mistakes */}
@@ -133,12 +143,17 @@ export function DiagnosisScreen({ scene, onCta, onRestart }: Props) {
           <div className="insight-card">
             <h3 style={{ fontSize: '1rem', marginBottom: '0.5rem', color: '#dc2626' }}>❌ Главные ошибки</h3>
             <ul style={{ paddingLeft: '1rem', margin: 0, fontSize: '0.9rem' }}>
-              {diag.counterfactuals.length > 0 
-                ? diag.counterfactuals.map((c, i) => <li key={i}>{c.change}</li>)
+              {diag.mistakes.length > 0
+                ? diag.mistakes.map((mistake, i) => <li key={i}>{mistake.message}</li>)
                 : <li>Грубых ошибок не найдено</li>}
             </ul>
           </div>
         </div>
+        {diag.counterfactuals.length > 0 && <div className="insight-card">
+          <h3>Что могло сработать лучше при тех же стартовых условиях</h3>
+          <ul>{diag.counterfactuals.map((item) => <li key={item.change}>{item.change}: ориентир +{rub(item.expectedProfitDelta)} прибыли</li>)}</ul>
+          <p>Это модельная оценка, а не гарантированный результат.</p>
+        </div>}
         
         {/* Lost Leads info */}
         {metrics.expectedLostRevenue > 0 && (
@@ -154,7 +169,7 @@ export function DiagnosisScreen({ scene, onCta, onRestart }: Props) {
         {/* CTA */}
         <div className="scene-btn-row">
           <button className="btn-primary" onClick={onCta}>
-            Разобрать мой запуск
+            Получить бесплатную консультацию
           </button>
           <button className="btn-secondary" onClick={onRestart}>
             Пройти заново

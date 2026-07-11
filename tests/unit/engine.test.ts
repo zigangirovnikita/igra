@@ -48,6 +48,21 @@ describe('commands and invariants', () => {
     expect(next.history.at(-1)?.type).toBe('initial_plan_set');
   });
 
+  it('turns a pilot offer into a real sales attempt', () => {
+    const state = createInitialState(setup, config, 'pilot_attempt_seed');
+    const next = applyCommand(state, config, { commandId: 'pilot-offer', type: 'start_action', payload: { actionId: 'demand_pilot_offer' } });
+    const cohort = next.cohorts.find((item) => item.sourceActionId === 'demand_pilot_offer');
+    expect(cohort).toBeDefined();
+    expect(cohort?.applications).toBe(3);
+    expect(next.assets.demandConfidence).toBe(1);
+  });
+
+  it('records reflection answers for the final diagnosis', () => {
+    const state = createInitialState(setup, config, 'reflection_seed');
+    const next = applyCommand(state, config, { commandId: 'reflection', type: 'record_reflection', payload: { eventId: 'weak_stories', answer: 'audience' } });
+    expect(next.history.at(-1)).toMatchObject({ type: 'reflection', message: 'audience' });
+  });
+
   it('does not apply the same command twice', () => {
     const state = createInitialState(setup, config, 'idempotent_seed');
     const command = { commandId: 'same', type: 'start_action' as const, payload: { actionId: 'demand_poll' } };

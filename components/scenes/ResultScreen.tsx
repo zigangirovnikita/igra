@@ -28,7 +28,7 @@ export function ResultScreen({ scene, onNext }: Props) {
         )}
         <div className="scene-btn-row">
           <button className="btn-primary" onClick={onNext}>
-            Посмотреть показатели →
+            Продолжить →
           </button>
         </div>
       </div>

@@ -4,6 +4,7 @@ export const setupSchema = z.object({
   avatarGender: z.enum(['female', 'male']),
   name: z.string().trim().min(2).max(30),
   niche: z.string().trim().min(2).max(120),
+  productName: z.string().trim().min(2).max(160).optional(),
   superpowers: z.array(z.string()).length(2).refine((items) => new Set(items).size === 2, 'Выберите две разные суперсилы'),
   productType: z.string().min(1),
   productPrice: z.coerce.number().int().min(100).max(5_000_000),
@@ -21,7 +22,7 @@ export const setupSchema = z.object({
 export const commandRequestSchema = z.object({
   commandId: z.string().min(1).max(120),
   expectedVersion: z.number().int().nonnegative(),
-  type: z.enum(['start_action', 'set_route', 'set_plan', 'start_parallel', 'resolve_mini_game', 'finish_game']),
+  type: z.enum(['start_action', 'set_route', 'set_plan', 'record_reflection', 'process_inbound', 'start_parallel', 'resolve_mini_game', 'finish_game']),
   idempotencyKey: z.string().optional(),
   payload: z.unknown().optional()
 });

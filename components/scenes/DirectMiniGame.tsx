@@ -9,13 +9,11 @@ type Props = {
   busy: boolean;
 };
 
-const MAX_MANUAL = 15;
-
 export function DirectMiniGame({ scene, onResolve, busy }: Props) {
   const [answered, setAnswered] = useState<Set<number>>(new Set());
 
   function handleAnswer(index: number) {
-    if (answered.size >= MAX_MANUAL || answered.has(index)) return;
+    if (answered.size >= scene.manualCapacity || answered.has(index)) return;
     setAnswered((prev) => new Set([...prev, index]));
   }
 
@@ -28,7 +26,7 @@ export function DirectMiniGame({ scene, onResolve, busy }: Props) {
         <div className="minigame-header">
           <h2 className="minigame-title">📱 Директ взорвался!</h2>
           <p className="minigame-subtitle">
-            В директ написали <strong>{scene.totalInbound}</strong> человек. Вы успеваете ответить только {MAX_MANUAL}.
+            В директ написали <strong>{scene.totalInbound}</strong> человек. Ваш ручной предел — {scene.manualCapacity}.
           </p>
         </div>
 
@@ -38,7 +36,7 @@ export function DirectMiniGame({ scene, onResolve, busy }: Props) {
               <span className="message-text">«{msg}»</span>
               <button
                 className="btn-answer"
-                disabled={answered.has(i) || answered.size >= MAX_MANUAL || busy}
+                disabled={answered.has(i) || answered.size >= scene.manualCapacity || busy}
                 onClick={() => handleAnswer(i)}
               >
                 {answered.has(i) ? '✓' : 'Ответить'}
@@ -72,7 +70,7 @@ export function DirectMiniGame({ scene, onResolve, busy }: Props) {
               disabled={busy}
               onClick={() => onResolve('auto')}
             >
-              Не успеваю — пусть бот ответит
+              Рассчитать автоматически
             </button>
           </div>
         </div>

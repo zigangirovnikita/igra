@@ -4,6 +4,7 @@ import { calculateDiagnostics } from '../diagnostics/report';
 import { advanceDays, completeAction, recalculateMetrics } from '../time/ticks';
 import { applyProcessing } from '../calculations/funnel';
 import { findAction, getActionAvailability } from './availability';
+import { createInitialState } from '../state/initial';
 
 export function applyCommand(input: GameState, config: GameConfig, command: GameCommand): GameState {
   if (input.appliedCommandIds.includes(command.commandId)) return input;
@@ -19,7 +20,16 @@ export function applyCommand(input: GameState, config: GameConfig, command: Game
     state.history.push({ day: state.resources.day, type: 'route_changed', message: 'Маршрут обновлён' });
   } else if (command.type === 'set_plan') {
     state.initialPlan = command.payload;
+    state.activeRoute = {
+      ...state.activeRoute,
+      saleMethod: command.payload.saleMethod === 'call' ? 'call' : 'manual_chat',
+      followup: command.payload.followup === 'manual' ? 'manual' : 'none',
+    };
     state.history.push({ day: state.resources.day, type: 'initial_plan_set', message: 'Первоначальный план запуска сохранён' });
+  } else if (command.type === 'record_reflection') {
+    state.history.push({ day: state.resources.day, type: 'reflection', message: command.payload.answer, payload: { eventId: command.payload.eventId } });
+  } else if (command.type === 'process_inbound') {
+    state = processInbound(state, config, command.payload.cohortId, command.payload.amount);
   } else if (command.type === 'start_parallel') {
     state = startParallel(state, config, command.payload.actionAId, command.payload.actionBId, command.payload);
   } else if (command.type === 'resolve_mini_game') {
@@ -34,11 +44,25 @@ export function applyCommand(input: GameState, config: GameConfig, command: Game
   return state;
 }
 
+function processInbound(input: GameState, config: GameConfig, cohortId: string, amount: number): GameState {
+  const state = structuredClone(input);
+  const index = state.cohorts.findIndex((cohort) => cohort.id === cohortId);
+  if (index < 0) throw new Error(`Unknown cohort: ${cohortId}`);
+  const capacity = state.player.superpowers.includes('energy') ? 25 : 15;
+  const bounded = Math.max(0, Math.min(amount, capacity, state.cohorts[index].unprocessedWarm));
+  state.cohorts[index] = applyProcessing(state, config, state.cohorts[index], 'manual', bounded);
+  state.resources.energy = Math.max(0, state.resources.energy - bounded * (state.player.superpowers.includes('energy') ? 0.225 : 0.3));
+  state.history.push({ day: state.resources.day, type: 'inbound_processed', message: `Обработано входящих: ${Math.round(bounded)}`, payload: { cohortId } });
+  recalculateMetrics(state);
+  return state;
+}
+
 export function finishGame(input: GameState, config: GameConfig): GameState {
   const state = advanceDays(input, config, config.totalDays);
   recalculateMetrics(state);
   state.status = 'finished';
   state.diagnostics = calculateDiagnostics(state, config);
+  state.diagnostics.counterfactuals = replayCounterfactuals(input, config);
   return state;
 }
 
@@ -66,10 +90,40 @@ function startAction(
     day: state.resources.day,
     type: 'action_started',
     message: `Начато действие: ${action.title}`,
-    payload: { actionId: action.id }
+    payload: { ...payload, actionId: action.id }
   });
   const target = Math.min(config.totalDays, state.resources.day + Math.max(0, action.days));
   return advanceDays(state, config, target);
+}
+
+function replayCounterfactuals(input: GameState, config: GameConfig): Array<{ change: string; expectedProfitDelta: number }> {
+  const actions = input.history.filter((entry) => entry.type === 'action_started').map((entry) => ({ actionId: String(entry.payload?.actionId), payload: entry.payload ?? {} }));
+  const baselineProfit = input.metrics.revenue - input.metrics.expenses;
+  const candidates: Array<{ from: (id: string) => boolean; to: string; change: string; insert?: boolean }> = [
+    { from: (id) => id === 'product_studio' || id === 'product_home', to: 'product_pilot', change: 'Полный продукт до спроса → быстрый пилот' },
+    { from: (id) => id === 'website_basic' || id === 'website_beautiful', to: 'video_specialist', change: 'Сайт → видеоурок' },
+    { from: (id) => id === 'stories_3d', to: 'reels_stories_7d', change: 'Повторные сторис → рилсы + сторис' },
+  ];
+  if (!actions.some((item) => item.actionId.startsWith('demand_'))) candidates.push({ from: () => false, to: 'demand_pilot_offer', change: 'Без проверки спроса → пилотное предложение', insert: true });
+  if (!actions.some((item) => item.actionId.includes('followup'))) candidates.push({ from: () => false, to: 'manual_followup', change: 'Без дожима → ручной дожим', insert: true });
+
+  return candidates.map((candidate) => {
+    let state = createInitialState(input.player, config, input.seed);
+    if (input.initialPlan) state.initialPlan = input.initialPlan;
+    let replaced = false;
+    const sequence = actions.map((item) => {
+      if (!replaced && candidate.from(item.actionId)) { replaced = true; return { actionId: candidate.to, payload: { actionId: candidate.to } }; }
+      return item;
+    });
+    if (!replaced && candidate.insert) sequence.unshift({ actionId: candidate.to, payload: { actionId: candidate.to } });
+    for (const item of sequence) {
+      const action = config.actions.find((entry) => entry.id === item.actionId);
+      if (!action || !getActionAvailability(state, action, config).available) continue;
+      state = startAction(state, config, action, item.payload);
+    }
+    recalculateMetrics(state);
+    return { change: candidate.change, expectedProfitDelta: state.metrics.revenue - state.metrics.expenses - baselineProfit };
+  }).filter((item) => item.expectedProfitDelta > 0).sort((a, b) => b.expectedProfitDelta - a.expectedProfitDelta).slice(0, 3);
 }
 
 function startParallel(
@@ -113,10 +167,11 @@ function resolveMiniGame(input: GameState, config: GameConfig, cohortId: string,
   if (mode === 'auto') {
     const capacity = (state.player.superpowers.includes('energy') ? 25 : 15) * 1.0; 
     state.cohorts[cohortIndex] = applyProcessing(state, config, state.cohorts[cohortIndex], 'manual', capacity);
+    state.resources.energy = Math.max(0, state.resources.energy - capacity * (state.player.superpowers.includes('energy') ? 0.225 : 0.3));
   } else {
     state.cohorts[cohortIndex] = applyProcessing(state, config, state.cohorts[cohortIndex], 'manual', processed);
     if (processed && processed > 0) {
-      state.resources.energy = Math.max(0, state.resources.energy - processed * 0.3); // 0.3 energy per response
+      state.resources.energy = Math.max(0, state.resources.energy - processed * (state.player.superpowers.includes('energy') ? 0.225 : 0.3));
     }
   }
   
