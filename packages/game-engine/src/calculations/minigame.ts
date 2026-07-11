@@ -1,5 +1,5 @@
 import type { GameState, MiniGameMessage, MiniGameMessageKind, MiniGameSession } from '../types';
-import { stochasticRound } from '../random/keyed';
+import { hashToUnitInterval } from '../random/keyed';
 
 const MESSAGE_TEXTS: Record<MiniGameMessageKind, string[]> = {
   payment_ready: [
@@ -53,11 +53,11 @@ export function generateMiniGameSession(state: GameState, cohortId: string): Min
   const messages: MiniGameMessage[] = [];
 
   for (let index = 0; index < count; index += 1) {
-    const roll = stochasticRound(100, `${state.seed}|${cohort.id}|mini_game_kind|${index}`);
+    const roll = hashToUnitInterval(state.seed, cohort.id, 'mini_game_kind', index) * 100;
     const kind = kindForRoll(roll);
     const variants = MESSAGE_TEXTS[kind];
-    const variantRoll = stochasticRound(variants.length * 100, `${state.seed}|${cohort.id}|mini_game_text|${index}`);
-    const text = variants[Math.abs(variantRoll) % variants.length];
+    const variantIndex = Math.floor(hashToUnitInterval(state.seed, cohort.id, 'mini_game_text', index) * variants.length);
+    const text = variants[Math.min(variants.length - 1, variantIndex)];
     const valuable = kind === 'payment_ready' || kind === 'call_ready';
     const irrelevant = kind === 'irrelevant' || kind === 'unusual';
 
