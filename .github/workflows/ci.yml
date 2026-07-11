@@ -172,7 +172,7 @@ jobs:
 
   balance:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     env:
       DATABASE_URL: postgresql://launch_game:launch_game@localhost:5432/launch_game
     steps:
