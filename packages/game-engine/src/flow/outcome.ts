@@ -14,7 +14,7 @@ export function confirmAction(state: GameState, config: GameConfig): GameState {
   if (!action) throw new Error(`Action not found: ${actionId}`);
 
   let finalCost = action.cost;
-  if (action.repeatPolicy === 'upgrade' && action.upgradeCost !== undefined && action.upgradeGroup) {
+  if (action.upgradeCost !== undefined && action.upgradeGroup) {
     const hasPrevious = state.history.some((historyEntry) => {
       if (historyEntry.type !== 'action_completed' || !historyEntry.payload?.actionId) return false;
       const previousAction = config.actions.find((candidate) => candidate.id === historyEntry.payload?.actionId);
