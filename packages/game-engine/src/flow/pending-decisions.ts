@@ -84,7 +84,8 @@ export function resolvePendingDecision(
     if (payload.action === 'rest_day' || payload.action === 'rest_two_days') {
       const days = payload.action === 'rest_two_days' ? 2 : 1;
       if (state.resources.day + days > config.totalDays) throw new Error('Not enough days to rest');
-      state.resources.day += days;
+      // complete_day advances once more; pre-advance only the additional rest days here.
+      state.resources.day += Math.max(0, days - 1);
       state.resources.energy = Math.min(100, state.resources.energy + (days === 2 ? 45 : 20));
     } else if (payload.action === 'delegate') {
       if (state.resources.bank < 5_000) throw new Error('Not enough money to delegate');
