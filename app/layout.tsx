@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import './globals.css';
+import './scene-choice-ui.css';
 
 export const metadata: Metadata = {
   title: 'Проживи 30 дней запуска',
