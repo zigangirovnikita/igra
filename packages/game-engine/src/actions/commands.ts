@@ -199,8 +199,26 @@ function validatedMiniGameAnswerCount(state: GameState, answeredMessageIds: stri
   const validIds = new Set(miniGame.messages.map((message) => message.id));
   const uniqueValidCount = new Set(answeredMessageIds.filter((id) => validIds.has(id))).size;
   const elapsedMs = Math.max(0, now - startedAt);
-  const timeCapacity = Math.min(miniGame.messages.length, Math.floor(elapsedMs / 250) + 1);
+  const timeCapacity = miniGameTimeCapacity(state.resources.energy, elapsedMs, miniGame.messages.length);
   return Math.min(uniqueValidCount, timeCapacity);
+}
+
+function miniGameTimeCapacity(startingEnergy: number, elapsedMs: number, messageCount: number): number {
+  if (messageCount <= 0) return 0;
+
+  let capacity = 1;
+  let remainingElapsed = elapsedMs;
+  let projectedEnergy = Math.max(0, startingEnergy - 0.3);
+
+  while (capacity < messageCount) {
+    const cooldown = projectedEnergy < 30 ? 900 : 600;
+    if (remainingElapsed < cooldown) break;
+    remainingElapsed -= cooldown;
+    capacity += 1;
+    projectedEnergy = Math.max(0, projectedEnergy - 0.3);
+  }
+
+  return capacity;
 }
 
 function adviceGroupForAction(actionId?: string): string {
