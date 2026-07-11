@@ -54,6 +54,7 @@ const policies: Policy[] = [
 export const scenarios: ScenarioFixture[] = policies.map((item) => scenario(item.id, baseSetup, buildCommands(item)));
 
 function buildCommands(item: Policy): GameCommand[] {
+  const executableNurture: NurtureType[] = item.nurture.includes('telegram') ? ['telegram'] : ['none'];
   return [
     command('c1', 'advance_intro', {}),
     command('c1b', 'advance_intro', {}),
@@ -86,7 +87,7 @@ function buildCommands(item: Policy): GameCommand[] {
     command('c23b', 'configure_action', {
       route: {
         entry: 'direct_messages',
-        nurture: item.nurture,
+        nurture: executableNurture,
         processing: 'manual',
         saleMethod: item.saleMethod,
         followup: 'none',
