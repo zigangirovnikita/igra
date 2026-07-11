@@ -116,14 +116,20 @@ export function applyCommand(input: GameState, config: GameConfig, command: Game
     case 'record_reflection':
       state.history.push({ day: state.resources.day, type: 'reflection', message: command.payload.answer, payload: { eventId: command.payload.eventId } });
       break;
-    case 'resolve_mini_game':
+    case 'resolve_mini_game': {
       if (state.pendingDecision?.type !== 'mini_game') throw new Error('No active mini-game decision');
+      const payload = command.payload as {
+        cohortId: string;
+        mode: 'manual' | 'auto';
+        answeredMessageIds?: string[];
+      };
       state = PendingDecisions.resolvePendingDecision(state, config, {
-        cohortId: command.payload.cohortId,
-        action: command.payload.mode === 'manual' ? 'process_mini_game' : 'skip_mini_game',
-        amount: command.payload.processed,
+        cohortId: payload.cohortId,
+        action: payload.mode === 'manual' ? 'process_mini_game' : 'skip_mini_game',
+        amount: payload.mode === 'manual' ? validatedMiniGameAnswerCount(state, payload.answeredMessageIds ?? []) : 0,
       });
       break;
+    }
     case 'acknowledge_event': {
       const eventInstanceId = command.payload.eventId as string;
       if (!eventInstanceId) throw new Error('eventId required');
@@ -179,6 +185,22 @@ export function finishGame(input: GameState, config: GameConfig): GameState {
   state.flow.step = 'final_diagnosis';
   state.diagnostics = calculateDiagnostics(state, config);
   return state;
+}
+
+function validatedMiniGameAnswerCount(state: GameState, answeredMessageIds: string[]): number {
+  const miniGame = state.miniGame;
+  if (!miniGame || miniGame.status !== 'active') return 0;
+
+  const now = Date.now();
+  const startedAt = Date.parse(miniGame.startedAt);
+  const expiresAt = Date.parse(miniGame.expiresAt);
+  if (!Number.isFinite(startedAt) || !Number.isFinite(expiresAt) || now > expiresAt) return 0;
+
+  const validIds = new Set(miniGame.messages.map((message) => message.id));
+  const uniqueValidCount = new Set(answeredMessageIds.filter((id) => validIds.has(id))).size;
+  const elapsedMs = Math.max(0, now - startedAt);
+  const timeCapacity = Math.min(miniGame.messages.length, Math.floor(elapsedMs / 250) + 1);
+  return Math.min(uniqueValidCount, timeCapacity);
 }
 
 function adviceGroupForAction(actionId?: string): string {
