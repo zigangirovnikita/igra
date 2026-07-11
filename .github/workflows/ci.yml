@@ -63,9 +63,20 @@ jobs:
           if-no-files-found: error
           retention-days: 1
       - run: pnpm validate:config
-      - run: pnpm build
+      - name: Production build
+        id: build
+        continue-on-error: true
+        run: pnpm build 2>&1 | tee build.log
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: build.log
+          if-no-files-found: error
+          retention-days: 1
       - name: Fail failed quality checks
-        if: steps.typecheck.outcome == 'failure' || steps.tests.outcome == 'failure'
+        if: steps.typecheck.outcome == 'failure' || steps.tests.outcome == 'failure' || steps.build.outcome == 'failure'
         run: exit 1
 
   database:
@@ -140,7 +151,24 @@ jobs:
       - run: pnpm exec prisma generate
       - run: pnpm exec prisma migrate deploy
       - run: pnpm exec playwright install --with-deps chromium
-      - run: pnpm test:e2e
+      - name: Playwright E2E
+        id: e2e
+        continue-on-error: true
+        run: pnpm test:e2e 2>&1 | tee e2e.log
+      - name: Upload E2E diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-diagnostics
+          path: |
+            e2e.log
+            test-results
+            playwright-report
+          if-no-files-found: warn
+          retention-days: 1
+      - name: Fail failed E2E
+        if: steps.e2e.outcome == 'failure'
+        run: exit 1
 
   balance:
     runs-on: ubuntu-latest
