@@ -12,14 +12,14 @@ export function findAction(config: GameConfig, actionId: string): ActionConfig {
 export function getActionAvailability(state: GameState, action: ActionConfig, config: GameConfig): Availability {
   if (state.status === 'finished') return { available: false, reason: 'Сессия уже завершена' };
 
+  const executedUpgradeLevels = action.upgradeGroup
+    ? getExecutedUpgradeLevels(state, config, action.upgradeGroup)
+    : [];
+  const maxExecutedLevel = executedUpgradeLevels.length > 0 ? Math.max(...executedUpgradeLevels) : 0;
+
   let finalCost = action.cost;
-  if (action.repeatPolicy === 'upgrade' && action.upgradeCost !== undefined && action.upgradeGroup) {
-    const hasPrevious = state.history.some((historyEntry) => {
-      if (historyEntry.type !== 'action_completed' || !historyEntry.payload?.actionId) return false;
-      const previousAction = config.actions.find((candidate) => candidate.id === historyEntry.payload?.actionId);
-      return previousAction?.upgradeGroup === action.upgradeGroup;
-    });
-    if (hasPrevious) finalCost = action.upgradeCost;
+  if (action.upgradeCost !== undefined && action.upgradeGroup && maxExecutedLevel > 0) {
+    finalCost = action.upgradeCost;
   }
 
   if (state.resources.bank < finalCost) {
@@ -61,25 +61,26 @@ export function getActionAvailability(state: GameState, action: ActionConfig, co
     }
   }
 
-  if (action.repeatPolicy === 'upgrade' && action.upgradeGroup) {
-    const executedUpgrades = state.history
-      .filter((historyEntry) => historyEntry.type === 'action_completed' && historyEntry.payload?.actionId)
-      .map((historyEntry) => {
-        const executedAction = config.actions.find((candidate) => candidate.id === historyEntry.payload?.actionId);
-        return executedAction?.upgradeGroup === action.upgradeGroup ? (executedAction.upgradeLevel ?? null) : null;
-      })
-      .filter((level): level is number => typeof level === 'number');
-
-    const maxExecutedLevel = executedUpgrades.length > 0 ? Math.max(...executedUpgrades) : 0;
-    if (action.upgradeLevel !== undefined && maxExecutedLevel >= action.upgradeLevel) {
+  if (action.upgradeGroup && action.upgradeLevel !== undefined) {
+    if (maxExecutedLevel >= action.upgradeLevel) {
       return { available: false, reason: 'Уже выполнено или есть уровень выше' };
     }
-    if (action.upgradeLevel !== undefined && action.upgradeLevel > maxExecutedLevel + 1) {
+    if (action.upgradeLevel > maxExecutedLevel + 1) {
       return { available: false, reason: 'Сначала выполните предыдущий уровень' };
     }
   }
 
   return { available: true };
+}
+
+function getExecutedUpgradeLevels(state: GameState, config: GameConfig, upgradeGroup: string): number[] {
+  return state.history
+    .filter((historyEntry) => historyEntry.type === 'action_completed' && historyEntry.payload?.actionId)
+    .map((historyEntry) => {
+      const executedAction = config.actions.find((candidate) => candidate.id === historyEntry.payload?.actionId);
+      return executedAction?.upgradeGroup === upgradeGroup ? (executedAction.upgradeLevel ?? null) : null;
+    })
+    .filter((level): level is number => typeof level === 'number');
 }
 
 export function isManualEnergyAction(actionId: string): boolean {
