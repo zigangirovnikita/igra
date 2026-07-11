@@ -101,7 +101,15 @@ export const commandRequestSchema = z.discriminatedUnion('type', [
   z.object({ ...base, type: z.literal('cancel_finish'), payload: z.object({}).optional() }),
   z.object({ ...base, type: z.literal('repair_flow'), payload: z.object({}).optional() }),
   z.object({ ...base, type: z.literal('abandon_game'), payload: z.object({}).optional() }),
-  z.object({ ...base, type: z.literal('resolve_mini_game'), payload: z.object({ cohortId: z.string().min(1), mode: z.enum(['manual', 'auto']), processed: z.number().int().min(0).max(80).optional() }) }),
+  z.object({
+    ...base,
+    type: z.literal('resolve_mini_game'),
+    payload: z.object({
+      cohortId: z.string().min(1),
+      mode: z.enum(['manual', 'auto']),
+      answeredMessageIds: z.array(z.string().min(1).max(180)).max(80).optional(),
+    }),
+  }),
   z.object({ ...base, type: z.literal('record_reflection'), payload: z.object({ eventId: z.string().min(1), answer: z.string().trim().min(1).max(1000) }) }),
   z.object({ ...base, type: z.literal('acknowledge_event'), payload: z.object({ eventId: z.string().min(1).max(240) }) }),
 ]);
