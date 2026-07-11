@@ -1,4 +1,4 @@
-import type { GameState, GameConfig, ActionConfig, ActionOutcome, DayReport, LeadCohort, ContentType, ProcessingType } from '../types';
+import type { ActionConfig, ActionOutcome, ContentType, DayReport, GameConfig, GameState, LeadCohort, ProcessingType } from '../types';
 import { applyEffect } from '../actions/dsl';
 import { createContentCohort } from '../calculations/content';
 import { applyEntry, applyFollowup, applyProcessing, applySales } from '../calculations/funnel';
@@ -10,38 +10,49 @@ export function confirmAction(state: GameState, config: GameConfig): GameState {
   }
 
   const actionId = state.pendingAction.actionId;
-  const action = config.actions.find(a => a.id === actionId);
+  const action = config.actions.find((candidate) => candidate.id === actionId);
   if (!action) throw new Error(`Action not found: ${actionId}`);
 
   let finalCost = action.cost;
-
   if (action.repeatPolicy === 'upgrade' && action.upgradeCost !== undefined && action.upgradeGroup) {
-    const hasPrevious = state.history.some(h => {
-      if (h.type !== 'action_completed' || !h.payload?.actionId) return false;
-      const prevA = config.actions.find(a => a.id === h.payload!.actionId);
-      return prevA?.upgradeGroup === action.upgradeGroup;
+    const hasPrevious = state.history.some((historyEntry) => {
+      if (historyEntry.type !== 'action_completed' || !historyEntry.payload?.actionId) return false;
+      const previousAction = config.actions.find((candidate) => candidate.id === historyEntry.payload?.actionId);
+      return previousAction?.upgradeGroup === action.upgradeGroup;
     });
-    if (hasPrevious) {
-      finalCost = action.upgradeCost;
-    }
+    if (hasPrevious) finalCost = action.upgradeCost;
   }
 
+  if (state.resources.bank < finalCost) throw new Error('Not enough money');
+  if (state.resources.energy < action.energyCost) throw new Error('Not enough energy');
+
+  const beforeBank = state.resources.bank;
+  const beforeEnergy = state.resources.energy;
+  const beforeMetrics = { ...state.metrics };
+  const startedDay = state.resources.day;
+  const finishedDay = Math.min(config.totalDays, startedDay + Math.max(0, action.days - 1));
+
   state.resources.bank -= finalCost;
-  state.resources.energy = Math.max(0, state.resources.energy - action.energyCost);
+  state.resources.energy -= action.energyCost;
   state.metrics.expenses += finalCost;
 
   if (state.pendingAction.temporaryRoute) {
     state.activeRoute = state.pendingAction.temporaryRoute;
   }
 
-  const startedDay = state.resources.day;
-  const finishedDay = Math.min(config.totalDays, startedDay + Math.max(0, action.days - 1));
+  state.resources.day = finishedDay;
 
-  // Spend time immediately (advance to the next day after the action)
-  state.resources.day = Math.min(config.totalDays, startedDay + action.days);
-
-  // Execute effects immediately
-  const report = executeActionEffects(state, config, action, startedDay, finishedDay, state.pendingAction.contentType);
+  const report = executeActionEffects(
+    state,
+    config,
+    action,
+    startedDay,
+    finishedDay,
+    state.pendingAction.contentType,
+    beforeBank,
+    beforeEnergy,
+    beforeMetrics,
+  );
   state.lastOutcome = report.outcome;
   state.currentDayReport = report;
 
@@ -53,13 +64,7 @@ export function confirmAction(state: GameState, config: GameConfig): GameState {
   });
 
   state.pendingAction = null;
-
-  if (action.days > 0) {
-    state.flow.step = 'action_process'; // UI will acknowledge and go to action_result
-  } else {
-    state.flow.step = 'action_result'; // UI will show result immediately
-  }
-
+  state.flow.step = action.days > 0 ? 'action_process' : 'action_result';
   return state;
 }
 
@@ -69,14 +74,13 @@ export function executeActionEffects(
   action: ActionConfig,
   startedDay: number,
   finishedDay: number,
-  contentType?: string
+  contentType: string | undefined,
+  beforeBank: number,
+  beforeEnergy: number,
+  beforeMetrics: GameState['metrics'],
 ): DayReport {
-  const beforeMetrics = { ...state.metrics };
-  const beforeBank = state.resources.bank;
-  const beforeEnergy = state.resources.energy;
   const createdCohorts: string[] = [];
 
-  // Apply immediate effects
   for (const effect of action.effects) {
     applyEffect(state, effect);
   }
@@ -107,9 +111,9 @@ export function executeActionEffects(
     }));
   } else if (action.category === 'sales') {
     const saleMethod = action.id === 'calls' ? 'call' : 'manual_chat';
-    for (let i = 0; i < state.cohorts.length; i++) {
-      if (state.cohorts[i].unprocessedApplications > 0) {
-        state.cohorts[i] = applySales(state, config, state.cohorts[i], saleMethod, state.cohorts[i].unprocessedApplications);
+    for (let index = 0; index < state.cohorts.length; index += 1) {
+      if (state.cohorts[index].unprocessedApplications > 0) {
+        state.cohorts[index] = applySales(state, config, state.cohorts[index], saleMethod, state.cohorts[index].unprocessedApplications);
       }
     }
   }
@@ -121,18 +125,14 @@ export function executeActionEffects(
     title: action.title,
     startedDay,
     finishedDay,
-
     bankBefore: beforeBank,
     bankAfter: state.resources.bank,
-    bankSpent: beforeBank - state.resources.bank,
-
+    bankSpent: Math.max(0, beforeBank - state.resources.bank),
     energyBefore: beforeEnergy,
     energyAfter: state.resources.energy,
-    energySpent: beforeEnergy - state.resources.energy,
-
+    energySpent: Math.max(0, beforeEnergy - state.resources.energy),
     metricsBefore: beforeMetrics,
-    metricsAfter: state.metrics,
-
+    metricsAfter: { ...state.metrics },
     impressionsDelta: state.metrics.impressions - beforeMetrics.impressions,
     inboundDelta: state.metrics.inbound - beforeMetrics.inbound,
     processedDelta: state.metrics.processed - beforeMetrics.processed,
@@ -142,7 +142,6 @@ export function executeActionEffects(
     salesDelta: state.metrics.sales - beforeMetrics.sales,
     revenueDelta: state.metrics.revenue - beforeMetrics.revenue,
     lostDelta: state.metrics.lostLeads - beforeMetrics.lostLeads,
-
     createdCohortIds: createdCohorts,
     narrativeKeys: []
   };
@@ -169,28 +168,63 @@ function activateRouteTool(state: GameState, actionId: string): void {
 }
 
 function pickUpWarmBacklog(state: GameState, config: GameConfig, actionId: string): void {
-  const processing = actionId.startsWith('ai_bot') ? 'ai_bot' : actionId.startsWith('simple_bot') ? 'simple_bot' : 'manager';
+  const processing: ProcessingType = actionId.startsWith('ai_bot') ? 'ai_bot' : actionId.startsWith('simple_bot') ? 'simple_bot' : 'manager';
+  const recoveryRate = processing === 'ai_bot' ? 0.7 : processing === 'manager' ? 0.65 : 0.5;
   state.activeRoute = { ...state.activeRoute, processing };
   state.cohorts = state.cohorts.map((cohort) => {
     if (cohort.unprocessedInbound <= 0) return cohort;
-    const updated = { ...cohort, routeSnapshot: { ...cohort.routeSnapshot, processing: processing as ProcessingType } };
-    return applyProcessing(state, config, updated, 'auto');
+    const routeSnapshot = cohort.routeSnapshot;
+    const amount = Math.floor(cohort.unprocessedInbound * recoveryRate);
+    if (amount <= 0) return cohort;
+    const updated = applyProcessing(
+      state,
+      config,
+      { ...cohort, routeSnapshot: { ...routeSnapshot, processing } },
+      'auto',
+      amount,
+    );
+    return { ...updated, routeSnapshot };
   });
 }
 
 function runPilotOffer(state: GameState, config: GameConfig, finishedDay: number): string {
   const id = `pilot_offer_${finishedDay}`;
   let cohort: LeadCohort = {
-    id, createdDay: state.resources.day, sourceActionId: 'demand_pilot_offer', sourceType: 'stories', contentType: 'selling',
-    impressions: 3, inbound: 3, activated: 3, processed: 3, applications: 3, bookedCalls: 0, heldCalls: 0, sales: 0,
-    unprocessedInbound: 0, pendingFollowup: 0, inboundDecision: 'resolved', salesDecision: 'pending', followupDecision: 'not_ready',
-    deferredUntilDay: null, deferCount: 0, unprocessedApplications: 3, capacityLostLeads: 0,
+    id,
+    createdDay: finishedDay,
+    sourceActionId: 'demand_pilot_offer',
+    sourceType: 'stories',
+    contentType: 'selling',
+    impressions: 3,
+    inbound: 3,
+    activated: 3,
+    processed: 3,
+    applications: 3,
+    bookedCalls: 0,
+    heldCalls: 0,
+    sales: 0,
+    unprocessedInbound: 0,
+    pendingFollowup: 0,
+    inboundDecision: 'resolved',
+    salesDecision: 'pending',
+    followupDecision: 'not_ready',
+    deferredUntilDay: null,
+    deferCount: 0,
+    unprocessedApplications: 3,
+    capacityLostLeads: 0,
     losses: { entry: 0, processing: 0, qualification: 0, callBooking: 0, callNoShow: 0, sale: 0, followup: 0, capacity: 0 },
-    routeSnapshot: { ...state.activeRoute, capturedDay: state.resources.day }, 
-    contextSnapshot: { productPrice: state.launchPlan.productPrice || 0, productType: state.launchPlan.productType || '', demandConfidence: 0, productQuality: 0, energyAtCreation: state.resources.energy, createdDay: state.resources.day },
+    routeSnapshot: { ...state.activeRoute, capturedDay: finishedDay },
+    contextSnapshot: {
+      productPrice: state.launchPlan.productPrice || 0,
+      productType: state.launchPlan.productType || '',
+      demandConfidence: state.assets.demandConfidence,
+      productQuality: state.assets.productQuality,
+      energyAtCreation: state.resources.energy,
+      createdDay: finishedDay,
+    },
     followedUp: false,
   };
-  const productPrice = state.launchPlan.productPrice || 0;
+  const productPrice = cohort.contextSnapshot.productPrice;
   cohort = applySales(state, config, cohort, productPrice > 50_000 ? 'call' : 'manual_chat', 3);
   state.cohorts.push(cohort);
   return id;
