@@ -72,20 +72,26 @@ describe('commands and invariants', () => {
     }
 
     const action = config.actions.find((candidate) => candidate.id === 'product_pilot');
+    const outcome = state.lastOutcome;
     expect(action).toBeDefined();
-    expect(state.lastOutcome?.bankSpent).toBe(action?.cost);
-    expect(state.lastOutcome?.energySpent).toBe(action?.energyCost);
-    expect(state.lastOutcome?.bankBefore - (state.lastOutcome?.bankAfter ?? 0)).toBe(action?.cost);
-    expect(state.lastOutcome?.finishedDay - state.lastOutcome?.startedDay + 1).toBe(action?.days);
+    expect(outcome).toBeDefined();
+    if (!action || !outcome) throw new Error('Missing action outcome');
+
+    expect(outcome.bankSpent).toBe(action.cost);
+    expect(outcome.energySpent).toBe(action.energyCost);
+    expect(outcome.bankBefore - outcome.bankAfter).toBe(action.cost);
+    expect(outcome.finishedDay - outcome.startedDay + 1).toBe(action.days);
   });
 
   it('blocks an action when energy is below its complete cost', () => {
     const action = config.actions.find((candidate) => candidate.energyCost > 1 && candidate.enabled);
     expect(action).toBeDefined();
+    if (!action) throw new Error('Missing energy-consuming action');
+
     const state = createInitialState(setup, config, 'energy_seed');
     state.status = 'active';
-    state.resources.energy = Math.max(0, (action?.energyCost ?? 1) - 1);
-    const availability = getActionAvailability(state, action!, config);
+    state.resources.energy = Math.max(0, action.energyCost - 1);
+    const availability = getActionAvailability(state, action, config);
     expect(availability.available).toBe(false);
     if (!availability.available) expect(availability.reason).toMatch(/энергии/i);
   });
