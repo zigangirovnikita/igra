@@ -9,6 +9,7 @@ export function resolveCurrentScene(state: GameState): { scene: string; props?: 
   // However, flow.step might already be set to something related to finish
   const step = state.flow.step;
 
+  if (state.pendingDecision?.type === 'energy_crisis') return { scene: 'energy_crisis' };
   if (state.pendingDecision && !['finish_confirmation', 'goal_reached'].includes(step)) {
     return { scene: 'pending_decision' };
   }

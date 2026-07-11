@@ -1,5 +1,5 @@
 import type { GameState, GameConfig } from '@/packages/game-engine/src';
-import { CrisisScreen } from '../ui';
+import { MultiChoiceScreen } from '../ui';
 
 type FlowProps = {
   state: GameState;
@@ -8,16 +8,12 @@ type FlowProps = {
   busy: boolean;
 };
 
-export function EnergyCrisisFlow({ state: _state, dispatch, busy }: FlowProps) {
-  return (
-    <CrisisScreen
-      title="Выгорание!"
-      description="Энергия на нуле. Вы не можете продолжать работать в таком темпе."
-      crisisType="energy"
-      onAction={(id) => dispatch('resolve_pending_decision', {
-        action: id
-      })}
-      busy={busy}
-    />
-  );
+export function EnergyCrisisFlow({ state, config, dispatch, busy }: FlowProps) {
+  const choices = [];
+  if (state.resources.day + 1 <= config.totalDays) choices.push({ id: 'rest_day', label: 'Отдохнуть один день' });
+  if (state.resources.day + 2 <= config.totalDays) choices.push({ id: 'rest_two_days', label: 'Отдохнуть два дня' });
+  if (state.resources.bank >= 5_000) choices.push({ id: 'delegate', label: 'Делегировать за 5 000 ₽' });
+  choices.push({ id: 'push_through', label: 'Продолжить через силу' });
+  return <MultiChoiceScreen title="Энергия закончилась" description="Выберите, как восстановить возможность продолжить запуск."
+    choices={choices} onConfirm={(action) => dispatch('resolve_pending_decision', { action })} busy={busy} />;
 }

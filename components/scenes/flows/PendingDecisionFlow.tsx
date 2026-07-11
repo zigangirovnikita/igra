@@ -11,9 +11,14 @@ type FlowProps = {
 export function PendingDecisionFlow({ state, dispatch, busy }: FlowProps) {
   const pending = state.pendingDecision;
   if (!pending) return null;
-  
-  // Here we would match on pending.type
-  // For now just basic stub to resolve any decision
+
+  if (pending.type === 'goal_reached') {
+    return <MultiChoiceScreen title="Бизнес-цель достигнута" choices={[
+      { id: 'cancel', label: 'Продолжить запуск' },
+      { id: 'confirm', label: 'Завершить и посмотреть итоги' },
+    ]} onConfirm={(action) => dispatch('resolve_pending_decision', { action })} busy={busy} />;
+  }
+
   return (
     <MultiChoiceScreen
       title="Нужно ваше решение"
