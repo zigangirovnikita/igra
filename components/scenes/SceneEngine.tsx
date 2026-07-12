@@ -91,9 +91,12 @@ export function SceneEngine({ config }: Props) {
         }),
       });
       const data = await response.json();
-      if (response.status === 409 && data.error === 'version_conflict' && data.state) {
+      if (response.status === 409 && data.state) {
         setGameState(data.state);
-        setError('Состояние игры обновлено. Повторите действие.');
+        cacheSessionPointer(data.state.sessionId);
+        setError(data.error === 'version_conflict'
+          ? 'Состояние игры обновлено. Повторите действие.'
+          : 'Действие уже обработано. Показано актуальное состояние игры.');
         return;
       }
       if (!response.ok) throw new Error(data.message ?? data.error ?? 'Ошибка команды');

@@ -42,15 +42,35 @@ export function buildFallbackReport(state: GameState, diagnostics: Diagnostics):
       : 'Энергии достаточно, запуск выглядит повторяемым по темпу.',
     counterfactualSummary: diagnostics.counterfactuals.length
       ? 'Есть несколько честных альтернатив, которые могли улучшить результат.'
-      : 'Положительных независимых альтернатив по модели игры не найдено.',
-    alternativeActions: diagnostics.counterfactuals.map((item) => ({
+      : state.endingReason === 'manual_finished'
+        ? 'Запуск завершён досрочно, поэтому модель не сравнивала полный цикл альтернатив.'
+        : 'Положительных независимых альтернатив по модели игры не найдено.',
+    alternativeActions: diagnostics.counterfactuals.length ? diagnostics.counterfactuals.map((item) => ({
       change: item.change,
       potentialResult: `Потенциальный прирост прибыли: около ${money(Math.round(item.expectedProfitDelta))} ₽.`,
       why: 'Сравнение использует тот же seed и меняет одно ключевое решение.'
-    })),
+    })) : buildNextSteps(state, diagnostics),
     finalInsight: 'Сайт, бот и контент работают только как связанная система: трафик, вход, прогрев, обработка и продажа должны совпасть по времени.',
     ctaBridge: 'Разбор поможет найти, где в вашем реальном запуске теряются заявки и деньги.'
   };
+}
+
+function buildNextSteps(state: GameState, diagnostics: Diagnostics): AiReport['alternativeActions'] {
+  const steps: AiReport['alternativeActions'] = [];
+  const categories = new Set(diagnostics.bottlenecks.map((item) => item.category));
+  if (categories.has('traffic')) {
+    steps.push({ change: 'Сначала усилить входящий трафик', potentialResult: 'Набрать достаточно входящих для проверки всей воронки.', why: 'Сейчас главный риск находится на этапе привлечения людей.' });
+  }
+  if (categories.has('processing')) {
+    steps.push({ change: 'Настроить обработку входящих', potentialResult: 'Не терять заявки до следующего шага.', why: 'Часть людей остаётся без ответа или не доходит до продажи.' });
+  }
+  if (state.activeRoute.nurture.includes('none')) {
+    steps.push({ change: 'Добавить прогрев перед продажей', potentialResult: 'Подготовить человека к приглашению или покупке.', why: 'Сейчас маршрут ведёт к продаже без отдельного этапа доверия.' });
+  }
+  if (steps.length === 0) {
+    steps.push({ change: 'Повторить запуск с одним улучшением', potentialResult: 'Понять влияние решения без смешивания причин.', why: 'Меняйте один слабый этап воронки за раз и сравнивайте результат.' });
+  }
+  return steps.slice(0, 3);
 }
 
 export async function explainWithAi(state: GameState, diagnostics: Diagnostics): Promise<{ report: AiReport; source: 'ai' | 'fallback' }> {

@@ -69,7 +69,9 @@ export function ActionConfigurationFlow({ state, config, dispatch, busy }: FlowP
     {
       id: 'direct',
       label: 'Вести в директ',
-      description: 'Доступно сразу. Сообщения придётся разбирать вручную.',
+      description: currentError
+        ? 'Доступно сразу, но для этого действия заменит недоступные части плана на ручную обработку в директе.'
+        : 'Доступно сразу. Сообщения придётся разбирать вручную.',
       icon: '💬',
       route: direct,
     },
@@ -117,13 +119,13 @@ export function ActionConfigurationFlow({ state, config, dispatch, busy }: FlowP
     },
   ];
 
-  const defaultRouteId = currentError ? 'direct' : 'current';
+  const defaultRouteId = currentError ? null : 'current';
 
   return (
     <MultiChoiceScreen
       title="Куда вести людей?"
       description={currentError
-        ? `Текущий маршрут сейчас недоступен: ${currentError.toLowerCase()}. Можно продолжить через директ или вернуться и создать нужный инструмент.`
+        ? `Текущий маршрут сейчас недоступен: ${currentError.toLowerCase()}. Выберите временный маршрут явно или вернитесь и создайте нужный инструмент.`
         : 'Выберите маршрут. Закрытые варианты показаны заранее, но не блокируют продолжение игры.'}
       choices={routes.map(({ id, label, description, icon, disabled, disabledReason }) => ({
         id,
@@ -199,5 +201,15 @@ function describeRoute(route: RouteSelection): string {
         : route.processing === 'simple_bot'
           ? 'простой бот'
           : 'сайт';
-  return `Вход: ${entry} · обработка: ${processing}`;
+  const nurtureLabels: Record<RouteSelection['nurture'][number], string> = {
+    none: 'без прогрева',
+    guide: 'гайд',
+    video_lesson: 'видеоурок',
+    telegram: 'Telegram-прогрев',
+    webinar: 'вебинар',
+  };
+  const nurture = route.nurture.includes('none')
+    ? 'без прогрева'
+    : route.nurture.map((item) => nurtureLabels[item]).join(', ');
+  return `Вход: ${entry} · прогрев: ${nurture} · обработка: ${processing}`;
 }

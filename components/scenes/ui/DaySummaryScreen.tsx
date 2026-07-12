@@ -61,7 +61,7 @@ export function DaySummaryScreen({ day, title, summaryText, metrics, onNext, bus
           </div>
         )}
         <div className="metric-box">
-          <span className="metric-value">-{-metrics.energySpent} ⚡</span>
+          <span className="metric-value">{metrics.energySpent > 0 ? '-' : ''}{metrics.energySpent} ⚡</span>
           <span className="metric-label">Энергии</span>
         </div>
       </div>

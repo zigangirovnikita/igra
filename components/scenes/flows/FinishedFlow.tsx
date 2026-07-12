@@ -25,6 +25,12 @@ export function FinishedFlow({ state, dispatch, busy }: FlowProps) {
   const [leadBusy, setLeadBusy] = useState(false);
   const [leadStatus, setLeadStatus] = useState<string | null>(null);
 
+  // Команда завершения меняет каноническое состояние в SceneEngine. Не держим
+  // устаревший экран подтверждения, пока родитель уже перешёл к финалу.
+  useEffect(() => {
+    setFinalState(state);
+  }, [state]);
+
   const loadFinalReport = useCallback(async () => {
     if (finishBusy || report) return;
     setFinishBusy(true);

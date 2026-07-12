@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 
 export type ChoiceItem<T extends string = string> = {
   id: T;
@@ -43,6 +43,13 @@ export function MultiChoiceScreen<T extends string>({
   const [localSelected, setLocalSelected] = useState<T | T[] | null>(
     initialSelected !== null ? initialSelected : (isMulti ? [] : null),
   );
+  const choiceSignature = useMemo(() => choices.map((choice) => choice.id).join('|'), [choices]);
+
+  // Один и тот же компонент обслуживает разные последовательные вопросы.
+  // При смене набора вариантов нельзя переносить выбор с прошлого вопроса.
+  useEffect(() => {
+    setLocalSelected(initialSelected !== null ? initialSelected : (isMulti ? [] : null));
+  }, [choiceSignature, initialSelected, isMulti]);
 
   const handleSelect = (id: T) => {
     if (busy) return;

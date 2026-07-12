@@ -2,6 +2,7 @@ import type { GameCommand, GameConfig, GameState } from '../types';
 import { assertStateInvariants } from '../state/invariants';
 import { calculateDiagnostics } from '../diagnostics/report';
 import { appendTriggeredEvents } from '../events/dispatcher';
+import { generateMiniGameSession } from '../calculations/minigame';
 import * as SetupTransitions from '../flow/transitions';
 import * as DailyTransitions from '../flow/daily';
 import * as OutcomeTransitions from '../flow/outcome';
@@ -52,6 +53,9 @@ export function applyCommand(input: GameState, config: GameConfig, command: Game
       if (state.flow.step !== 'action_result') throw new Error('Invalid step');
       state.flow.step = 'post_action';
       state.pendingDecision = PendingDecisions.deriveNextPendingDecision(state);
+      if (state.pendingDecision?.type === 'mini_game') {
+        state.miniGame = generateMiniGameSession(state, state.pendingDecision.cohortId);
+      }
       if (!state.pendingDecision) state.flow.step = 'day_summary';
       break;
     case 'follow_advice':
@@ -180,6 +184,15 @@ export function applyCommand(input: GameState, config: GameConfig, command: Game
 
 export function finishGame(input: GameState, config: GameConfig): GameState {
   const state = structuredClone(input);
+  if (!state.endingReason) {
+    state.endingReason = state.resources.day >= config.totalDays
+      ? 'time_finished'
+      : state.targets.targetRevenue > 0 && state.metrics.revenue >= state.targets.targetRevenue
+        ? 'goal_finished'
+        : state.resources.bank <= 0 || state.resources.energy <= 0
+          ? 'resource_finished'
+          : 'manual_finished';
+  }
   state.status = 'finished';
   state.flow.stage = 'final';
   state.flow.step = 'final_diagnosis';

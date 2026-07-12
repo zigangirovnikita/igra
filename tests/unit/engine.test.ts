@@ -47,6 +47,25 @@ describe('commands and invariants', () => {
     expect(twice).toEqual(once);
   });
 
+  it('moves a confirmed early finish to the final reason without leaving a pending decision', () => {
+    const state = createInitialState(setup, config, 'finish_confirmation_seed');
+    state.status = 'active';
+    state.flow.stage = 'daily';
+    state.flow.step = 'finish_confirmation';
+    state.pendingDecision = { type: 'finish_confirmation', returnStep: 'daily_intent' };
+
+    const next = applyCommand(state, config, {
+      commandId: 'confirm_finish',
+      type: 'resolve_pending_decision',
+      payload: { action: 'confirm' },
+    });
+
+    expect(next.flow.stage).toBe('final');
+    expect(next.flow.step).toBe('final_reason');
+    expect(next.pendingDecision).toBeNull();
+    expect(next.endingReason).toBe('manual_finished');
+  });
+
   it('runs every fixture without invariant violations', () => {
     for (const scenario of scenarios) {
       let state = createInitialState(scenario.setup, config, scenario.seed);

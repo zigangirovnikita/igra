@@ -21,14 +21,14 @@ export function DiagnosisScreen({ state, diagnostics, aiReport, reportSource, on
   const startingBank = diagnostics.financials.bankRemaining + diagnostics.financials.expenses;
 
   return (
-    <div className="scene-screen scrollable" style={{ padding: '20px', color: 'white', maxWidth: '720px', margin: '0 auto' }}>
+    <div className="scene-screen diagnosis-screen scrollable">
       <h1 style={{ fontSize: '24px', marginBottom: '8px' }}>{aiReport.headline}</h1>
       <p className="scene-paragraph">{aiReport.resultSummary}</p>
       <p className="scene-paragraph" style={{ opacity: 0.7 }}>
         Источник объяснения: {reportSource === 'ai' ? 'ИИ по рассчитанным данным игры' : 'детерминированный резервный отчёт'}.
       </p>
 
-      <div role="tablist" aria-label="Разделы диагностики" className="scene-actions" style={{ marginBottom: '20px' }}>
+      <div role="tablist" aria-label="Разделы диагностики" className="scene-actions diagnosis-tabs">
         <button className={tab === 'summary' ? 'btn-primary' : 'btn-secondary'} role="tab" aria-selected={tab === 'summary'} onClick={() => setTab('summary')}>Итог</button>
         <button className={tab === 'diagnosis' ? 'btn-primary' : 'btn-secondary'} role="tab" aria-selected={tab === 'diagnosis'} onClick={() => setTab('diagnosis')}>Диагностика</button>
         <button className={tab === 'actions' ? 'btn-primary' : 'btn-secondary'} role="tab" aria-selected={tab === 'actions'} onClick={() => setTab('actions')}>Что делать</button>
@@ -104,7 +104,7 @@ export function DiagnosisScreen({ state, diagnostics, aiReport, reportSource, on
         </section>
       )}
 
-      <div style={{ marginTop: '32px' }}>
+      <div className="diagnosis-footer">
         <p className="scene-paragraph">{aiReport.ctaBridge}</p>
         <div className="scene-actions">
           <button className="btn-primary" onClick={onLead}>Получить разбор</button>
@@ -117,7 +117,7 @@ export function DiagnosisScreen({ state, diagnostics, aiReport, reportSource, on
 
 function Card({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div style={{ marginBottom: '20px', background: 'rgba(255,255,255,0.08)', padding: '16px', borderRadius: '8px' }}>
+    <div className="diagnosis-card">
       <h2 style={{ fontSize: '18px', marginBottom: '8px' }}>{title}</h2>
       {children}
     </div>
