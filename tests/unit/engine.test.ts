@@ -98,6 +98,91 @@ describe('commands and invariants', () => {
     if (!availability.available) expect(availability.reason).toMatch(/энергии/i);
   });
 
+  it('offers all alternative creation methods immediately', () => {
+    const state = createInitialState(setup, config, 'alternative_methods_seed');
+    state.status = 'active';
+    state.resources.day = 3;
+
+    const pairs = [
+      ['guide_self', 'guide_specialist'],
+      ['video_self', 'video_specialist'],
+      ['simple_bot_self', 'simple_bot_specialist'],
+      ['ai_bot_self', 'ai_bot_specialist'],
+      ['website_basic', 'website_beautiful'],
+    ] as const;
+
+    for (const pair of pairs) {
+      for (const actionId of pair) {
+        const action = config.actions.find((candidate) => candidate.id === actionId);
+        if (!action) throw new Error(`Missing action ${actionId}`);
+        expect(getActionAvailability(state, action, config)).toEqual({ available: true });
+      }
+    }
+  });
+
+  it('closes every sibling creation method after the tool is created', () => {
+    const cases = [
+      { asset: 'guide', value: 'self', actions: ['guide_self', 'guide_specialist'] },
+      { asset: 'videoLesson', value: 'specialist', actions: ['video_self', 'video_specialist'] },
+      { asset: 'simpleBot', value: 'self', actions: ['simple_bot_self', 'simple_bot_specialist'] },
+      { asset: 'aiBot', value: 'specialist', actions: ['ai_bot_self', 'ai_bot_specialist'] },
+      { asset: 'website', value: 'basic', actions: ['website_basic', 'website_beautiful'] },
+    ] as const;
+
+    for (const testCase of cases) {
+      const state = createInitialState(setup, config, `exclusive_${testCase.asset}`);
+      state.status = 'active';
+      state.resources.day = 3;
+      state.assets[testCase.asset] = testCase.value;
+
+      for (const actionId of testCase.actions) {
+        const action = config.actions.find((candidate) => candidate.id === actionId);
+        if (!action) throw new Error(`Missing action ${actionId}`);
+        const availability = getActionAvailability(state, action, config);
+        expect(availability.available).toBe(false);
+        if (!availability.available) expect(availability.reason).toMatch(/уже создан/i);
+      }
+    }
+  });
+
+  it('allows choosing a stronger option directly without artificial prerequisite levels', () => {
+    const state = createInitialState(setup, config, 'direct_upgrade_seed');
+    state.status = 'active';
+    state.resources.day = 3;
+
+    const directOptions = [
+      'consultation_detailed',
+      'demand_interviews',
+      'demand_pilot_offer',
+      'product_home',
+      'product_studio',
+    ];
+
+    for (const actionId of directOptions) {
+      const action = config.actions.find((candidate) => candidate.id === actionId);
+      if (!action) throw new Error(`Missing action ${actionId}`);
+      expect(getActionAvailability(state, action, config)).toEqual({ available: true });
+    }
+  });
+
+  it('does not offer weaker variants after a stronger one was completed', () => {
+    const state = createInitialState(setup, config, 'stronger_variant_seed');
+    state.status = 'active';
+    state.resources.day = 3;
+    state.history.push({
+      day: 3,
+      type: 'action_completed',
+      message: 'Студия, оператор и монтаж',
+      payload: { actionId: 'product_studio' },
+    });
+
+    const weaker = config.actions.find((candidate) => candidate.id === 'product_self');
+    if (!weaker) throw new Error('Missing product_self');
+    const availability = getActionAvailability(state, weaker, config);
+    expect(availability.available).toBe(false);
+    if (!availability.available) expect(availability.reason).toMatch(/более сильный вариант/i);
+  });
+
   it('creates separate integer cohorts for combined reels and stories', () => {
     const state = createInitialState(setup, config, 'combined_content_seed');
     state.status = 'active';
