@@ -3,6 +3,16 @@ import { evaluateCondition } from './dsl';
 
 export type Availability = { available: true } | { available: false; reason: string };
 
+const EXCLUSIVE_ASSET_LABELS = {
+  guide: 'Гайд',
+  videoLesson: 'Видеоурок',
+  simpleBot: 'Простой бот',
+  aiBot: 'ИИ-бот',
+  website: 'Сайт',
+} satisfies Partial<Record<keyof GameState['assets'], string>>;
+
+type ExclusiveAssetKey = keyof typeof EXCLUSIVE_ASSET_LABELS;
+
 export function findAction(config: GameConfig, actionId: string): ActionConfig {
   const action = config.actions.find((item) => item.id === actionId && item.enabled);
   if (!action) throw new Error(`Unknown or disabled action: ${actionId}`);
@@ -11,6 +21,11 @@ export function findAction(config: GameConfig, actionId: string): ActionConfig {
 
 export function getActionAvailability(state: GameState, action: ActionConfig, config: GameConfig): Availability {
   if (state.status === 'finished') return { available: false, reason: 'Сессия уже завершена' };
+
+  const exclusiveAssetKey = getExclusiveAssetKey(action);
+  if (exclusiveAssetKey && state.assets[exclusiveAssetKey] !== null) {
+    return { available: false, reason: `${EXCLUSIVE_ASSET_LABELS[exclusiveAssetKey]} уже создан` };
+  }
 
   const executedUpgradeLevels = action.upgradeGroup
     ? getExecutedUpgradeLevels(state, config, action.upgradeGroup)
@@ -61,16 +76,21 @@ export function getActionAvailability(state: GameState, action: ActionConfig, co
     }
   }
 
-  if (action.upgradeGroup && action.upgradeLevel !== undefined) {
-    if (maxExecutedLevel >= action.upgradeLevel) {
-      return { available: false, reason: 'Уже выполнено или есть уровень выше' };
-    }
-    if (action.upgradeLevel > maxExecutedLevel + 1) {
-      return { available: false, reason: 'Сначала выполните предыдущий уровень' };
-    }
+  if (action.upgradeGroup && action.upgradeLevel !== undefined && maxExecutedLevel >= action.upgradeLevel) {
+    return { available: false, reason: 'Уже выполнен этот или более сильный вариант' };
   }
 
   return { available: true };
+}
+
+function getExclusiveAssetKey(action: ActionConfig): ExclusiveAssetKey | null {
+  const effect = action.effects.find((candidate) =>
+    (candidate.operator === 'createAsset' || candidate.operator === 'replaceAsset') &&
+    typeof candidate.path === 'string' &&
+    candidate.path in EXCLUSIVE_ASSET_LABELS
+  );
+
+  return effect?.path as ExclusiveAssetKey | undefined ?? null;
 }
 
 function getExecutedUpgradeLevels(state: GameState, config: GameConfig, upgradeGroup: string): number[] {
