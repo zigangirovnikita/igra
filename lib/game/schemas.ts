@@ -71,7 +71,7 @@ export const commandRequestSchema = z.discriminatedUnion('type', [
   z.object({ ...base, type: z.literal('edit_day1_plan'), payload: z.object({}).optional() }),
   z.object({ ...base, type: z.literal('complete_day_one'), payload: z.object({}).optional() }),
   z.object({ ...base, type: z.literal('advance_day2_intro'), payload: z.object({}).optional() }),
-  z.object({ ...base, type: z.literal('set_channels'), payload: z.object({ channels: z.array(audienceChannelSchema).min(1).max(3) }) }),
+  z.object({ ...base, type: z.literal('set_channels'), payload: z.object({ channels: z.array(audienceChannelSchema).max(3) }) }),
   z.object({ ...base, type: z.literal('set_audience_metrics'), payload: z.object({
     reels: z.number().int().min(0).max(10_000_000).optional(),
     stories: z.number().int().min(0).max(10_000_000).optional(),

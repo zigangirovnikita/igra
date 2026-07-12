@@ -19,7 +19,10 @@ export function EventFlow({ state, config, dispatch, busy }: FlowProps) {
   const templateId = String(pending.payload?.eventId ?? '');
   const instanceId = String(pending.payload?.eventInstanceId ?? '');
   const template = config.events.find((event) => event.id === templateId);
-  const paragraphs = template?.messages?.length ? template.messages : [pending.message];
+  const lostLeadsDelta = Number(pending.payload?.lostLeadsDelta ?? 0);
+  const paragraphs = templateId === 'inbound_lost' && lostLeadsDelta > 0
+    ? [`На этом этапе ${lostLeadsDelta} ${formatContacts(lostLeadsDelta)} не дошли до следующего шага.`, 'Проверьте вход, прогрев и обработку: потеря может возникнуть в любом из этих звеньев.']
+    : template?.messages?.length ? template.messages : [pending.message];
 
   return (
     <NarrativeScreen
@@ -30,6 +33,15 @@ export function EventFlow({ state, config, dispatch, busy }: FlowProps) {
       onNext={() => dispatch('acknowledge_event', { eventId: instanceId })}
     />
   );
+}
+
+function formatContacts(count: number): string {
+  const lastTwo = count % 100;
+  if (lastTwo >= 11 && lastTwo <= 14) return 'контактов';
+  const last = count % 10;
+  if (last === 1) return 'контакт';
+  if (last >= 2 && last <= 4) return 'контакта';
+  return 'контактов';
 }
 
 function eventTitle(eventId: string): string {

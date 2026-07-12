@@ -92,9 +92,9 @@ export function DiagnosisScreen({ state, diagnostics, aiReport, reportSource, on
         <section role="tabpanel">
           <Card title="Что могло быть иначе">
             <p>{aiReport.counterfactualSummary}</p>
-            {diagnostics.counterfactuals.length === 0 ? <p>Положительных альтернатив при повторном прогоне не найдено.</p> : (
+            {diagnostics.counterfactuals.length > 0 ? (
               <ul>{diagnostics.counterfactuals.map((item) => <li key={item.change}>{item.change}: прирост прибыли {formatMoney(item.expectedProfitDelta)}</li>)}</ul>
-            )}
+            ) : state.endingReason !== 'manual_finished' ? <p>Положительных альтернатив при повторном прогоне не найдено.</p> : null}
           </Card>
 
           <Card title="Следующие действия">

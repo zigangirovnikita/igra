@@ -90,4 +90,22 @@ describe('command API concurrency', () => {
     expect(response.status).toBe(200);
     expect((await response.json()).state.flow.step).toBe('daily_intent');
   });
+
+  it('accepts an empty channel list for the valid “no channels yet” start', async () => {
+    const state = createInitialState(scenarios[0].setup, config, crypto.randomUUID());
+    state.flow.stage = 'day2_resources';
+    state.flow.step = 'day2_channels';
+    state.resources.day = 2;
+    mocks.getSession.mockResolvedValue({ id: state.sessionId, state, setup: state.player });
+    const { POST } = await import('../../app/api/game/sessions/[id]/commands/route');
+    const response = await POST(
+      new Request('http://localhost', {
+        method: 'POST',
+        body: JSON.stringify({ commandId: 'no_channels', expectedVersion: 0, type: 'set_channels', payload: { channels: [] } }),
+      }),
+      { params: Promise.resolve({ id: state.sessionId }) },
+    );
+    expect(response.status).toBe(200);
+    expect((await response.json()).state.flow.step).toBe('day2_metrics');
+  });
 });

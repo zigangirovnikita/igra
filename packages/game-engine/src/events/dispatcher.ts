@@ -23,6 +23,7 @@ export function appendTriggeredEvents(previous: GameState, state: GameState, con
         eventId: template.id,
         eventInstanceId,
         sceneType: template.sceneType,
+        lostLeadsDelta: Math.max(0, output.metrics.lostLeads - previous.metrics.lostLeads),
       },
     });
   }
