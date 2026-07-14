@@ -35,7 +35,7 @@ describe('command API concurrency', () => {
     const response = await POST(
       new Request('http://localhost', {
         method: 'POST',
-        body: JSON.stringify({ commandId: 'late', expectedVersion: 99, type: 'advance_intro', payload: {} }),
+        body: JSON.stringify({ commandId: 'late', expectedVersion: 99, type: 'v3_next', payload: {} }),
       }),
       { params: Promise.resolve({ id: state.sessionId }) },
     );
@@ -49,7 +49,7 @@ describe('command API concurrency', () => {
     const session = { id: state.sessionId, state, setup: state.player };
     mocks.getSession.mockImplementation(async () => session);
     const { POST } = await import('../../app/api/game/sessions/[id]/commands/route');
-    const body = { commandId: 'same', expectedVersion: 0, type: 'advance_intro', payload: {} };
+    const body = { commandId: 'same', expectedVersion: 0, type: 'v3_next', payload: {} };
 
     const response = await POST(
       new Request('http://localhost', { method: 'POST', body: JSON.stringify(body) }),

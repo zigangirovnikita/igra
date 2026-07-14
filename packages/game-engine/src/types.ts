@@ -2,6 +2,7 @@ export type Id = string;
 
 export type Gender = 'female' | 'male';
 export type GameStatus = 'setup' | 'active' | 'finished' | 'abandoned';
+export type Superpower = 'sales' | 'marketing' | 'energy' | 'ads';
 export type ContentType = 'useful' | 'storytelling' | 'selling' | 'chaotic';
 export type SourceType = 'reels' | 'stories' | 'telegram' | 'live' | 'webinar' | 'contacts';
 export type ProcessingType = 'manual' | 'simple_bot' | 'ai_bot' | 'manager' | 'website_auto';
@@ -14,6 +15,7 @@ export type PlayerProfile = {
   avatarGender: Gender;
   name: string;
   niche: string;
+  superpower: Superpower;
 };
 
 export type SetupInput = PlayerProfile;
@@ -48,6 +50,7 @@ export type FlowStage =
   | 'day1_plan'
   | 'day2_resources'
   | 'daily'
+  | 'v3'
   | 'final';
 
 export type FlowStep =
@@ -80,7 +83,27 @@ export type FlowStep =
   | 'goal_reached'
   | 'finish_confirmation'
   | 'final_reason'
-  | 'final_diagnosis';
+  | 'final_diagnosis'
+  | 'v3_story_budget'
+  | 'v3_rules'
+  | 'v3_story_plan'
+  | 'v3_product'
+  | 'v3_price'
+  | 'v3_dream'
+  | 'v3_goal_summary'
+  | 'v3_reflection_intro'
+  | 'v3_reflection'
+  | 'v3_prepare_category'
+  | 'v3_advice_category'
+  | 'v3_advice_option'
+  | 'v3_advice_result'
+  | 'v3_rest'
+  | 'v3_past_runs'
+  | 'v3_pre_action_summary'
+  | 'v3_action_select'
+  | 'v3_active_intro'
+  | 'v3_active_stage'
+  | 'v3_stage_report';
 
 export type DailyIntent =
   | 'get_sales'
@@ -406,6 +429,179 @@ export type Diagnostics = {
   dreams: Array<{ id: string; title: string; price: number; affordable: boolean }>;
 };
 
+export type V3ProductType =
+  | 'consultation'
+  | 'service'
+  | 'live_course'
+  | 'recorded_course'
+  | 'membership'
+  | 'mentorship';
+
+export type V3PreparationArea = 'warmup' | 'sales' | 'ads';
+export type V3PreparationMode = 'self' | 'expert';
+export type V3AdviceCategory = 'ads' | 'warmup' | 'sales';
+export type V3AdviceOption = 'friend' | 'consult_5k' | 'consult_10k';
+export type V3AdvicePrecision = 'rough' | 'exact';
+export type V3SelectionKind = 'ad' | 'warmup' | 'sales';
+
+export type V3PreparationPlanItem = {
+  id: string;
+  area: V3PreparationArea;
+  instrumentId: string;
+  mode: V3PreparationMode;
+  title: string;
+  cost: number;
+  energyCost: number;
+  days: number;
+  confirmedDay: number;
+};
+
+export type V3PreparedTool = {
+  key: string;
+  area: 'warmup' | 'sales';
+  instrumentId: string;
+  mode: V3PreparationMode;
+  title: string;
+  known: boolean;
+  uses: number;
+};
+
+export type V3PreparedAd = {
+  key: string;
+  instrumentId: string;
+  mode: V3PreparationMode;
+  title: string;
+  known: boolean;
+  uses: number;
+};
+
+export type V3ActiveSelection = {
+  ad: string | null;
+  warmup: string | null;
+  sales: string | null;
+};
+
+export type V3AdviceEffect = {
+  category: V3AdviceCategory;
+  multiplier: number;
+  precision: V3AdvicePrecision;
+};
+
+export type V3AdviceResult = {
+  category: V3AdviceCategory;
+  option: V3AdviceOption;
+  cost: number;
+  title: string;
+  adviser: string;
+  paragraphs: string[];
+  conversionRows: Array<{ label: string; value: string; note?: string }>;
+  effectLines: string[];
+  createdDay: number;
+};
+
+export type V3StageReport = {
+  id: string;
+  stageNumber: number;
+  startedDay: number;
+  finishedDay: number;
+  daysSpent: number;
+  energySpent: number;
+  adTitle: string;
+  warmupTitle: string;
+  salesTitle: string;
+  views: number;
+  newLeads: number;
+  notInterested: number;
+  interested: number;
+  requiredAnswer: number;
+  lost: number;
+  applications: number;
+  callsHeld: number;
+  callsNoBuy: number;
+  callsBuy: number;
+  chatsHeld: number;
+  chatsNoBuy: number;
+  chatsBuy: number;
+  siteVisits: number;
+  siteBuys: number;
+  siteMessages: number;
+  salesCount: number;
+  revenue: number;
+  goalReached: boolean;
+  endedByBurnout: boolean;
+};
+
+export type V3ActiveAdEvent = {
+  id: string;
+  second: number;
+  label: string;
+  viewsDelta: number;
+  hot: boolean;
+};
+
+export type V3ActiveWarmupMessage = {
+  id: string;
+  second: number;
+  expiresSecond: number;
+  text: string;
+};
+
+export type V3ActiveSaleOutcome = {
+  id: string;
+  text: string;
+  buy: boolean;
+  followupMessage: boolean;
+  followupBuy: boolean;
+};
+
+export type V3ActiveStagePlan = {
+  durationSeconds: 60;
+  callDurationSeconds: number;
+  chatDurationSeconds: number;
+  messageTimeoutSeconds: number;
+  adLabel: string;
+  adEvents: V3ActiveAdEvent[];
+  warmupMessages: V3ActiveWarmupMessage[];
+  callOutcomes: V3ActiveSaleOutcome[];
+  chatOutcomes: V3ActiveSaleOutcome[];
+  totals: {
+    views: number;
+    newLeads: number;
+    notInterested: number;
+    interested: number;
+    requiredAnswer: number;
+    autoSales: number;
+    siteMessages: number;
+  };
+};
+
+export type V3State = {
+  productType: V3ProductType | null;
+  productPrice: number | null;
+  dreamId: string | null;
+  customDreamTitle: string | null;
+  customDreamPrice: number | null;
+  explanationSeen: Record<string, boolean>;
+  preparedTools: V3PreparedTool[];
+  preparedAds: V3PreparedAd[];
+  plannedPreparations: V3PreparationPlanItem[];
+  loopAdviceUsed: Record<string, boolean>;
+  loopAdviceEffects: Partial<Record<V3AdviceCategory, V3AdviceEffect>>;
+  lastAdvice: V3AdviceResult | null;
+  loopRestDays: number;
+  loopRestEnergy: number;
+  lastPreparationSummary: {
+    items: V3PreparationPlanItem[];
+    unlockedTitles: string[];
+    preparationDays: number;
+    restDays: number;
+  } | null;
+  activeSelection: V3ActiveSelection;
+  stageReports: V3StageReport[];
+  lastStageReport: V3StageReport | null;
+  activeStageStartedAt: string | null;
+};
+
 export type GameState = {
   schemaVersion: 2;
   sessionId: string;
@@ -452,6 +648,7 @@ export type GameState = {
   endingReason: EndingReason | null;
   miniGame: MiniGameSession | null;
   decisionLog: DecisionRecord[];
+  v3: V3State;
 };
 
 export type GameCommand =
@@ -497,4 +694,18 @@ export type GameCommand =
   | { commandId: string; type: 'start_parallel'; payload: { actionAId: string; actionBId: string; contentType?: ContentType; route?: RouteSelection } }
   | { commandId: string; type: 'record_reflection'; payload: { eventId: string; answer: string } }
   | { commandId: string; type: 'set_route'; payload: RouteSelection }
-  | { commandId: string; type: 'acknowledge_event'; payload: Record<string, never> };
+  | { commandId: string; type: 'acknowledge_event'; payload: Record<string, never> }
+  | { commandId: string; type: 'v3_next'; payload?: Record<string, never> }
+  | { commandId: string; type: 'v3_set_product'; payload: { productType: V3ProductType } }
+  | { commandId: string; type: 'v3_set_price'; payload: { productPrice: number } }
+  | { commandId: string; type: 'v3_set_dream'; payload: { dreamId: string; customTitle?: string; customPrice?: number } }
+  | { commandId: string; type: 'v3_open_reflection'; payload: { target: 'prepare' | 'advice' | 'rest' | 'history' | 'act' } }
+  | { commandId: string; type: 'v3_confirm_preparation'; payload: { area: V3PreparationArea; instrumentId: string; mode: V3PreparationMode } }
+  | { commandId: string; type: 'v3_request_advice'; payload: { category: V3AdviceCategory; option: V3AdviceOption } }
+  | { commandId: string; type: 'v3_rest'; payload: { days: 1 | 2 | 3 } }
+  | { commandId: string; type: 'v3_begin_action_plan'; payload?: Record<string, never> }
+  | { commandId: string; type: 'v3_ack_pre_action_summary'; payload?: Record<string, never> }
+  | { commandId: string; type: 'v3_select_active'; payload: { kind: V3SelectionKind; key: string } }
+  | { commandId: string; type: 'v3_start_active_stage'; payload?: Record<string, never> }
+  | { commandId: string; type: 'v3_complete_active_stage'; payload?: { manualAnswers?: number; salesChats?: number; directSalesChats?: number; postCallChats?: number; calls?: number } }
+  | { commandId: string; type: 'v3_return_reflection'; payload?: Record<string, never> };

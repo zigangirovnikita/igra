@@ -2,9 +2,11 @@ import { describe, expect, it } from 'vitest';
 import {
   applyCommand,
   assertStateInvariants,
+  buildV3ActiveStagePlan,
   createInitialState,
   finishGame,
   getActionAvailability,
+  getV3ActiveOptions,
   getBucketTargetSales,
   hashToUnitInterval,
   stochasticRound,
@@ -41,7 +43,7 @@ describe('randomness', () => {
 describe('commands and invariants', () => {
   it('does not apply the same command twice', () => {
     const state = createInitialState(setup, config, 'idempotent_seed');
-    const command = { commandId: 'same', type: 'advance_intro' as const, payload: {} };
+    const command = { commandId: 'same', type: 'v3_next' as const, payload: {} };
     const once = applyCommand(state, config, command);
     const twice = applyCommand(once, config, command);
     expect(twice).toEqual(once);
@@ -85,23 +87,226 @@ describe('commands and invariants', () => {
   });
 
   it('reports the full bank and energy cost of an action', () => {
-    const scenario = scenarios[0];
-    let state = createInitialState(scenario.setup, config, 'outcome_seed');
-    for (const command of scenario.commands) {
-      state = applyCommand(state, config, command);
-      if (command.commandId === 'c18') break;
-    }
+    const state = createInitialState(scenarios[0].setup, config, 'outcome_seed');
+    const next = applyCommand(state, config, {
+      commandId: 'prepare',
+      type: 'v3_confirm_preparation',
+      payload: { area: 'warmup', instrumentId: 'simple_bot', mode: 'expert' },
+    });
+    expect(state.resources.bank - next.resources.bank).toBe(20_000);
+    expect(state.resources.energy - next.resources.energy).toBe(0);
+    expect(next.v3.plannedPreparations[0]?.days).toBe(3);
+  });
 
-    const action = config.actions.find((candidate) => candidate.id === 'product_pilot');
-    const outcome = state.lastOutcome;
-    expect(action).toBeDefined();
-    expect(outcome).toBeDefined();
-    if (!action || !outcome) throw new Error('Missing action outcome');
+  it('unlocks a confirmed v3 preparation for active stage selection', () => {
+    let state = createInitialState(scenarios[0].setup, config, 'v3_unlock_preparation_seed');
+    state = applyCommand(state, config, {
+      commandId: 'prepare_simple_bot',
+      type: 'v3_confirm_preparation',
+      payload: { area: 'warmup', instrumentId: 'simple_bot', mode: 'expert' },
+    });
+    state = applyCommand(state, config, {
+      commandId: 'begin_action_plan',
+      type: 'v3_begin_action_plan',
+      payload: {},
+    });
 
-    expect(outcome.bankSpent).toBe(action.cost);
-    expect(outcome.energySpent).toBe(action.energyCost);
-    expect(outcome.bankBefore - outcome.bankAfter).toBe(action.cost);
-    expect(outcome.finishedDay - outcome.startedDay + 1).toBe(action.days);
+    expect(state.v3.preparedTools.some((tool) => tool.key === 'warmup:simple_bot:expert')).toBe(true);
+    expect(getV3ActiveOptions(state, 'warmup')).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          key: 'warmup:simple_bot:expert',
+          locked: false,
+          title: 'Обычный бот - со специалистом',
+        }),
+      ]),
+    );
+  });
+
+  it('shows v3 advice result and keeps the strongest advice bonus for the loop', () => {
+    let state = createInitialState(scenarios[0].setup, config, 'v3_advice_seed');
+    const bankBefore = state.resources.bank;
+
+    state = applyCommand(state, config, {
+      commandId: 'advice_5k',
+      type: 'v3_request_advice',
+      payload: { category: 'ads', option: 'consult_5k' },
+    });
+
+    expect(state.flow.step).toBe('v3_advice_result');
+    expect(state.resources.bank).toBe(bankBefore - 5_000);
+    expect(state.v3.lastAdvice?.effectLines).toContain('Результативность рекламы стала выше на 5%.');
+    expect(state.v3.loopAdviceEffects.ads?.multiplier).toBe(1.05);
+
+    state = applyCommand(state, config, {
+      commandId: 'advice_10k',
+      type: 'v3_request_advice',
+      payload: { category: 'ads', option: 'consult_10k' },
+    });
+
+    expect(state.resources.bank).toBe(bankBefore - 15_000);
+    expect(state.v3.loopAdviceEffects.ads?.multiplier).toBe(1.10);
+    expect(state.v3.lastAdvice?.effectLines).toContain('Результативность рекламы стала выше на 10%.');
+  });
+
+  it('applies v3 advice bonus to the matching active-stage conversion and resets it after the stage', () => {
+    const base = createInitialState(scenarios[0].setup, config, 'v3_advice_bonus_seed');
+    base.v3.activeSelection = {
+      ad: 'ad:unprepared',
+      warmup: 'warmup:manual',
+      sales: 'sales:intuition',
+    };
+
+    const advised = structuredClone(base);
+    advised.v3.loopAdviceEffects = {
+      ads: { category: 'ads', multiplier: 1.10, precision: 'exact' },
+    };
+
+    const baseResult = applyCommand(base, config, {
+      commandId: 'complete_base',
+      type: 'v3_complete_active_stage',
+      payload: { manualAnswers: 200, salesChats: 200, calls: 60 },
+    });
+    const advisedResult = applyCommand(advised, config, {
+      commandId: 'complete_advised',
+      type: 'v3_complete_active_stage',
+      payload: { manualAnswers: 200, salesChats: 200, calls: 60 },
+    });
+
+    expect(advisedResult.v3.lastStageReport?.newLeads).toBeGreaterThan(baseResult.v3.lastStageReport?.newLeads ?? 0);
+    expect(advisedResult.v3.loopAdviceEffects).toEqual({});
+  });
+
+  it('builds the same v3 active-stage plan used by the final report', () => {
+    const state = createInitialState(scenarios[0].setup, config, 'v3_active_plan_seed');
+    state.v3.activeSelection = {
+      ad: 'ad:unprepared',
+      warmup: 'warmup:manual',
+      sales: 'sales:intuition',
+    };
+
+    const plan = buildV3ActiveStagePlan(state);
+    const completed = applyCommand(state, config, {
+      commandId: 'complete_active_plan',
+      type: 'v3_complete_active_stage',
+      payload: { manualAnswers: 20, directSalesChats: 6, postCallChats: 2, salesChats: 8, calls: 4 },
+    });
+    const report = completed.v3.lastStageReport;
+
+    expect(plan.callDurationSeconds).toBe(6);
+    expect(plan.messageTimeoutSeconds).toBe(6);
+    expect(plan.totals.views).toBe(report?.views);
+    expect(plan.totals.newLeads).toBe(report?.newLeads);
+    expect(report?.callsHeld).toBe(4);
+    expect(report?.chatsHeld).toBeLessThanOrEqual(8);
+    expect(report?.chatsHeld).toBeGreaterThan(0);
+    expect(report?.salesCount).toBe((report?.callsBuy ?? 0) + (report?.chatsBuy ?? 0) + (report?.siteBuys ?? 0));
+    expect(report?.applications).toBe(report?.interested);
+    expect(completed.metrics.applications).toBe(report?.applications);
+  });
+
+  it('reveals sales conversions from sales superpower and sales consultation', () => {
+    const superpowered = createInitialState({ ...scenarios[0].setup, superpower: 'sales' }, config, 'v3_sales_superpower_seed');
+    const salesOptions = getV3ActiveOptions(superpowered, 'sales');
+    expect(salesOptions.find((option) => option.key.includes('locked:sales:call_script:self'))).toEqual(
+      expect.objectContaining({ known: true, baseConversion: 0.20 }),
+    );
+
+    const consulted = createInitialState(scenarios[0].setup, config, 'v3_sales_advice_seed');
+    consulted.v3.loopAdviceEffects = {
+      sales: { category: 'sales', multiplier: 1.10, precision: 'exact' },
+    };
+    expect(getV3ActiveOptions(consulted, 'sales').find((option) => option.key.includes('locked:sales:chat_script:expert'))).toEqual(
+      expect.objectContaining({ known: true, baseConversion: 0.20 }),
+    );
+  });
+
+  it('uses high-conversion low-reach stories and telegram ads in v3', () => {
+    const state = createInitialState(scenarios[0].setup, config, 'v3_low_reach_ads_seed');
+    state.v3.preparedAds = [
+      { key: 'ad:stories:self:test', instrumentId: 'stories', mode: 'self', title: 'Контент для сторис - самостоятельно', known: false, uses: 0 },
+    ];
+    state.v3.activeSelection = {
+      ad: 'ad:stories:self:test',
+      warmup: 'warmup:manual',
+      sales: 'sales:intuition',
+    };
+
+    expect(getV3ActiveOptions(state, 'ad').find((option) => option.key === 'ad:stories:self:test')).toEqual(
+      expect.objectContaining({ baseConversion: 0.10 }),
+    );
+    expect(getV3ActiveOptions(state, 'ad').find((option) => option.key.includes('locked:ads:telegram:expert'))).toEqual(
+      expect.objectContaining({ baseConversion: 0.14 }),
+    );
+
+    const plan = buildV3ActiveStagePlan(state);
+    expect(plan.totals.views).toBeGreaterThanOrEqual(6_000);
+    expect(plan.totals.views).toBeLessThanOrEqual(8_000);
+    expect(Math.max(...plan.adEvents.map((event) => event.viewsDelta))).toBeLessThanOrEqual(450);
+    expect(plan.adEvents.some((event) => event.hot)).toBe(false);
+  });
+
+  it('uses the requested v3 warmup conversion rates and keeps webinar auto-sales', () => {
+    const state = createInitialState(scenarios[0].setup, config, 'v3_warmup_rates_seed');
+    const warmupOptions = getV3ActiveOptions(state, 'warmup');
+
+    expect(warmupOptions.find((option) => option.key.includes('locked:warmup:guide:self'))).toEqual(
+      expect.objectContaining({ baseConversion: 0.10 }),
+    );
+    expect(warmupOptions.find((option) => option.key.includes('locked:warmup:simple_bot:expert'))).toEqual(
+      expect.objectContaining({ baseConversion: 0.18 }),
+    );
+    expect(warmupOptions.find((option) => option.key.includes('locked:warmup:ai_bot:expert'))).toEqual(
+      expect.objectContaining({ baseConversion: 0.27 }),
+    );
+    expect(warmupOptions.find((option) => option.key.includes('locked:warmup:video_lesson:self'))).toEqual(
+      expect.objectContaining({ baseConversion: 0.16 }),
+    );
+    expect(warmupOptions.find((option) => option.key.includes('locked:warmup:auto_webinar:expert'))).toEqual(
+      expect.objectContaining({ baseConversion: 0.19 }),
+    );
+
+    state.v3.preparedAds = [
+      { key: 'ad:reels:expert:test', instrumentId: 'reels', mode: 'expert', title: 'Контент для рилс - со специалистом', known: false, uses: 0 },
+    ];
+    state.v3.preparedTools = [
+      { key: 'warmup:auto_webinar:expert', area: 'warmup', instrumentId: 'auto_webinar', mode: 'expert', title: 'Автовебинар - со специалистом', known: false, uses: 0 },
+    ];
+    state.v3.activeSelection = {
+      ad: 'ad:reels:expert:test',
+      warmup: 'warmup:auto_webinar:expert',
+      sales: 'sales:intuition',
+    };
+
+    const plan = buildV3ActiveStagePlan(state);
+    expect(plan.totals.autoSales).toBeGreaterThan(0);
+
+    const completed = applyCommand(state, config, {
+      commandId: 'complete_auto_webinar_sales',
+      type: 'v3_complete_active_stage',
+      payload: { manualAnswers: 56, directSalesChats: 0, postCallChats: 0, salesChats: 0, calls: 0 },
+    });
+    expect(completed.v3.lastStageReport?.salesCount).toBe(plan.totals.autoSales);
+  });
+
+  it('keeps low-ticket sales-superpower chat conversion above the minimum floor', () => {
+    const state = createInitialState({ ...scenarios[0].setup, superpower: 'sales' }, config, 'v3_sales_chat_streak_seed');
+    state.launchPlan.productPrice = 15_000;
+    state.v3.activeSelection = {
+      ad: 'ad:unprepared',
+      warmup: 'warmup:manual',
+      sales: 'sales:intuition',
+    };
+
+    const plan = buildV3ActiveStagePlan(state);
+    expect(plan.chatOutcomes.slice(0, 24).filter((outcome) => outcome.buy).length).toBeGreaterThanOrEqual(3);
+
+    const completed = applyCommand(state, config, {
+      commandId: 'complete_chat_streak',
+      type: 'v3_complete_active_stage',
+      payload: { manualAnswers: 56, directSalesChats: 24, salesChats: 24, calls: 0 },
+    });
+    expect(completed.v3.lastStageReport?.chatsBuy).toBeGreaterThanOrEqual(3);
   });
 
   it('blocks an action when energy is below its complete cost', () => {

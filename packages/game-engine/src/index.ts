@@ -8,3 +8,11 @@ export { hashToUnitInterval, keyedRandomMultiplier, stochasticRound } from './ra
 export { recalculateMetrics } from './time/ticks';
 export { calculateDiagnostics, buildAIDiagnosticContext } from './diagnostics/report';
 export { deriveNextPendingDecision, resolvePendingDecision } from './flow/pending-decisions';
+export {
+  V3_PREPARATIONS,
+  V3_PRODUCT_TITLES,
+  buildV3ActiveStagePlan,
+  getV3ActiveOptions,
+  getV3PreparationDefinitions,
+  v3ProductPlaceholder,
+} from './flow/v3';

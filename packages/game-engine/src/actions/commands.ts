@@ -7,6 +7,7 @@ import * as SetupTransitions from '../flow/transitions';
 import * as DailyTransitions from '../flow/daily';
 import * as OutcomeTransitions from '../flow/outcome';
 import * as PendingDecisions from '../flow/pending-decisions';
+import * as V3 from '../flow/v3';
 import { applyEffect } from './dsl';
 
 export function applyCommand(input: GameState, config: GameConfig, command: GameCommand): GameState {
@@ -150,6 +151,51 @@ export function applyCommand(input: GameState, config: GameConfig, command: Game
       break;
     }
 
+    case 'v3_next':
+      state = state.flow.step === 'v3_active_intro'
+        ? V3.startV3ActiveStageAfterIntro(state)
+        : V3.nextV3Step(state);
+      break;
+    case 'v3_set_product':
+      state = V3.setV3Product(state, command.payload.productType);
+      break;
+    case 'v3_set_price':
+      state = V3.setV3Price(state, config, command.payload.productPrice);
+      break;
+    case 'v3_set_dream':
+      state = V3.setV3Dream(state, config, command.payload.dreamId, command.payload.customTitle, command.payload.customPrice);
+      break;
+    case 'v3_open_reflection':
+      state = V3.openV3Reflection(state, command.payload.target);
+      break;
+    case 'v3_confirm_preparation':
+      state = V3.confirmV3Preparation(state, command.payload.area, command.payload.instrumentId, command.payload.mode);
+      break;
+    case 'v3_request_advice':
+      state = V3.requestV3Advice(state, command.payload.category, command.payload.option);
+      break;
+    case 'v3_rest':
+      state = V3.restV3(state, command.payload.days);
+      break;
+    case 'v3_begin_action_plan':
+      state = V3.beginV3ActionPlan(state);
+      break;
+    case 'v3_ack_pre_action_summary':
+      state = V3.ackV3PreActionSummary(state);
+      break;
+    case 'v3_select_active':
+      state = V3.selectV3Active(state, command.payload.kind, command.payload.key);
+      break;
+    case 'v3_start_active_stage':
+      state = V3.startV3ActiveStage(state);
+      break;
+    case 'v3_complete_active_stage':
+      state = V3.completeV3ActiveStage(state, command.payload);
+      break;
+    case 'v3_return_reflection':
+      state = V3.returnV3Reflection(state);
+      break;
+
     case 'start_parallel':
     case 'set_route':
       throw new Error('Developer command is disabled in public game API');
@@ -173,7 +219,7 @@ export function applyCommand(input: GameState, config: GameConfig, command: Game
       sequence: state.decisionLog.length,
       day: state.resources.day,
       commandType: command.type,
-      payload: command.payload,
+      payload: command.payload ?? {},
     });
   }
 

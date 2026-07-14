@@ -11,6 +11,7 @@ export function resolveCurrentScene(state: GameState): { scene: string; props?: 
   if (pendingEvent) return { scene: 'event' };
 
   const step = state.flow.step;
+  if (state.flow.stage === 'v3' || step.startsWith('v3_')) return { scene: 'v3' };
   if (state.pendingDecision?.type === 'energy_crisis') return { scene: 'energy_crisis' };
   if (state.pendingDecision?.type === 'budget_notice') return { scene: 'budget_notice' };
   if (state.pendingDecision && !['finish_confirmation', 'goal_reached'].includes(step)) {

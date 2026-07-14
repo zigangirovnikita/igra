@@ -24,6 +24,7 @@ import { EnergyCrisisFlow } from './flows/EnergyCrisisFlow';
 import { BudgetCrisisFlow } from './flows/BudgetCrisisFlow';
 import { FinishedFlow } from './flows/FinishedFlow';
 import { EventFlow } from './flows/EventFlow';
+import { V3Flow } from './flows/V3Flow';
 
 type Props = { config: GameConfig };
 
@@ -143,6 +144,7 @@ export function SceneEngine({ config }: Props) {
       {error && <div className="scene-error" role="alert">{error}</div>}
       {scene !== 'finished' && <GameHud state={gameState} />}
       {scene === 'event' && <EventFlow {...commonProps} />}
+      {scene === 'v3' && <V3Flow {...commonProps} />}
       {scene === 'intro' && <IntroFlow {...commonProps} />}
       {scene === 'day_1' && <Day1Flow {...commonProps} />}
       {scene === 'day_2' && <Day2Flow {...commonProps} />}

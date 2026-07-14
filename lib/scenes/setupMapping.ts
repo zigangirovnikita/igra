@@ -6,6 +6,7 @@ export function draftToSetupInput(draft: SetupDraft): PlayerProfile {
     avatarGender: draft.gender,
     name: draft.name,
     niche: draft.niche,
+    superpower: draft.superpower,
   };
 }
 

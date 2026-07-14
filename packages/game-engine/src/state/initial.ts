@@ -31,8 +31,8 @@ export function createInitialState(setup: PlayerProfile, config: GameConfig, see
       confirmed: false
     },
     flow: {
-      stage: 'intro',
-      step: 'intro_budget',
+      stage: 'v3',
+      step: 'v3_story_budget',
       selectedIntent: null,
       selectedGroup: null,
       goalPromptHandled: false,
@@ -46,7 +46,7 @@ export function createInitialState(setup: PlayerProfile, config: GameConfig, see
     resources: {
       day: 1,
       bank: config.startingBank,
-      energy: config.startingEnergy
+      energy: setup.superpower === 'energy' ? 120 : config.startingEnergy
     },
     assets: {
       demandConfidence: 0,
@@ -96,6 +96,27 @@ export function createInitialState(setup: PlayerProfile, config: GameConfig, see
     endingReason: null,
     miniGame: null,
     decisionLog: [],
+    v3: {
+      productType: null,
+      productPrice: null,
+      dreamId: null,
+      customDreamTitle: null,
+      customDreamPrice: null,
+      explanationSeen: {},
+      preparedTools: [],
+      preparedAds: [],
+      plannedPreparations: [],
+      loopAdviceUsed: {},
+      loopAdviceEffects: {},
+      lastAdvice: null,
+      loopRestDays: 0,
+      loopRestEnergy: 0,
+      lastPreparationSummary: null,
+      activeSelection: { ad: null, warmup: null, sales: null },
+      stageReports: [],
+      lastStageReport: null,
+      activeStageStartedAt: null,
+    },
   };
 
   assertStateInvariants(state, config);

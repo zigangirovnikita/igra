@@ -4,7 +4,8 @@ export function assertStateInvariants(state: GameState, config: GameConfig): voi
   if (state.resources.bank < 0 || state.resources.bank > config.startingBank) {
     throw new Error('Invariant violation: bank out of bounds');
   }
-  if (state.resources.energy < 0 || state.resources.energy > 100) {
+  const maxEnergy = state.player.superpower === 'energy' ? 120 : 100;
+  if (state.resources.energy < 0 || state.resources.energy > maxEnergy) {
     throw new Error('Invariant violation: energy out of bounds');
   }
   if (state.resources.day < 1 || state.resources.day > config.totalDays) {

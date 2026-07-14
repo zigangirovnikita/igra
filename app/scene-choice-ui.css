@@ -86,6 +86,12 @@
   box-shadow: 0 5px 0 rgba(226, 53, 119, 0.32);
 }
 
+.v3-modal .choice-card--selected {
+  border-color: var(--color-green, #1a9e5c);
+  background: #d6f5e7;
+  box-shadow: 4px 4px 0 rgba(26, 158, 92, 0.24);
+}
+
 .choice-card--disabled,
 .choice-card:disabled {
   opacity: 1;

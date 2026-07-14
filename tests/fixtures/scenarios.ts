@@ -22,6 +22,7 @@ const baseSetup: SetupInput = {
   avatarGender: 'female',
   name: 'Никита',
   niche: 'онлайн-консультации',
+  superpower: 'marketing',
 };
 
 const policies: Policy[] = [
@@ -54,48 +55,19 @@ const policies: Policy[] = [
 export const scenarios: ScenarioFixture[] = policies.map((item) => scenario(item.id, baseSetup, buildCommands(item)));
 
 function buildCommands(item: Policy): GameCommand[] {
-  const executableNurture: NurtureType[] = item.nurture.includes('telegram') ? ['telegram'] : ['none'];
   return [
-    command('c1', 'advance_intro', {}),
-    command('c1b', 'advance_intro', {}),
-    command('c2', 'set_product_type', { productType: item.productType }),
-    command('c3', 'set_product_name', { productName: 'Тестовый продукт' }),
-    command('c4', 'set_product_price', { productPrice: item.price }),
-    command('c5', 'set_sale_method', { saleMethod: item.saleMethod }),
-    command('c6', 'set_nurture', { nurture: item.nurture }),
-    command('c7', 'set_entry_point', { entryPoint: 'direct_messages' }),
-    command('c8', 'advance_day1_goal', {}),
-    command('c9', 'set_dreams', { dreams: ['vacation'] }),
-    command('c10', 'complete_day_one', {}),
-    command('c11', 'advance_day2_intro', {}),
-    command('c12', 'set_channels', { channels: ['instagram'] }),
-    command('c13', 'set_audience_metrics', { reels: item.reels, stories: item.stories }),
-    command('c14', 'complete_day_two', {}),
-    command('c14a', 'advance_daily_intro', {}),
-    command('c15', 'choose_intent', { intent: 'fix_system' }),
-    command('c16', 'choose_action_group', { group: 'product' }),
-    command('c17', 'select_action', { actionId: 'product_pilot' }),
-    command('c18', 'confirm_action', {}),
-    command('c18p', 'acknowledge_action_process', {}),
-    command('c19', 'acknowledge_action_result', {}),
-    command('c19e', 'complete_day', {}),
-    command('c19a', 'advance_daily_intro', {}),
-    command('c20', 'choose_intent', { intent: 'get_sales' }),
-    command('c21', 'choose_action_group', { group: 'traffic' }),
-    command('c22', 'select_action', { actionId: 'stories_3d' }),
-    command('c23', 'configure_action', { contentType: item.contentType }),
-    command('c23b', 'configure_action', {
-      route: {
-        entry: 'direct_messages',
-        nurture: executableNurture,
-        processing: 'manual',
-        saleMethod: item.saleMethod,
-        followup: 'none',
-      },
-    }),
-    command('c24', 'confirm_action', {}),
-    command('c25', 'acknowledge_action_process', {}),
-    command('c26', 'acknowledge_action_result', {}),
+    command('c1', 'v3_set_product', { productType: item.productType }),
+    command('c2', 'v3_set_price', { productPrice: Math.max(1_000, item.price) }),
+    command('c3', 'v3_set_dream', { dreamId: 'vacation' }),
+    command('c4', 'v3_next', {}),
+    command('c5', 'v3_next', {}),
+    command('c6', 'v3_begin_action_plan', {}),
+    command('c7', 'v3_select_active', { kind: 'ad', key: 'ad:unprepared' }),
+    command('c8', 'v3_select_active', { kind: 'warmup', key: 'warmup:manual' }),
+    command('c9', 'v3_select_active', { kind: 'sales', key: 'sales:intuition' }),
+    command('c10', 'v3_start_active_stage', {}),
+    command('c11', 'v3_next', {}),
+    command('c12', 'v3_complete_active_stage', {}),
   ];
 }
 

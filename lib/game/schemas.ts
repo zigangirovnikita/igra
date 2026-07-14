@@ -4,6 +4,7 @@ export const setupSchema = z.object({
   avatarGender: z.enum(['female', 'male']),
   name: z.string().trim().min(2).max(30),
   niche: z.string().trim().min(2).max(120),
+  superpower: z.enum(['sales', 'marketing', 'energy', 'ads']),
 });
 
 const base = {
@@ -25,6 +26,12 @@ const entryPointSchema = z.enum(['direct_messages', 'guide', 'video_lesson', 'we
 const nurtureSchema = z.enum(['none', 'guide', 'video_lesson', 'telegram', 'webinar']);
 const contentTypeSchema = z.enum(['useful', 'storytelling', 'selling', 'chaotic']);
 const audienceChannelSchema = z.enum(['instagram', 'telegram', 'contacts']);
+const v3ProductTypeSchema = z.enum(['consultation', 'service', 'recorded_course', 'live_course', 'mentorship', 'membership']);
+const v3PreparationAreaSchema = z.enum(['warmup', 'sales', 'ads']);
+const v3PreparationModeSchema = z.enum(['self', 'expert']);
+const v3AdviceCategorySchema = z.enum(['ads', 'warmup', 'sales']);
+const v3AdviceOptionSchema = z.enum(['friend', 'consult_5k', 'consult_10k']);
+const v3SelectionKindSchema = z.enum(['ad', 'warmup', 'sales']);
 const routeSchema = z.object({
   entry: entryPointSchema,
   nurture: z.array(nurtureSchema).min(1).max(3),
@@ -112,6 +119,40 @@ export const commandRequestSchema = z.discriminatedUnion('type', [
   }),
   z.object({ ...base, type: z.literal('record_reflection'), payload: z.object({ eventId: z.string().min(1), answer: z.string().trim().min(1).max(1000) }) }),
   z.object({ ...base, type: z.literal('acknowledge_event'), payload: z.object({ eventId: z.string().min(1).max(240) }) }),
+  z.object({ ...base, type: z.literal('v3_next'), payload: z.object({}).optional() }),
+  z.object({ ...base, type: z.literal('v3_set_product'), payload: z.object({ productType: v3ProductTypeSchema }) }),
+  z.object({ ...base, type: z.literal('v3_set_price'), payload: z.object({ productPrice: z.number().int().min(1000).max(5_000_000) }) }),
+  z.object({ ...base, type: z.literal('v3_set_dream'), payload: z.object({
+    dreamId: z.string().min(1).max(120),
+    customTitle: z.string().trim().min(2).max(80).optional(),
+    customPrice: z.number().int().min(1_000).max(5_000_000).optional(),
+  }) }),
+  z.object({ ...base, type: z.literal('v3_open_reflection'), payload: z.object({ target: z.enum(['prepare', 'advice', 'rest', 'history', 'act']) }) }),
+  z.object({ ...base, type: z.literal('v3_confirm_preparation'), payload: z.object({
+    area: v3PreparationAreaSchema,
+    instrumentId: z.string().min(1).max(80),
+    mode: v3PreparationModeSchema,
+  }) }),
+  z.object({ ...base, type: z.literal('v3_request_advice'), payload: z.object({
+    category: v3AdviceCategorySchema,
+    option: v3AdviceOptionSchema,
+  }) }),
+  z.object({ ...base, type: z.literal('v3_rest'), payload: z.object({ days: z.union([z.literal(1), z.literal(2), z.literal(3)]) }) }),
+  z.object({ ...base, type: z.literal('v3_begin_action_plan'), payload: z.object({}).optional() }),
+  z.object({ ...base, type: z.literal('v3_ack_pre_action_summary'), payload: z.object({}).optional() }),
+  z.object({ ...base, type: z.literal('v3_select_active'), payload: z.object({
+    kind: v3SelectionKindSchema,
+    key: z.string().min(1).max(180),
+  }) }),
+  z.object({ ...base, type: z.literal('v3_start_active_stage'), payload: z.object({}).optional() }),
+  z.object({ ...base, type: z.literal('v3_complete_active_stage'), payload: z.object({
+    manualAnswers: z.number().int().min(0).max(200).optional(),
+    salesChats: z.number().int().min(0).max(200).optional(),
+    directSalesChats: z.number().int().min(0).max(200).optional(),
+    postCallChats: z.number().int().min(0).max(200).optional(),
+    calls: z.number().int().min(0).max(60).optional(),
+  }).optional() }),
+  z.object({ ...base, type: z.literal('v3_return_reflection'), payload: z.object({}).optional() }),
 ]);
 
 export const developerCommandRequestSchema = z.discriminatedUnion('type', [
