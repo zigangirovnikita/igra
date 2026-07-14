@@ -64,6 +64,12 @@ function buildNextSteps(state: GameState, diagnostics: Diagnostics): AiReport['a
   if (categories.has('processing')) {
     steps.push({ change: 'Настроить обработку входящих', potentialResult: 'Не терять заявки до следующего шага.', why: 'Часть людей остаётся без ответа или не доходит до продажи.' });
   }
+  if (categories.has('warmup')) {
+    steps.push({ change: 'Усилить прогрев', potentialResult: 'Переводить больше лидов в заявки.', why: 'Слабое место находится между первым интересом и готовностью к продаже.' });
+  }
+  if (categories.has('sales')) {
+    steps.push({ change: 'Подготовить продажи', potentialResult: 'Повысить конверсию заявок в оплату.', why: 'Заявки уже доходят до продажи, но часть людей не покупает.' });
+  }
   if (state.activeRoute.nurture.includes('none')) {
     steps.push({ change: 'Добавить прогрев перед продажей', potentialResult: 'Подготовить человека к приглашению или покупке.', why: 'Сейчас маршрут ведёт к продаже без отдельного этапа доверия.' });
   }
@@ -155,7 +161,10 @@ function lossTitle(category: string): string {
     processing: 'Обработка входящих',
     capacity: 'Вместимость продукта',
     energy: 'Энергия',
-    traffic: 'Трафик'
+    traffic: 'Трафик',
+    warmup: 'Прогрев',
+    sales: 'Продажи',
+    preparation: 'Подготовка',
   };
   return titles[category] ?? category;
 }

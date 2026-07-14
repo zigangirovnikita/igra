@@ -525,6 +525,7 @@ export type V3StageReport = {
   siteVisits: number;
   siteBuys: number;
   siteMessages: number;
+  autoSales: number;
   salesCount: number;
   revenue: number;
   goalReached: boolean;

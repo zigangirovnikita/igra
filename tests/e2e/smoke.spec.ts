@@ -25,6 +25,52 @@ async function completeOnboarding(page: Page) {
   await expect(page.getByRole('heading', { name: 'Меню рефлексии' })).toBeVisible();
 }
 
+async function forceTerminalActiveStage(page: Page) {
+  await page.evaluate(async () => {
+    const cachedRaw = localStorage.getItem('launch-game-cache');
+    if (!cachedRaw) throw new Error('Missing cached session');
+    const cached = JSON.parse(cachedRaw) as { sessionId: string };
+    let state = await fetchState(cached.sessionId);
+
+    async function command(type: string, payload: Record<string, unknown> = {}) {
+      const response = await fetch(`/api/game/sessions/${cached.sessionId}/commands`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          commandId: `e2e_${type}_${crypto.randomUUID()}`,
+          expectedVersion: state.stateVersion,
+          type,
+          payload,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message ?? data.error ?? `Command failed: ${type}`);
+      state = data.state;
+    }
+
+    await command('v3_begin_action_plan');
+    await command('v3_select_active', { kind: 'ad', key: 'ad:unprepared' });
+    await command('v3_select_active', { kind: 'warmup', key: 'warmup:manual' });
+    await command('v3_select_active', { kind: 'sales', key: 'sales:intuition' });
+    await command('v3_start_active_stage');
+    await command('v3_next');
+    await command('v3_complete_active_stage', {
+      manualAnswers: 200,
+      directSalesChats: 200,
+      postCallChats: 200,
+      salesChats: 200,
+      calls: 60,
+    });
+
+    async function fetchState(sessionId: string) {
+      const response = await fetch(`/api/game/sessions/${sessionId}`);
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error ?? 'Failed to fetch state');
+      return data.state;
+    }
+  });
+}
+
 test('home and health endpoints respond', async ({ page, request }) => {
   await page.goto('/');
   await expect(page.getByRole('heading', { name: /Проживи 30 дней запуска/ })).toBeVisible();
@@ -45,6 +91,23 @@ test('reload offers canonical session resume', async ({ page }) => {
   await expect(page.getByRole('heading', { name: 'Продолжить запуск?' })).toBeVisible();
   await page.getByRole('button', { name: 'Продолжить' }).click();
   await expect(page.getByRole('heading', { name: 'Меню рефлексии' })).toBeVisible();
+});
+
+test('terminal v3 run reaches final diagnosis and lead form', async ({ page }) => {
+  await completeOnboarding(page);
+  await forceTerminalActiveStage(page);
+  await page.reload();
+  await page.getByRole('button', { name: 'Продолжить' }).click();
+
+  await expect(page.getByRole('heading', { name: /Активный этап №1 завершен/ })).toBeVisible();
+  await page.getByRole('button', { name: 'Смотреть итог запуска' }).click();
+  await expect(page.getByRole('heading', { name: 'Запуск завершён' })).toBeVisible();
+
+  await page.getByRole('button', { name: 'Посмотреть итоги' }).click();
+  await expect(page.getByText('Источник объяснения')).toBeVisible({ timeout: 15_000 });
+  await page.getByRole('button', { name: 'Получить разбор' }).click();
+  await expect(page.getByRole('heading', { name: 'Получить бесплатную консультацию' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Отправить заявку' })).toBeVisible();
 });
 
 test('layout remains usable at 320px', async ({ page }) => {

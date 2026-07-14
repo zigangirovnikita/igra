@@ -7,11 +7,13 @@ import {
   finishGame,
   getActionAvailability,
   getV3ActiveOptions,
+  getV3PreparationDefinitions,
   getBucketTargetSales,
   hashToUnitInterval,
   stochasticRound,
   type GameCommand,
   type GameState,
+  type Superpower,
 } from '../../packages/game-engine/src';
 import { createContentCohort } from '../../packages/game-engine/src/calculations/content';
 import { executeActionEffects } from '../../packages/game-engine/src/flow/outcome';
@@ -200,9 +202,63 @@ describe('commands and invariants', () => {
     expect(report?.callsHeld).toBe(4);
     expect(report?.chatsHeld).toBeLessThanOrEqual(8);
     expect(report?.chatsHeld).toBeGreaterThan(0);
-    expect(report?.salesCount).toBe((report?.callsBuy ?? 0) + (report?.chatsBuy ?? 0) + (report?.siteBuys ?? 0));
+    expect(report?.salesCount).toBe((report?.autoSales ?? 0) + (report?.callsBuy ?? 0) + (report?.chatsBuy ?? 0) + (report?.siteBuys ?? 0));
     expect(report?.applications).toBe(report?.interested);
     expect(completed.metrics.applications).toBe(report?.applications);
+  });
+
+  it('moves a terminal v3 active-stage report to the final reason screen', () => {
+    let state = createInitialState({ ...scenarios[0].setup, superpower: 'sales' }, config, 'v3_terminal_report_seed');
+    state.launchPlan.productPrice = 15_000;
+    state.targets = { targetSales: 30, targetRevenue: 450_000, personalGoal: 150_000 };
+    state.v3.activeSelection = {
+      ad: 'ad:unprepared',
+      warmup: 'warmup:manual',
+      sales: 'sales:intuition',
+    };
+
+    state = applyCommand(state, config, {
+      commandId: 'complete_terminal_v3_stage',
+      type: 'v3_complete_active_stage',
+      payload: { manualAnswers: 200, directSalesChats: 200, postCallChats: 200, salesChats: 200, calls: 60 },
+    });
+
+    expect(state.flow.stage).toBe('v3');
+    expect(state.flow.step).toBe('v3_stage_report');
+    expect(state.endingReason).toBe('resource_finished');
+
+    state = applyCommand(state, config, {
+      commandId: 'open_terminal_v3_final',
+      type: 'v3_return_reflection',
+      payload: {},
+    });
+
+    expect(state.flow.stage).toBe('final');
+    expect(state.flow.step).toBe('final_reason');
+  });
+
+  it('keeps custom v3 dream price in final diagnostics', () => {
+    let state = createInitialState(scenarios[0].setup, config, 'v3_custom_dream_diagnostics_seed');
+    state = applyCommand(state, config, {
+      commandId: 'set_product',
+      type: 'v3_set_product',
+      payload: { productType: 'service' },
+    });
+    state = applyCommand(state, config, {
+      commandId: 'set_price',
+      type: 'v3_set_price',
+      payload: { productPrice: 15_000 },
+    });
+    state = applyCommand(state, config, {
+      commandId: 'set_custom_dream',
+      type: 'v3_set_dream',
+      payload: { dreamId: 'custom', customTitle: 'Новый айфон', customPrice: 150_000 },
+    });
+
+    const finished = finishGame(state, config);
+    expect(finished.diagnostics?.dreams[0]).toEqual(
+      expect.objectContaining({ title: 'Новый айфон', price: 150_000 }),
+    );
   });
 
   it('reveals sales conversions from sales superpower and sales consultation', () => {
@@ -287,6 +343,7 @@ describe('commands and invariants', () => {
       payload: { manualAnswers: 56, directSalesChats: 0, postCallChats: 0, salesChats: 0, calls: 0 },
     });
     expect(completed.v3.lastStageReport?.salesCount).toBe(plan.totals.autoSales);
+    expect(completed.v3.lastStageReport?.autoSales).toBe(plan.totals.autoSales);
   });
 
   it('keeps low-ticket sales-superpower chat conversion above the minimum floor', () => {
@@ -307,6 +364,77 @@ describe('commands and invariants', () => {
       payload: { manualAnswers: 56, directSalesChats: 24, salesChats: 24, calls: 0 },
     });
     expect(completed.v3.lastStageReport?.chatsBuy).toBeGreaterThanOrEqual(3);
+  });
+
+  it('keeps every v3 ad, warmup, sales, and superpower conversion combination consistent', () => {
+    const superpowers: Superpower[] = ['marketing', 'sales', 'energy', 'ads'];
+    const failures: string[] = [];
+    let checked = 0;
+
+    for (const superpower of superpowers) {
+      const state = createConversionMatrixState(superpower, `v3_matrix_${superpower}`);
+      const ads = getV3ActiveOptions(state, 'ad').filter((option) => !option.locked);
+      const warmups = getV3ActiveOptions(state, 'warmup').filter((option) => !option.locked);
+      const salesOptions = getV3ActiveOptions(state, 'sales').filter((option) => !option.locked);
+
+      for (const ad of ads) {
+        for (const warmup of warmups) {
+          for (const sales of salesOptions) {
+            if (warmup.key.includes('auto_webinar') && sales.key.includes('auto_webinar')) continue;
+            const combo = `${superpower} / ${ad.key} / ${warmup.key} / ${sales.key}`;
+            try {
+              const comboState = structuredClone(state);
+              comboState.v3.activeSelection = { ad: ad.key, warmup: warmup.key, sales: sales.key };
+              const plan = buildV3ActiveStagePlan(comboState);
+              const completed = applyCommand(comboState, config, {
+                commandId: `complete_${checked}`,
+                type: 'v3_complete_active_stage',
+                payload: {
+                  manualAnswers: plan.totals.requiredAnswer,
+                  calls: plan.totals.interested,
+                  directSalesChats: plan.totals.interested,
+                  postCallChats: plan.totals.interested,
+                  salesChats: plan.totals.interested,
+                },
+              });
+              const report = completed.v3.lastStageReport;
+              if (!report) throw new Error('missing report');
+
+              expect(report.views, combo).toBe(plan.totals.views);
+              expect(report.newLeads, combo).toBe(plan.totals.newLeads);
+              expect(report.interested, combo).toBe(plan.totals.interested);
+              expect(report.notInterested, combo).toBe(plan.totals.notInterested);
+              expect(report.requiredAnswer, combo).toBe(plan.totals.requiredAnswer);
+              expect(report.applications, combo).toBe(report.interested);
+              expect(report.lost, combo).toBe(0);
+              expect(report.callsBuy, combo).toBeLessThanOrEqual(report.callsHeld);
+              expect(report.chatsBuy, combo).toBeLessThanOrEqual(report.chatsHeld);
+              expect(report.siteBuys, combo).toBeLessThanOrEqual(report.siteVisits);
+              expect(report.siteMessages, combo).toBeLessThanOrEqual(report.siteVisits);
+              expect(report.autoSales, combo).toBeLessThanOrEqual(report.applications);
+              expect(report.salesCount, combo).toBe(
+                report.autoSales + report.callsBuy + report.chatsBuy + report.siteBuys,
+              );
+              expect(report.salesCount, combo).toBeLessThanOrEqual(report.applications);
+              expect(completed.metrics.impressions, combo).toBe(report.views);
+              expect(completed.metrics.inbound, combo).toBe(report.newLeads);
+              expect(completed.metrics.activated, combo).toBe(report.interested);
+              expect(completed.metrics.processed, combo).toBe(report.interested);
+              expect(completed.metrics.applications, combo).toBe(report.applications);
+              expect(completed.metrics.sales, combo).toBe(report.salesCount);
+              expect(completed.metrics.revenue, combo).toBe(report.revenue);
+              assertStateInvariants(completed, config);
+              checked += 1;
+            } catch (error) {
+              failures.push(`${combo}: ${error instanceof Error ? error.message : String(error)}`);
+            }
+          }
+        }
+      }
+    }
+
+    expect(failures).toEqual([]);
+    expect(checked).toBeGreaterThan(2_000);
   });
 
   it('blocks an action when energy is below its complete cost', () => {
@@ -541,5 +669,31 @@ function resolvePending(input: GameState, key: string): GameState {
     state = applyCommand(state, config, command);
   }
   if (state.pendingDecision) throw new Error(`Pending decision loop: ${state.pendingDecision.type}`);
+  return state;
+}
+
+function createConversionMatrixState(superpower: Superpower, seed: string): GameState {
+  const state = createInitialState({ ...scenarios[0].setup, superpower }, config, seed);
+  state.launchPlan.productPrice = 15_000;
+  state.targets = { targetSales: 30, targetRevenue: 450_000, personalGoal: 150_000 };
+  state.v3.preparedAds = getV3PreparationDefinitions('ads').flatMap((definition) => (['self', 'expert'] as const).map((mode) => ({
+    key: `ad:${definition.id}:${mode}:matrix`,
+    instrumentId: definition.id,
+    mode,
+    title: `${definition.title} - ${mode === 'self' ? 'самостоятельно' : 'со специалистом'}`,
+    known: true,
+    uses: 0,
+  })));
+  state.v3.preparedTools = (['warmup', 'sales'] as const).flatMap((area) =>
+    getV3PreparationDefinitions(area).flatMap((definition) => (['self', 'expert'] as const).map((mode) => ({
+      key: `${area}:${definition.id}:${mode}`,
+      area,
+      instrumentId: definition.id,
+      mode,
+      title: `${definition.title} - ${mode === 'self' ? 'самостоятельно' : 'со специалистом'}`,
+      known: true,
+      uses: 0,
+    }))),
+  );
   return state;
 }

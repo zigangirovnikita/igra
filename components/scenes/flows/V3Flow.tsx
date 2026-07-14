@@ -366,7 +366,7 @@ export function V3Flow({ state, config: _config, dispatch, busy }: Props) {
     const report = state.v3.lastStageReport;
     return (
       <V3Screen image="summary" title={`Активный этап №${report?.stageNumber ?? ''} завершен`} busy={busy}
-        button="Перейти к рефлексии" onClick={() => dispatch('v3_return_reflection')}>
+        button={state.endingReason ? 'Смотреть итог запуска' : 'Перейти к рефлексии'} onClick={() => dispatch('v3_return_reflection')}>
         {report ? <ReportCard report={report} full /> : <p>Отчет не найден.</p>}
       </V3Screen>
     );
@@ -506,26 +506,40 @@ function ActiveStage({ state, dispatch, busy: _busy }: { state: GameState; dispa
   const blocked = now < blockedUntil;
   const blockLeft = Math.max(0, Math.ceil((blockedUntil - now) / 1000));
   const warmedNow = Math.max(0, interestedNow - expiredMessages);
+  const autoSalesNow = Math.min(
+    warmedNow,
+    Math.round(plan.totals.autoSales * (warmedNow / Math.max(1, plan.totals.interested))),
+  );
+  const readyForSalesNow = Math.max(0, warmedNow - autoSalesNow);
   const salesMode = activeSalesMode(state.v3.activeSelection.sales);
-  const availableCallCount = salesMode === 'chat'
+  const availableCallCount = salesMode === 'chat' || salesMode === 'site' || salesMode === 'webinar'
     ? 0
-    : Math.max(0, warmedNow - calls.held);
-  const siteMessageLimit = salesMode === 'site'
+    : Math.max(0, readyForSalesNow - calls.held);
+  const siteMessageLimit = salesMode === 'site' || salesMode === 'webinar'
     ? Math.min(
       plan.totals.siteMessages,
-      Math.round(plan.totals.siteMessages * (warmedNow / Math.max(1, plan.totals.interested))),
+      Math.round(plan.totals.siteMessages * (readyForSalesNow / Math.max(1, plan.totals.interested - plan.totals.autoSales))),
     )
     : 0;
   const availableChatCount = salesMode === 'call'
     ? Math.max(0, postCallQueue.length - chats.postCall)
-    : salesMode === 'site'
+    : salesMode === 'site' || salesMode === 'webinar'
       ? Math.max(0, siteMessageLimit - chats.held)
-      : Math.max(0, warmedNow + postCallQueue.length - calls.held - chats.direct - chats.postCall);
+      : Math.max(0, readyForSalesNow + postCallQueue.length - calls.held - chats.direct - chats.postCall);
   const currentWarmupText = visibleMessages[0]?.text ?? (plan.totals.requiredAnswer > 0 ? 'Сообщений для ответа пока нет' : 'Прогрев работает без ручных ответов');
   const currentCall = plan.callOutcomes[calls.held];
   const currentPostCallChat = postCallQueue[chats.postCall];
   const currentDirectChat = plan.chatOutcomes[chats.direct];
   const currentChat = currentPostCallChat ?? currentDirectChat;
+  const salesMessage = lastResult?.buy
+    ? 'Купили!'
+    : salesMode === 'call'
+      ? currentCall?.text
+      : salesMode === 'webinar'
+        ? currentChat?.text ?? 'Автовебинар продает автоматически'
+        : salesMode === 'site'
+          ? currentChat?.text ?? 'Сайт продает автоматически'
+          : currentChat?.text;
 
   const runAction = (durationSeconds: number, label: string, update: () => void) => {
     if (blocked || seconds <= 0) return;
@@ -601,15 +615,16 @@ function ActiveStage({ state, dispatch, busy: _busy }: { state: GameState; dispa
             <b>Не оставили заявку {notInterested}</b>
             <b>Остыли и ушли {expiredMessages}</b>
             <b>Оставили заявку {interestedNow}</b>
-            <b>Готовы к продаже {warmedNow}</b>
+            {plan.totals.autoSales > 0 && <b>Купили автоматически {autoSalesNow}</b>}
+            <b>Готовы к продаже {readyForSalesNow}</b>
           </div>
           <h2>Продажи</h2>
           <div className={`v3-message ${lastResult?.buy ? 'is-sale' : ''}`}>
-            {lastResult?.buy ? 'Купили!' : salesMode === 'call' ? currentCall?.text : currentChat?.text}
+            {salesMessage}
             {lastResult?.buy && <span className="v3-money-burst">$ $ $</span>}
           </div>
           <div className="v3-grid">
-            {salesMode !== 'chat' && salesMode !== 'site' && (
+            {salesMode !== 'chat' && salesMode !== 'site' && salesMode !== 'webinar' && (
               <button disabled={blocked || availableCallCount <= 0} onClick={runCall}>Провести созвон</button>
             )}
             {salesMode !== 'call' || postCallQueue.length > chats.postCall ? (
@@ -633,10 +648,11 @@ function ActiveStage({ state, dispatch, busy: _busy }: { state: GameState; dispa
   );
 }
 
-function activeSalesMode(key: string | null): 'intuition' | 'call' | 'chat' | 'site' {
+function activeSalesMode(key: string | null): 'intuition' | 'call' | 'chat' | 'site' | 'webinar' {
   if (!key) return 'intuition';
   if (key.includes('call_script')) return 'call';
   if (key.includes('chat_script')) return 'chat';
+  if (key.includes('auto_webinar')) return 'webinar';
   if (key.includes('website')) return 'site';
   return 'intuition';
 }
@@ -716,9 +732,15 @@ function ReportCard({
             <p>Купили: {report.chatsBuy}</p>
             <p>Не купили: {report.chatsNoBuy}</p>
           </div>
+          {(report.autoSales ?? 0) > 0 && (
+            <div className="v3-report-section">
+              <strong>Автопродажи</strong>
+              <p>Купили без ручной обработки: {report.autoSales}</p>
+            </div>
+          )}
           {report.siteVisits > 0 && (
             <div className="v3-report-section">
-              <strong>Сайт</strong>
+              <strong>{report.salesTitle.includes('Автовебинар') ? 'Автовебинар' : 'Сайт'}</strong>
               <p>Посетителей: {report.siteVisits}</p>
               <p>Купили: {report.siteBuys}</p>
               <p>Написали: {report.siteMessages}</p>

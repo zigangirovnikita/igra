@@ -16,6 +16,7 @@ If older product notes, screenshots, or generated artifacts conflict with `docs/
 - Do not start final visual polish before the pure game engine, fixtures, and balance simulator pass.
 - Keep `packages/game-engine` framework-independent and deterministic.
 - Do not import React, Next.js, Prisma, browser APIs, or OpenAI inside the engine.
+- Treat old `day1_*`, `day2_*`, `daily_*`, `cohorts`, and `DirectMiniGame` UI/flow code as legacy compatibility unless a task explicitly targets old saved sessions. New product behavior belongs to v3.
 - Never use `Math.random()` in game calculations. Use keyed seeded randomness.
 - Never use `eval`, `new Function`, or executable expressions from JSON config.
 - Do not trust client-calculated metrics. The server applies commands through the same engine and stores canonical state.

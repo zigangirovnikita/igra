@@ -208,7 +208,7 @@ export function applyCommand(input: GameState, config: GameConfig, command: Game
     : command.type === 'select_action'
       ? command.payload.actionId
       : undefined;
-  if (command.type !== 'acknowledge_event') {
+  if (command.type !== 'acknowledge_event' && !command.type.startsWith('v3_')) {
     state = appendTriggeredEvents(input, state, config, actionId);
   }
   state.appliedCommandIds.push(command.commandId);

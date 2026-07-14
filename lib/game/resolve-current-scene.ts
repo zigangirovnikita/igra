@@ -3,6 +3,12 @@ import type { GameState } from '@/packages/game-engine/src';
 export function resolveCurrentScene(state: GameState): { scene: string; props?: Record<string, unknown> } {
   if (state.status === 'setup') return { scene: 'setup' };
 
+  const step = state.flow.step;
+  if (state.flow.stage === 'final' || step === 'final_reason' || step === 'final_diagnosis' || step === 'finish_confirmation') {
+    return { scene: 'finished' };
+  }
+  if (state.flow.stage === 'v3' || step.startsWith('v3_')) return { scene: 'v3' };
+
   const pendingEvent = state.history.find((entry) => {
     if (entry.type !== 'game_event') return false;
     const instanceId = String(entry.payload?.eventInstanceId ?? '');
@@ -10,8 +16,6 @@ export function resolveCurrentScene(state: GameState): { scene: string; props?: 
   });
   if (pendingEvent) return { scene: 'event' };
 
-  const step = state.flow.step;
-  if (state.flow.stage === 'v3' || step.startsWith('v3_')) return { scene: 'v3' };
   if (state.pendingDecision?.type === 'energy_crisis') return { scene: 'energy_crisis' };
   if (state.pendingDecision?.type === 'budget_notice') return { scene: 'budget_notice' };
   if (state.pendingDecision && !['finish_confirmation', 'goal_reached'].includes(step)) {
@@ -34,11 +38,7 @@ export function resolveCurrentScene(state: GameState): { scene: string; props?: 
     case 'day_summary': return { scene: 'day_completion' };
     case 'energy_crisis': return { scene: 'energy_crisis' };
     case 'budget_notice': return { scene: 'budget_notice' };
-    case 'goal_reached':
-    case 'finish_confirmation':
-    case 'final_reason':
-    case 'final_diagnosis':
-      return { scene: 'finished' };
+    case 'goal_reached': return { scene: 'finished' };
     default:
       return state.pendingDecision ? { scene: 'pending_decision' } : { scene: 'unknown' };
   }

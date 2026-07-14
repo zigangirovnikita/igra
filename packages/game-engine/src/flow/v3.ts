@@ -47,6 +47,7 @@ const CHAT_DURATION_SECONDS = 2;
 const MESSAGE_TIMEOUT_SECONDS = 6;
 const MAX_OUTCOME_SEQUENCE = 120;
 const SITE_MESSAGE_CONVERSION = 0.25;
+const WEBINAR_MESSAGE_CONVERSION = 0.12;
 
 const PRODUCT_PLACEHOLDERS: Record<V3ProductType, number> = {
   consultation: 5_000,
@@ -75,6 +76,7 @@ export const V3_PREPARATIONS: PrepDef[] = [
   prep('sales', 'chat_script', 'Переписка', 0, 16, 2, 16_000, 0, 2, 0.14, 0.20),
   prep('sales', 'call_script', 'Созвон', 0, 20, 3, 22_000, 0, 2, 0.20, 0.28),
   prep('sales', 'website', 'Сайт', 0, 25, 4, 35_000, 0, 3, 0.16, 0.23),
+  prep('sales', 'auto_webinar', 'Автовебинар', 0, 28, 5, 38_000, 0, 4, 0.14, 0.19),
   prep('ads', 'stories', 'Контент для сторис', 0, 14, 2, 14_000, 0, 2, 0.10, 0.14),
   prep('ads', 'reels', 'Контент для рилс', 0, 18, 3, 18_000, 0, 2, 0.01, 0.013),
   prep('ads', 'telegram', 'Контент для ТГ-канала', 0, 16, 2, 16_000, 0, 2, 0.10, 0.14),
@@ -260,6 +262,7 @@ export function restV3(state: GameState, days: 1 | 2 | 3): GameState {
   state.v3.loopRestDays += days;
   state.v3.loopRestEnergy += energyGain;
   state.flow.step = 'v3_reflection';
+  finalizeV3IfTerminal(state);
   return state;
 }
 
@@ -278,6 +281,7 @@ export function beginV3ActionPlan(state: GameState): GameState {
   };
   state.v3.plannedPreparations = [];
   state.flow.step = (preparationDays > 0 || state.v3.loopRestDays > 0) ? 'v3_pre_action_summary' : 'v3_action_select';
+  finalizeV3IfTerminal(state);
   return state;
 }
 
@@ -289,6 +293,9 @@ export function ackV3PreActionSummary(state: GameState): GameState {
 export function selectV3Active(state: GameState, kind: V3SelectionKind, key: string): GameState {
   recoverPermanentToolsFromLastSummary(state);
   if (!isSelectable(state, kind, key)) throw new Error('Этот инструмент еще не готов');
+  if (isConflictingWebinarSelection(state, kind, key)) {
+    throw new Error('Автовебинар нельзя использовать одновременно и в прогреве, и в продажах');
+  }
   state.v3.activeSelection[kind] = key;
   return state;
 }
@@ -338,13 +345,16 @@ export function completeV3ActiveStage(state: GameState, interactions?: V3ActiveI
   state.v3.activeStageStartedAt = null;
   state.currentDayReport = null;
   state.flow.step = 'v3_stage_report';
-  if (report.endedByBurnout) {
-    state.endingReason = 'resource_finished';
-  }
+  state.endingReason = v3EndingReasonAfterReport(state, report);
   return state;
 }
 
 export function returnV3Reflection(state: GameState): GameState {
+  if (state.endingReason) {
+    state.flow.stage = 'final';
+    state.flow.step = 'final_reason';
+    return state;
+  }
   state.flow.step = 'v3_reflection';
   return state;
 }
@@ -416,8 +426,14 @@ export function buildV3ActiveStagePlan(state: GameState): V3ActiveStagePlan {
   const requiredAnswer = Math.min(56, Math.max(0, Math.round(interested * warmup.manualShare)));
   const autoSales = Math.max(0, stochasticRound(interested * (warmup.autoSalesShare ?? 0), planKey(state, stageNumber, 'warmup-auto-sales')));
   const salesConversion = effectiveSalesConversion(state, context.sales.baseConversion, salesBonus);
-  const siteMessages = context.sales.key.includes('website')
-    ? countDeterministicSuccesses(interested, SITE_MESSAGE_CONVERSION, planKey(state, stageNumber, 'site-messages'))
+  const salesPool = Math.max(0, interested - autoSales);
+  const messageConversion = autoSalesMessageConversion(context.sales.key);
+  const siteMessages = messageConversion > 0
+    ? countDeterministicSuccesses(
+      Math.max(0, salesPool - countDeterministicSuccesses(salesPool, salesConversion, planKey(state, stageNumber, 'site-buys'))),
+      messageConversion,
+      planKey(state, stageNumber, 'sales-auto-messages'),
+    )
     : 0;
 
   return {
@@ -518,6 +534,7 @@ function buildStageReport(state: GameState, interactions?: V3ActiveInteractions)
   const lost = Math.max(0, requiredAnswer - handledCapacity);
   const warmed = Math.max(0, interested - lost);
   const autoSales = Math.min(warmed, plan.totals.autoSales);
+  const salesPool = Math.max(0, warmed - autoSales);
 
   let callsHeld = 0;
   let callsBuy = 0;
@@ -535,18 +552,19 @@ function buildStageReport(state: GameState, interactions?: V3ActiveInteractions)
   if (sales.key.includes('call_script')) {
     const postCallChatConversion = effectiveSalesConversion(state, sales.baseConversion, context.salesBonus);
     callsHeld = hasInteractions
-      ? Math.max(0, Math.min(warmed, requestedCalls))
-      : Math.max(0, Math.min(warmed, Math.floor((state.resources.energy - energySpent) / 5)));
+      ? Math.max(0, Math.min(salesPool, requestedCalls))
+      : Math.max(0, Math.min(salesPool, Math.floor((state.resources.energy - energySpent) / 5)));
     callsBuy = countOutcomeBuys(plan.callOutcomes, callsHeld);
     const postCallMessages = countPostCallMessages(plan.callOutcomes, callsHeld);
     chatsHeld = Math.max(0, Math.min(postCallMessages, requestedPostCallChats));
     chatsBuy = countDeterministicSuccesses(chatsHeld, postCallChatConversion, planKey(state, stageNumber, 'post-call-chat-buys'));
     energySpent += callsHeld * 5 + chatsHeld * 2;
-  } else if (sales.key.includes('website')) {
+  } else if (sales.key.includes('website') || sales.key.includes('auto_webinar')) {
     const websiteSalesConversion = effectiveSalesConversion(state, sales.baseConversion, context.salesBonus);
-    siteVisits = warmed;
+    const messageConversion = autoSalesMessageConversion(sales.key);
+    siteVisits = salesPool;
     siteBuys = countDeterministicSuccesses(siteVisits, websiteSalesConversion, planKey(state, stageNumber, 'site-buys'));
-    siteMessages = countDeterministicSuccesses(siteVisits, SITE_MESSAGE_CONVERSION, planKey(state, stageNumber, 'site-messages'));
+    siteMessages = countDeterministicSuccesses(Math.max(0, siteVisits - siteBuys), messageConversion, planKey(state, stageNumber, 'sales-auto-messages'));
     chatsHeld = hasInteractions
       ? Math.max(0, Math.min(siteMessages, requestedChats))
       : Math.max(0, Math.min(siteMessages, Math.floor((state.resources.energy - energySpent) / 2)));
@@ -555,10 +573,10 @@ function buildStageReport(state: GameState, interactions?: V3ActiveInteractions)
   } else if (sales.key === 'sales:intuition') {
     const postCallChatConversion = effectiveSalesConversion(state, sales.baseConversion, context.salesBonus);
     callsHeld = hasInteractions
-      ? Math.max(0, Math.min(warmed, requestedCalls))
-      : Math.max(0, Math.min(warmed, Math.floor((state.resources.energy - energySpent) / 5)));
+      ? Math.max(0, Math.min(salesPool, requestedCalls))
+      : Math.max(0, Math.min(salesPool, Math.floor((state.resources.energy - energySpent) / 5)));
     callsBuy = countOutcomeBuys(plan.callOutcomes, callsHeld);
-    const remainingAfterCalls = Math.max(0, warmed - callsHeld);
+    const remainingAfterCalls = Math.max(0, salesPool - callsHeld);
     const postCallMessages = countPostCallMessages(plan.callOutcomes, callsHeld);
     const directChatsHeld = Math.max(0, Math.min(remainingAfterCalls, requestedDirectChats));
     const postCallChatsHeld = Math.max(0, Math.min(postCallMessages, requestedPostCallChats));
@@ -568,8 +586,8 @@ function buildStageReport(state: GameState, interactions?: V3ActiveInteractions)
     energySpent += callsHeld * 6 + chatsHeld * 3;
   } else {
     chatsHeld = hasInteractions
-      ? Math.max(0, Math.min(warmed, requestedChats))
-      : Math.max(0, Math.min(warmed, Math.floor((state.resources.energy - energySpent) / 2)));
+      ? Math.max(0, Math.min(salesPool, requestedChats))
+      : Math.max(0, Math.min(salesPool, Math.floor((state.resources.energy - energySpent) / 2)));
     chatsBuy = countOutcomeBuys(plan.chatOutcomes, chatsHeld);
     energySpent += chatsHeld * 2;
   }
@@ -608,6 +626,7 @@ function buildStageReport(state: GameState, interactions?: V3ActiveInteractions)
     siteVisits,
     siteBuys,
     siteMessages,
+    autoSales,
     salesCount,
     revenue,
     goalReached: state.metrics.revenue + revenue >= state.targets.targetRevenue && state.targets.targetRevenue > 0,
@@ -820,6 +839,38 @@ function effectiveSalesConversion(state: GameState, baseConversion: number, bonu
   return clampConversion(Math.max(baseConversion, minSalesConversionForPrice(state.launchPlan.productPrice ?? 0)) * bonus);
 }
 
+function v3EndingReasonAfterReport(state: GameState, report: V3StageReport): GameState['endingReason'] {
+  if (state.endingReason) return state.endingReason;
+  if (report.endedByBurnout || state.resources.energy <= 0 || state.resources.bank <= 0) return 'resource_finished';
+  if (report.finishedDay >= 30 || state.resources.day >= 30) return 'time_finished';
+  if (
+    (state.targets.targetRevenue > 0 && state.metrics.revenue >= state.targets.targetRevenue)
+    || (state.targets.targetSales > 0 && state.metrics.sales >= state.targets.targetSales)
+    || report.goalReached
+  ) {
+    return 'goal_finished';
+  }
+  return null;
+}
+
+function finalizeV3IfTerminal(state: GameState): void {
+  if (state.endingReason) return;
+  if (state.resources.energy <= 0 || state.resources.bank <= 0) {
+    state.endingReason = 'resource_finished';
+  } else if (state.resources.day >= 30) {
+    state.endingReason = 'time_finished';
+  } else if (
+    (state.targets.targetRevenue > 0 && state.metrics.revenue >= state.targets.targetRevenue)
+    || (state.targets.targetSales > 0 && state.metrics.sales >= state.targets.targetSales)
+  ) {
+    state.endingReason = 'goal_finished';
+  }
+  if (state.endingReason) {
+    state.flow.stage = 'final';
+    state.flow.step = 'final_reason';
+  }
+}
+
 function minSalesConversionForPrice(productPrice: number): number {
   if (productPrice > 0 && productPrice <= 15_000) return 0.10;
   return 0;
@@ -859,6 +910,13 @@ function isSelectable(state: GameState, kind: V3SelectionKind, key: string): boo
   return getV3ActiveOptions(state, kind).some((option) => option.key === key && !option.locked);
 }
 
+function isConflictingWebinarSelection(state: GameState, kind: V3SelectionKind, key: string): boolean {
+  if (!key.includes('auto_webinar')) return false;
+  if (kind === 'warmup') return Boolean(state.v3.activeSelection.sales?.includes('auto_webinar'));
+  if (kind === 'sales') return Boolean(state.v3.activeSelection.warmup?.includes('auto_webinar'));
+  return false;
+}
+
 function isPermanentPrepared(state: GameState, area: V3PreparationArea, instrumentId: string, mode: V3PreparationMode): boolean {
   return state.v3.preparedTools.some((item) => item.area === area && item.instrumentId === instrumentId && item.mode === mode)
     || state.v3.plannedPreparations.some((item) => item.area === area && item.instrumentId === instrumentId && item.mode === mode);
@@ -879,11 +937,18 @@ function manualShareFor(area: V3PreparationArea, instrumentId: string): number {
   if (area === 'warmup' && instrumentId === 'simple_bot') return 0.2;
   if (area === 'warmup' && instrumentId === 'auto_webinar') return 0.12;
   if (area === 'sales' && instrumentId === 'website') return 0.25;
+  if (area === 'sales' && instrumentId === 'auto_webinar') return WEBINAR_MESSAGE_CONVERSION;
   return 0.55;
 }
 
 function autoSalesShareFor(area: V3PreparationArea, instrumentId: string): number {
   if (area === 'warmup' && instrumentId === 'auto_webinar') return 0.08;
+  return 0;
+}
+
+function autoSalesMessageConversion(key: string): number {
+  if (key.includes('website')) return SITE_MESSAGE_CONVERSION;
+  if (key.includes('auto_webinar')) return WEBINAR_MESSAGE_CONVERSION;
   return 0;
 }
 
@@ -1004,6 +1069,7 @@ function conversionRows(category: V3AdviceCategory, precision: V3AdvicePrecision
     { label: 'Переписка -> покупка', value: approx ? 'около 14%' : '14-20%' },
     { label: 'Созвон -> покупка', value: approx ? 'около 20%' : '20-28%' },
     { label: 'Сайт -> покупка', value: approx ? 'около 16%' : '16-23%' },
+    { label: 'Автовебинар -> покупка', value: approx ? 'около 14%' : '14-19%', note: 'часть не купивших пишет в переписку' },
   ];
 }
 

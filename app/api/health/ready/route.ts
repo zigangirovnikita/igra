@@ -6,7 +6,7 @@ export function GET() {
     const config = loadGameConfig();
     const production = process.env.NODE_ENV === 'production';
     const missingProductionEnv = production
-      ? ['DATABASE_URL', 'SESSION_SECRET', 'LEAD_WEBHOOK_URL', 'LEAD_WEBHOOK_SECRET'].filter((key) => !process.env[key])
+      ? ['DATABASE_URL', 'LEAD_WEBHOOK_URL', 'LEAD_WEBHOOK_SECRET', 'LEAD_ENCRYPTION_KEY'].filter((key) => !process.env[key])
       : [];
 
     if (missingProductionEnv.length > 0) {
