@@ -5,7 +5,7 @@ import type { ReactNode } from 'react';
 import {
   buildV3ActiveStagePlan,
   getV3ActiveOptions,
-  getV3PreparationDefinitions,
+  getV3PreparationDisplayOptions,
   type GameConfig,
   type GameState,
   type V3ActiveSaleOutcome,
@@ -176,7 +176,7 @@ export function V3Flow({ state, config: _config, dispatch, busy }: Props) {
   }
 
   if (step === 'v3_prepare_category') {
-    const definitions = prepareArea ? getV3PreparationDefinitions(prepareArea) : [];
+    const definitions = prepareArea ? getV3PreparationDisplayOptions(state, prepareArea) : [];
     return (
       <V3Screen gender={gender} title={prepareArea ? AREA_TITLES[prepareArea] : 'Подготовиться'} busy={busy}>
         {!prepareArea ? (
@@ -192,8 +192,8 @@ export function V3Flow({ state, config: _config, dispatch, busy }: Props) {
               <div key={definition.id} className="v3-text-card">
                 <strong>{definition.title}</strong>
                 <div className="v3-grid">
-                  <PrepareButton state={state} definitionId={definition.id} area={prepareArea} mode="self" dispatch={dispatch} />
-                  <PrepareButton state={state} definitionId={definition.id} area={prepareArea} mode="expert" dispatch={dispatch} />
+                  <PrepareButton state={state} definition={definition} area={prepareArea} mode="self" dispatch={dispatch} />
+                  <PrepareButton state={state} definition={definition} area={prepareArea} mode="expert" dispatch={dispatch} />
                 </div>
               </div>
             ))}
@@ -423,22 +423,21 @@ function V3Screen({
 
 function PrepareButton({
   state,
-  definitionId,
+  definition,
   area,
   mode,
   dispatch,
 }: {
   state: GameState;
-  definitionId: string;
+  definition: ReturnType<typeof getV3PreparationDisplayOptions>[number];
   area: V3PreparationArea;
   mode: V3PreparationMode;
   dispatch: Dispatch;
 }) {
-  const definition = getV3PreparationDefinitions(area).find((item) => item.id === definitionId);
-  const price = definition?.[mode === 'self' ? 'self' : 'expert'];
-  if (!definition || !price) return null;
+  const price = definition[mode === 'self' ? 'self' : 'expert'];
   const purchased = isPreparationPurchased(state, area, definition.id, mode);
   const permanentPurchased = purchased && area !== 'ads';
+  const conversionLine = price.known ? ` · конверсия ${formatConversion(price.effectiveConversion)}` : '';
   return (
     <button className={`v3-red-button${purchased ? ' v3-red-button--owned' : ''}`} disabled={permanentPurchased} onClick={() => {
       if (confirm(`${definition.title}: подтвердить вариант "${mode === 'self' ? 'самостоятельно' : 'со специалистом'}"?`)) {
@@ -446,7 +445,7 @@ function PrepareButton({
       }
     }}>
       {purchased ? area === 'ads' ? 'Куплено · купить еще' : 'Куплено' : `Сделать ${mode === 'self' ? 'самостоятельно' : 'со специалистом'}`}
-      <small>{price.cost > 0 ? `${price.cost.toLocaleString('ru-RU')} ₽` : 'без денег'} · {price.energy} энергии · {price.days} дн.</small>
+      <small>{price.cost > 0 ? `${price.cost.toLocaleString('ru-RU')} ₽` : 'без денег'} · {price.energy} энергии · {price.days} дн.{conversionLine}</small>
     </button>
   );
 }

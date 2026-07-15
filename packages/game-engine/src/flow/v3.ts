@@ -40,6 +40,10 @@ type ActiveDef = {
 };
 
 type ActiveOption = ActiveDef & { locked: boolean; known: boolean; effectiveConversion: number };
+type PreparationDisplayOption = PrepDef & {
+  self: PrepDef['self'] & { known: boolean; effectiveConversion: number };
+  expert: PrepDef['expert'] & { known: boolean; effectiveConversion: number };
+};
 
 const ACTIVE_STAGE_SECONDS = 60;
 const CALL_DURATION_SECONDS = 6;
@@ -361,6 +365,23 @@ export function returnV3Reflection(state: GameState): GameState {
 
 export function getV3PreparationDefinitions(area?: V3PreparationArea): PrepDef[] {
   return area ? V3_PREPARATIONS.filter((item) => item.area === area) : V3_PREPARATIONS;
+}
+
+export function getV3PreparationDisplayOptions(state: GameState, area: V3PreparationArea): PreparationDisplayOption[] {
+  const kind = selectionKindForPreparationArea(area);
+  return getV3PreparationDefinitions(area).map((item) => ({
+    ...item,
+    self: {
+      ...item.self,
+      known: isConversionKnown(state, kind, false),
+      effectiveConversion: effectiveOptionConversion(state, kind, item.self.conversion),
+    },
+    expert: {
+      ...item.expert,
+      known: isConversionKnown(state, kind, false),
+      effectiveConversion: effectiveOptionConversion(state, kind, item.expert.conversion),
+    },
+  }));
 }
 
 export function getV3ActiveOptions(state: GameState, kind: V3SelectionKind): ActiveOption[] {
@@ -839,6 +860,10 @@ function effectiveOptionConversion(state: GameState, kind: V3SelectionKind, base
   return kind === 'sales'
     ? effectiveSalesConversion(state, baseConversion, bonus)
     : clampConversion(baseConversion * bonus);
+}
+
+function selectionKindForPreparationArea(area: V3PreparationArea): V3SelectionKind {
+  return area === 'ads' ? 'ad' : area;
 }
 
 function effectiveSalesConversion(state: GameState, baseConversion: number, bonus: number): number {

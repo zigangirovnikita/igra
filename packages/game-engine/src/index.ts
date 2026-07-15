@@ -14,5 +14,6 @@ export {
   buildV3ActiveStagePlan,
   getV3ActiveOptions,
   getV3PreparationDefinitions,
+  getV3PreparationDisplayOptions,
   v3ProductPlaceholder,
 } from './flow/v3';

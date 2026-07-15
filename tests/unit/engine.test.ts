@@ -8,6 +8,7 @@ import {
   getActionAvailability,
   getV3ActiveOptions,
   getV3PreparationDefinitions,
+  getV3PreparationDisplayOptions,
   getBucketTargetSales,
   hashToUnitInterval,
   stochasticRound,
@@ -264,6 +265,13 @@ describe('commands and invariants', () => {
 
   it('reveals effective active option conversions from superpowers and consultations', () => {
     const superpowered = createInitialState({ ...scenarios[0].setup, superpower: 'sales' }, config, 'v3_sales_superpower_seed');
+    const preparationOptions = getV3PreparationDisplayOptions(superpowered, 'sales');
+    const chatScript = preparationOptions.find((option) => option.id === 'chat_script');
+    expect(chatScript?.self.known).toBe(true);
+    expect(chatScript?.self.effectiveConversion).toBeCloseTo(0.1596);
+    expect(chatScript?.expert.known).toBe(true);
+    expect(chatScript?.expert.effectiveConversion).toBeCloseTo(0.228);
+
     const salesOptions = getV3ActiveOptions(superpowered, 'sales');
     const superpoweredCall = salesOptions.find((option) => option.key.includes('locked:sales:call_script:self'));
     expect(superpoweredCall).toEqual(expect.objectContaining({ known: true, baseConversion: 0.20 }));
