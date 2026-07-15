@@ -57,6 +57,7 @@ export function SetupScene({ config: _config, onComplete, busy, initialDraft }: 
 
       {step === 'setup_intro' && (
         <div className="setup-step setup-step--center">
+          <SetupVisual variant="sunset-duo" gender={draft.gender} />
           <div className="v3-text-card">
             Сначала создадим игрового персонажа, после приступим к сюжету.
           </div>
@@ -86,6 +87,7 @@ export function SetupScene({ config: _config, onComplete, busy, initialDraft }: 
       {/* ── NAME ── */}
       {step === 'name' && (
         <div className="setup-step">
+          <SetupVisual variant="product" gender={draft.gender} />
           <SetupSummary draft={draft} />
           <h2 className="setup-question">Введите имя персонажа:</h2>
           <input
@@ -104,6 +106,7 @@ export function SetupScene({ config: _config, onComplete, busy, initialDraft }: 
       {/* ── NICHE ── */}
       {step === 'niche' && (
         <div className="setup-step">
+          <SetupVisual variant="product" gender={draft.gender} />
           <SetupSummary draft={draft} />
           <h2 className="setup-question">Введите какая ниша или чем занимается {draft.name || 'персонаж'}</h2>
           <input
@@ -120,6 +123,7 @@ export function SetupScene({ config: _config, onComplete, busy, initialDraft }: 
 
       {step === 'superpower' && (
         <div className="setup-step">
+          <SetupVisual variant="goal" gender={draft.gender} />
           <SetupSummary draft={draft} />
           <h2 className="setup-question">Введите суперсилу для персонажа</h2>
           <div className="v3-power-list">
@@ -142,6 +146,7 @@ export function SetupScene({ config: _config, onComplete, busy, initialDraft }: 
 
       {step === 'created' && (
         <div className="setup-step">
+          <SetupVisual variant="goal" gender={draft.gender} />
           <SetupSummary draft={draft} />
           <h2 className="setup-question">Поздравляем! Персонаж создан!</h2>
           <div className="v3-text-card">{superpowerText(draft.superpower)}</div>
@@ -160,6 +165,20 @@ const SUPERPOWERS: Array<{ id: Superpower; title: string; description: string }>
   { id: 'energy', title: 'Энергичность', description: 'Дает 120 единиц энергии на старте вместо 100.' },
   { id: 'ads', title: 'Реклама', description: 'Повышает эффективность рекламы и показывает примерные просмотры.' },
 ];
+
+function SetupVisual({
+  variant,
+  gender,
+}: {
+  variant: Parameters<typeof PixelArtScene>[0]['variant'];
+  gender: SetupDraft['gender'];
+}) {
+  return (
+    <div className="setup-visual">
+      <PixelArtScene variant={variant} gender={gender} />
+    </div>
+  );
+}
 
 function SetupSummary({ draft }: { draft: SetupDraft }) {
   return (

@@ -101,7 +101,7 @@ test('terminal v3 run reaches final diagnosis and lead form', async ({ page }) =
 
   await expect(page.getByRole('heading', { name: /Активный этап №1 завершен/ })).toBeVisible();
   await page.getByRole('button', { name: 'Смотреть итог запуска' }).click();
-  await expect(page.getByRole('heading', { name: 'Запуск завершён' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Вы выгорели' })).toBeVisible();
 
   await page.getByRole('button', { name: 'Посмотреть итоги' }).click();
   await expect(page.getByText('Источник объяснения')).toBeVisible({ timeout: 15_000 });

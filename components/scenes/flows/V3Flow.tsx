@@ -65,7 +65,7 @@ export function V3Flow({ state, config: _config, dispatch, busy }: Props) {
 
   if (step === 'v3_rules') {
     return (
-      <V3Screen gender={gender} image="beach-talk" title="Правила запуска" busy={busy} button="Правила ясны!" onClick={() => dispatch('v3_next')}>
+      <V3Screen gender={gender} image="goal" title="Правила запуска" busy={busy} button="Правила ясны!" onClick={() => dispatch('v3_next')}>
         <p>Наверху всегда показаны день, банк и энергия.</p>
         <p>Банк - это остаток стартовых 100 000 рублей. Выручка от продаж в эту сумму не входит.</p>
         <p>Если энергия закончится, вы выгорели и игра закончится.</p>
@@ -76,7 +76,7 @@ export function V3Flow({ state, config: _config, dispatch, busy }: Props) {
 
   if (step === 'v3_story_plan') {
     return (
-      <V3Screen gender={gender} image="beach-talk" title="Подумайте о продукте и мечте" busy={busy}
+      <V3Screen gender={gender} image="product" title="Подумайте о продукте и мечте" busy={busy}
         button="Хорошо" onClick={() => dispatch('v3_next')}>
         <p>Я сейчас поеду по делам. А ты пока подумай, что ты хочешь продавать и что хочешь купить с продаж.</p>
       </V3Screen>
@@ -85,7 +85,7 @@ export function V3Flow({ state, config: _config, dispatch, busy }: Props) {
 
   if (step === 'v3_product') {
     return (
-      <V3Screen gender={gender} image="notebook" title={`Выберите, что будет продавать ${name}`} busy={busy}>
+      <V3Screen gender={gender} image="product" title={`Выберите, что будет продавать ${name}`} busy={busy}>
         <div className="v3-grid">
           {PRODUCT_ORDER.map((id) => (
             <button key={id} className="v3-red-button" onClick={() => dispatch('v3_set_product', { productType: id })}>
@@ -100,7 +100,7 @@ export function V3Flow({ state, config: _config, dispatch, busy }: Props) {
   if (step === 'v3_price') {
     const placeholder = state.v3.productType ? v3ProductPlaceholder(state.v3.productType) : 30000;
     return (
-      <V3Screen gender={gender} image="notebook" title={`В какую стоимость ${name} будет продавать ${state.launchPlan.productName}?`} busy={busy}
+      <V3Screen gender={gender} image="price" title={`В какую стоимость ${name} будет продавать ${state.launchPlan.productName}?`} busy={busy}
         button="Готово, дальше" onClick={() => dispatch('v3_set_price', { productPrice: Number(price || placeholder) })}>
         <input className="setup-input" inputMode="numeric" value={price} onChange={(event) => setPrice(event.target.value)}
           placeholder={`Например: ${placeholder}`} />
@@ -112,7 +112,7 @@ export function V3Flow({ state, config: _config, dispatch, busy }: Props) {
   if (step === 'v3_dream') {
     const dreams = approvedDreams(gender);
     return (
-      <V3Screen gender={gender} image="notebook" title={`Что ${name} хочет купить, когда продажи пойдут?`} busy={busy}>
+      <V3Screen gender={gender} image="dream" title={`Что ${name} хочет купить, когда продажи пойдут?`} busy={busy}>
         <div className="v3-dream-list">
           {dreams.map((dream) => (
             <button key={dream.id} className="v3-dream-row" onClick={() => dispatch('v3_set_dream', {
@@ -141,7 +141,7 @@ export function V3Flow({ state, config: _config, dispatch, busy }: Props) {
 
   if (step === 'v3_goal_summary') {
     return (
-      <V3Screen gender={gender} image="summary" title="Цель запуска" busy={busy} button="Цель ясна" onClick={() => dispatch('v3_next')}>
+      <V3Screen gender={gender} image="goal" title="Цель запуска" busy={busy} button="Цель ясна" onClick={() => dispatch('v3_next')}>
         <p>Прошел 1 день. {name} придумал{gender === 'female' ? 'а' : ''}, что будет продавать {state.launchPlan.productName} за {(state.launchPlan.productPrice || 0).toLocaleString('ru-RU')} ₽.</p>
         <p>Для этого цель: сделать {state.targets.targetSales} продаж и заработать {state.targets.targetRevenue.toLocaleString('ru-RU')} рублей.</p>
       </V3Screen>
@@ -150,7 +150,7 @@ export function V3Flow({ state, config: _config, dispatch, busy }: Props) {
 
   if (step === 'v3_reflection_intro') {
     return (
-      <V3Screen gender={gender} image="cocktails" title={`${name} начинает цикл запуска`} busy={busy} button="Понятно!" onClick={() => dispatch('v3_next')}>
+      <V3Screen gender={gender} image="reflection" title={`${name} начинает цикл запуска`} busy={busy} button="Понятно!" onClick={() => dispatch('v3_next')}>
         <p>Каждая волна включает рефлексию, подготовку, активный этап и итоги попытки.</p>
         <p>Подготовьтесь, посоветуйтесь, восстановите энергию или переходите к действиям.</p>
       </V3Screen>
@@ -160,7 +160,7 @@ export function V3Flow({ state, config: _config, dispatch, busy }: Props) {
   if (step === 'v3_reflection') {
     return (
       <V3Screen gender={gender}
-        image="cocktails"
+        image="reflection"
         title="Меню рефлексии"
         busy={busy}
         button="Действовать"
@@ -179,7 +179,7 @@ export function V3Flow({ state, config: _config, dispatch, busy }: Props) {
   if (step === 'v3_prepare_category') {
     const definitions = prepareArea ? getV3PreparationDisplayOptions(state, prepareArea) : [];
     return (
-      <V3Screen gender={gender} image="laptop" title={prepareArea ? AREA_TITLES[prepareArea] : 'Подготовиться'} busy={busy}>
+      <V3Screen gender={gender} image="prepare" title={prepareArea ? AREA_TITLES[prepareArea] : 'Подготовиться'} busy={busy}>
         {!prepareArea ? (
           <div className="v3-stack">
             {(['warmup', 'sales', 'ads'] as V3PreparationArea[]).map((area) => (
@@ -213,7 +213,7 @@ export function V3Flow({ state, config: _config, dispatch, busy }: Props) {
 
   if (step === 'v3_advice_category') {
     return (
-      <V3Screen gender={gender} image="notebook" title={adviceCategory ? adviceTitle(adviceCategory) : 'Посоветоваться'} busy={busy}>
+      <V3Screen gender={gender} image="advice" title={adviceCategory ? adviceTitle(adviceCategory) : 'Посоветоваться'} busy={busy}>
         {!adviceCategory ? (
           <div className="v3-stack">
             {(['ads', 'warmup', 'sales'] as V3AdviceCategory[]).map((category) => (
@@ -250,7 +250,7 @@ export function V3Flow({ state, config: _config, dispatch, busy }: Props) {
   if (step === 'v3_advice_result') {
     const advice = state.v3.lastAdvice;
     return (
-      <V3Screen gender={gender} image="notebook" title="Совет получен" busy={busy} button="Вернуться к рефлексии" onClick={() => dispatch('v3_return_reflection')}>
+      <V3Screen gender={gender} image="advice" title="Совет получен" busy={busy} button="Вернуться к рефлексии" onClick={() => dispatch('v3_return_reflection')}>
         {advice ? (
           <div className="v3-advice-result">
             <div className="v3-report-section">
@@ -282,7 +282,7 @@ export function V3Flow({ state, config: _config, dispatch, busy }: Props) {
 
   if (step === 'v3_rest') {
     return (
-      <V3Screen gender={gender} image="cocktails" title="Восстановить энергию" busy={busy}>
+      <V3Screen gender={gender} image="rest" title="Восстановить энергию" busy={busy}>
         <div className="v3-stack">
           <button className="v3-red-button" onClick={() => dispatch('v3_rest', { days: 1 })}>Отдохнуть 1 день (+20 энергии)</button>
           <button className="v3-red-button" onClick={() => dispatch('v3_rest', { days: 2 })}>Отдохнуть 2 дня (+45 энергии)</button>
@@ -310,7 +310,7 @@ export function V3Flow({ state, config: _config, dispatch, busy }: Props) {
   if (step === 'v3_pre_action_summary') {
     if (!state.v3.lastPreparationSummary && (state.v3.plannedPreparations.length > 0 || state.v3.loopRestDays > 0)) {
       return (
-        <V3Screen gender={gender} image="laptop" title="Готовим активный этап" busy={busy} button="Посчитать подготовку" onClick={() => dispatch('v3_begin_action_plan')}>
+        <V3Screen gender={gender} image="prepare" title="Готовим активный этап" busy={busy} button="Посчитать подготовку" onClick={() => dispatch('v3_begin_action_plan')}>
           <p>Сейчас посчитаем, сколько дней заняли подготовка и отдых.</p>
         </V3Screen>
       );
@@ -318,7 +318,7 @@ export function V3Flow({ state, config: _config, dispatch, busy }: Props) {
     const summary = state.v3.lastPreparationSummary;
     if (summary) {
       return (
-        <V3Screen gender={gender} image="laptop" title="Подготовка завершена" busy={busy} button="Да, начать активный этап" onClick={() => dispatch('v3_ack_pre_action_summary')}>
+        <V3Screen gender={gender} image="prepare" title="Подготовка завершена" busy={busy} button="Да, начать активный этап" onClick={() => dispatch('v3_ack_pre_action_summary')}>
           <p>Во время подготовки вы решили сделать:</p>
           <ul>{summary.items.map((item) => <li key={item.id}>{item.title}</li>)}</ul>
           <p>Теперь вам доступны:</p>
@@ -328,7 +328,7 @@ export function V3Flow({ state, config: _config, dispatch, busy }: Props) {
       );
     }
     return (
-      <V3Screen gender={gender} image="laptop" title="Переходим к действиям" busy={busy} button="Выбрать инструменты" onClick={() => dispatch('v3_begin_action_plan')}>
+      <V3Screen gender={gender} image="prepare" title="Переходим к действиям" busy={busy} button="Выбрать инструменты" onClick={() => dispatch('v3_begin_action_plan')}>
         <p>Подготовки в этом круге нет. Можно сразу выбрать рекламу, прогрев и продажи.</p>
       </V3Screen>
     );
@@ -336,7 +336,7 @@ export function V3Flow({ state, config: _config, dispatch, busy }: Props) {
 
   if (step === 'v3_action_select') {
     return (
-      <V3Screen gender={gender} image="cocktails" title={`Решите, что ${name} будет делать в этот раз`} busy={busy}>
+      <V3Screen gender={gender} image="action" title={`Решите, что ${name} будет делать в этот раз`} busy={busy}>
         <div className="v3-stack">
           {(['ad', 'warmup', 'sales'] as V3SelectionKind[]).map((kind) => {
             const isSelected = Boolean(state.v3.activeSelection[kind]);
@@ -652,7 +652,7 @@ function ActiveStage({ state, dispatch, busy: _busy }: { state: GameState; dispa
           <div className="v3-runner">
             {plan.adEvents.map((event) => (
               <span key={event.id} className={event.hot && event.second <= elapsed ? 'is-hot' : undefined}>
-                {event.label}{' '}
+                {displayAdEventLabel(event.label)}
               </span>
             ))}
           </div>
@@ -710,6 +710,13 @@ function activeSalesMode(key: string | null): 'intuition' | 'call' | 'chat' | 's
   if (key.includes('auto_webinar')) return 'webinar';
   if (key.includes('website')) return 'site';
   return 'intuition';
+}
+
+function displayAdEventLabel(label: string): string {
+  if (label.includes('залетел')) return label.replace(' залетел', '!');
+  if (label === 'Реклама') return 'Рекл.';
+  if (label === 'Внешняя реклама') return 'Трафик';
+  return label;
 }
 
 function PastAttemptCard({

@@ -6,6 +6,15 @@ type Variant =
   | 'notebook'
   | 'cocktails'
   | 'laptop'
+  | 'product'
+  | 'price'
+  | 'dream'
+  | 'goal'
+  | 'reflection'
+  | 'prepare'
+  | 'advice'
+  | 'rest'
+  | 'action'
   | 'active'
   | 'summary';
 
@@ -22,6 +31,15 @@ export function PixelArtScene({
     notebook: 'notebook',
     cocktails: 'cocktails',
     laptop: 'laptop',
+    product: 'product',
+    price: 'price',
+    dream: 'dream',
+    goal: 'goal',
+    reflection: 'reflection',
+    prepare: 'prepare',
+    advice: 'advice',
+    rest: 'rest',
+    action: 'action',
     active: 'active',
     summary: 'summary',
   };
@@ -31,14 +49,6 @@ export function PixelArtScene({
     <div className={`v3-pixel-scene v3-pixel-scene--${variant}`} aria-hidden="true">
       <img className="v3-pixel-scene__asset" src={asset} alt="" draggable={false} />
       <div className="v3-scene-overlay v3-scene-overlay--scan" />
-      {variant === 'notebook' && <div className="v3-notebook"><i /><b /></div>}
-      {variant === 'laptop' && <div className="v3-laptop"><i /><i /><i /></div>}
-      {variant === 'active' && (
-        <div className="v3-active-visual" aria-hidden="true">
-          <span data-label="Рилс" /><span data-label="Бот" /><span data-label="Чат" /><span data-label="₽" />
-        </div>
-      )}
-      {variant === 'summary' && <div className="v3-trophy" aria-hidden="true" />}
     </div>
   );
 }
