@@ -431,7 +431,7 @@ export function getV3AttemptInsight(
         productLine,
         'Главная задача теперь - понять, какая часть воронки дала результат, и повторить ее.',
       ],
-      recommendation: `Разберите удачную связку по продукту "${product.label}" и масштабируйте самый сильный участок: ${scaleRecommendation(product)}.`,
+      recommendation: `Разберите удачную связку по продукту "${product.label}" и масштабируйте самый сильный участок: ${stripFinalPunctuation(scaleRecommendation(product))}.`,
     };
   }
 
@@ -443,12 +443,12 @@ export function getV3AttemptInsight(
       missedRevenue,
       bullets: [
         `Энергия этапа: -${report.energySpent}`,
-        `${report.lost} заявок остыли или не были обработаны`,
+        `Остыли или не были обработаны: ${report.lost}`,
         productLine,
         instrumentLines.processing,
         'Без специалистов и понятной системы ручные действия съедают запуск быстрее, чем приносят продажи.',
       ],
-      recommendation: `Нужен разбор воронки под "${product.label}": ${burnoutRecommendation(product)}.`,
+      recommendation: `Нужен разбор воронки под "${product.label}": ${burnoutRecommendation(product)}`,
     };
   }
 
@@ -459,13 +459,13 @@ export function getV3AttemptInsight(
       lossLabel: missedRevenue > 0 ? `Упущено около ${formatEngineMoney(missedRevenue)}` : 'Потеряны горячие заявки',
       missedRevenue,
       bullets: [
-        `${applications} заявок оставили интерес`,
-        `${report.lost} заявок остыли и ушли`,
+        `Заявки с интересом: ${applications}`,
+        `Остыли и ушли: ${report.lost}`,
         productLine,
         instrumentLines.processing,
         'Проблема не только в трафике. Дыра в обработке заявок.',
       ],
-      recommendation: `Покупайте консультацию по прогреву: ${warmupRecommendation(product)}.`,
+      recommendation: `Покупайте консультацию по прогреву: ${warmupRecommendation(product)}`,
     };
   }
 
@@ -482,7 +482,7 @@ export function getV3AttemptInsight(
         instrumentLines.sales,
         'Люди заинтересовались, но продажная часть не дожала оплату.',
       ],
-      recommendation: `Здесь нужна консультация по продажам: ${salesRecommendation(product, report.salesTitle)}.`,
+      recommendation: `Здесь нужна консультация по продажам: ${salesRecommendation(product, report.salesTitle)}`,
     };
   }
 
@@ -499,7 +499,7 @@ export function getV3AttemptInsight(
         instrumentLines.warmup,
         'Реклама дала поток, но смыслы прогрева не довели людей до решения.',
       ],
-      recommendation: `Нужен разбор прогрева для "${product.label}": ${warmupRecommendation(product)}.`,
+      recommendation: `Нужен разбор прогрева для "${product.label}": ${warmupRecommendation(product)}`,
     };
   }
 
@@ -516,7 +516,7 @@ export function getV3AttemptInsight(
         instrumentLines.sales,
         'Без обработки даже хорошая воронка не превращается в деньги.',
       ],
-      recommendation: `Сначала разберите, кто должен закрывать заявки по "${product.label}": ${salesRouteRecommendation(product)}.`,
+      recommendation: `Сначала разберите, кто должен закрывать заявки по "${product.label}": ${salesRouteRecommendation(product)}`,
     };
   }
 
@@ -1169,6 +1169,10 @@ function formatEngineMoney(value: number): string {
   return `${Math.round(value).toLocaleString('ru-RU')} ₽`;
 }
 
+function stripFinalPunctuation(value: string): string {
+  return value.replace(/[.!?]+$/u, '');
+}
+
 function effectiveSalesConversion(state: GameState, baseConversion: number, bonus: number): number {
   return clampConversion(Math.max(baseConversion, minSalesConversionForPrice(state.launchPlan.productPrice ?? 0)) * bonus);
 }
@@ -1348,7 +1352,7 @@ function buildAdviceResult(
     category,
     option,
     cost,
-    title: `${adviceOptionTitle(option)}: ${topic} для "${product.label}"`,
+    title: `${adviceOptionTitle(option)}: ${topic} по продукту "${product.label}"`,
     adviser: option === 'friend' ? 'Знакомый спец' : option === 'consult_5k' ? 'Профильный консультант' : 'Сильный стратег',
     paragraphs: adviceParagraphs(state, category, option),
     conversionRows: precision ? conversionRows(category, precision) : [],

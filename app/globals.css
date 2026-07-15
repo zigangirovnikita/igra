@@ -1419,6 +1419,10 @@ textarea {
   animation: v3-pop-card 1s steps(2) infinite;
 }
 
+.v3-active-visual span::before {
+  content: attr(data-label);
+}
+
 .v3-active-visual span:nth-child(4) {
   background: #5effa8;
 }
@@ -1442,6 +1446,10 @@ textarea {
   font-weight: 900;
   color: #15844e;
   animation: v3-trophy 1s steps(2) infinite;
+}
+
+.v3-trophy::before {
+  content: "₽";
 }
 
 @keyframes v3-trophy {

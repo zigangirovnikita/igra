@@ -361,7 +361,7 @@ describe('commands and invariants', () => {
 
     expect(insight.severity).toBe('danger');
     expect(insight.headline).toContain('не вывезли обработку');
-    expect(insight.bullets).toContain('30 заявок остыли и ушли');
+    expect(insight.bullets).toContain('Остыли и ушли: 30');
   });
 
   it('personalizes v3 attempt insight by product and selected instruments', () => {

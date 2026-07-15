@@ -135,7 +135,7 @@ function detectV3Mistakes(state: GameState): Array<{ day: number; message: strin
     result.push({
       day: firstLostApplications.startedDay,
       category: 'processing',
-      message: `В попытке №${firstLostApplications.stageNumber} ${firstLostApplications.lost} заявок остыли без ответа и не дошли до продаж.`,
+      message: `В попытке №${firstLostApplications.stageNumber} остывших заявок без ответа: ${firstLostApplications.lost}. Они не дошли до продаж.`,
     });
   }
 

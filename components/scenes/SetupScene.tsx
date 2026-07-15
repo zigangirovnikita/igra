@@ -166,9 +166,9 @@ function SetupSummary({ draft }: { draft: SetupDraft }) {
     <div className="v3-setup-summary">
       <span className={`v3-avatar v3-avatar--${draft.gender}`} />
       <dl>
-        <dt>Имя</dt><dd>{draft.name || '{имя}'}</dd>
+        <dt>Имя</dt><dd>{draft.name || 'Не указано'}</dd>
         <dt>Пол</dt><dd>{draft.gender === 'female' ? 'Женщина' : 'Мужчина'}</dd>
-        <dt>Ниша</dt><dd>{draft.niche || '{ниша}'}</dd>
+        <dt>Ниша</dt><dd>{draft.niche || 'Не указана'}</dd>
         <dt>Сила</dt><dd>{SUPERPOWERS.find((item) => item.id === draft.superpower)?.title || '{сила}'}</dd>
       </dl>
     </div>

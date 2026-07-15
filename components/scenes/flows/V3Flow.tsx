@@ -65,7 +65,7 @@ export function V3Flow({ state, config: _config, dispatch, busy }: Props) {
 
   if (step === 'v3_rules') {
     return (
-      <V3Screen gender={gender} title="Правила запуска" busy={busy} button="Правила ясны!" onClick={() => dispatch('v3_next')}>
+      <V3Screen gender={gender} image="beach-talk" title="Правила запуска" busy={busy} button="Правила ясны!" onClick={() => dispatch('v3_next')}>
         <p>Наверху всегда показаны день, банк и энергия.</p>
         <p>Банк - это остаток стартовых 100 000 рублей. Выручка от продаж в эту сумму не входит.</p>
         <p>Если энергия закончится, вы выгорели и игра закончится.</p>
@@ -150,7 +150,7 @@ export function V3Flow({ state, config: _config, dispatch, busy }: Props) {
 
   if (step === 'v3_reflection_intro') {
     return (
-      <V3Screen gender={gender} title={`${name} начинает цикл запуска`} busy={busy} button="Понятно!" onClick={() => dispatch('v3_next')}>
+      <V3Screen gender={gender} image="cocktails" title={`${name} начинает цикл запуска`} busy={busy} button="Понятно!" onClick={() => dispatch('v3_next')}>
         <p>Каждая волна включает рефлексию, подготовку, активный этап и итоги попытки.</p>
         <p>Подготовьтесь, посоветуйтесь, восстановите энергию или переходите к действиям.</p>
       </V3Screen>
@@ -179,7 +179,7 @@ export function V3Flow({ state, config: _config, dispatch, busy }: Props) {
   if (step === 'v3_prepare_category') {
     const definitions = prepareArea ? getV3PreparationDisplayOptions(state, prepareArea) : [];
     return (
-      <V3Screen gender={gender} title={prepareArea ? AREA_TITLES[prepareArea] : 'Подготовиться'} busy={busy}>
+      <V3Screen gender={gender} image="laptop" title={prepareArea ? AREA_TITLES[prepareArea] : 'Подготовиться'} busy={busy}>
         {!prepareArea ? (
           <div className="v3-stack">
             {(['warmup', 'sales', 'ads'] as V3PreparationArea[]).map((area) => (
@@ -213,7 +213,7 @@ export function V3Flow({ state, config: _config, dispatch, busy }: Props) {
 
   if (step === 'v3_advice_category') {
     return (
-      <V3Screen gender={gender} title={adviceCategory ? adviceTitle(adviceCategory) : 'Посоветоваться'} busy={busy}>
+      <V3Screen gender={gender} image="notebook" title={adviceCategory ? adviceTitle(adviceCategory) : 'Посоветоваться'} busy={busy}>
         {!adviceCategory ? (
           <div className="v3-stack">
             {(['ads', 'warmup', 'sales'] as V3AdviceCategory[]).map((category) => (
@@ -282,7 +282,7 @@ export function V3Flow({ state, config: _config, dispatch, busy }: Props) {
 
   if (step === 'v3_rest') {
     return (
-      <V3Screen gender={gender} title="Восстановить энергию" busy={busy}>
+      <V3Screen gender={gender} image="cocktails" title="Восстановить энергию" busy={busy}>
         <div className="v3-stack">
           <button className="v3-red-button" onClick={() => dispatch('v3_rest', { days: 1 })}>Отдохнуть 1 день (+20 энергии)</button>
           <button className="v3-red-button" onClick={() => dispatch('v3_rest', { days: 2 })}>Отдохнуть 2 дня (+45 энергии)</button>
@@ -295,7 +295,7 @@ export function V3Flow({ state, config: _config, dispatch, busy }: Props) {
 
   if (step === 'v3_past_runs') {
     return (
-      <V3Screen gender={gender} title="Прошлые попытки" busy={busy} button="Вернуться к рефлексии" onClick={() => dispatch('v3_return_reflection')}>
+      <V3Screen gender={gender} image="summary" title="Прошлые попытки" busy={busy} button="Вернуться к рефлексии" onClick={() => dispatch('v3_return_reflection')}>
         {state.v3.stageReports.length === 0 ? <p>Активных этапов еще не было.</p> : (
           <div className="v3-attempt-list">
             {state.v3.stageReports.map((report) => (
@@ -323,7 +323,7 @@ export function V3Flow({ state, config: _config, dispatch, busy }: Props) {
           <ul>{summary.items.map((item) => <li key={item.id}>{item.title}</li>)}</ul>
           <p>Теперь вам доступны:</p>
           <ul>{summary.unlockedTitles.map((title) => <li key={title}>{title}</li>)}</ul>
-          <p>Подготовка заняла {summary.preparationDays} дней. Отдых занял {summary.restDays} дней.</p>
+          <p>Подготовка заняла {formatCount(summary.preparationDays, 'день', 'дня', 'дней')}. Отдых занял {formatCount(summary.restDays, 'день', 'дня', 'дней')}.</p>
         </V3Screen>
       );
     }
@@ -364,7 +364,7 @@ export function V3Flow({ state, config: _config, dispatch, busy }: Props) {
 
   if (step === 'v3_active_intro') {
     return (
-      <V3Screen gender={gender} title="Сейчас начнется активный этап" busy={busy} button="Понятно!" onClick={() => dispatch('v3_next')}>
+      <V3Screen gender={gender} image="active" title="Сейчас начнется активный этап" busy={busy} button="Понятно!" onClick={() => dispatch('v3_next')}>
         <p>Вы будете видеть, какие результаты дают реклама, прогрев и продажи.</p>
         <p>Если нужно отвечать на сообщения или созвоны, старайтесь успевать. Это тратит энергию.</p>
         <p>Если энергия закончится, необработанные обращения будут потеряны.</p>
@@ -583,13 +583,13 @@ function ActiveStage({ state, dispatch, busy: _busy }: { state: GameState; dispa
   const stageAlert = lastResult?.buy
     ? `ОПЛАТА! +${productPrice.toLocaleString('ru-RU')} ₽`
     : expiredMessages > 0
-      ? `ГОРИТ ОЧЕРЕДЬ: ${expiredMessages} заявок остыли`
+      ? `ГОРИТ ОЧЕРЕДЬ: ${formatCount(expiredMessages, 'заявка остыла', 'заявки остыли', 'заявок остыли')}`
       : hotAdVisible
         ? 'КОНТЕНТ ЗАЛЕТЕЛ: поток лидов ускорился'
         : currentSales > 0
-          ? `Уже ${currentSales} продаж. Дожимайте заявки.`
+          ? `Уже ${formatCount(currentSales, 'продажа', 'продажи', 'продаж')}. Дожимайте заявки.`
           : readyForSalesNow > 0
-            ? `${readyForSalesNow} заявок готовы к продаже`
+            ? `К ПРОДАЖЕ ГОТОВО: ${readyForSalesNow}`
             : 'Идет трафик. Следите за узким местом.';
 
   const runAction = (durationSeconds: number, label: string, update: () => void) => {
@@ -652,7 +652,7 @@ function ActiveStage({ state, dispatch, busy: _busy }: { state: GameState; dispa
           <div className="v3-runner">
             {plan.adEvents.map((event) => (
               <span key={event.id} className={event.hot && event.second <= elapsed ? 'is-hot' : undefined}>
-                {event.label}
+                {event.label}{' '}
               </span>
             ))}
           </div>
@@ -664,13 +664,13 @@ function ActiveStage({ state, dispatch, busy: _busy }: { state: GameState; dispa
             <span>{blocked ? `${blockLabel ?? 'занято'}: ${blockLeft} сек.` : `в очереди: ${visibleMessages.length}`}</span>
           </div>
           <div className="v3-counter-grid">
-            <b>Новых лидов {newLeads}</b>
-            <b>Требуют ответа {Math.max(0, requiredAnswerNow - answeredIds.length - expiredMessages)}</b>
-            <b>Не оставили заявку {notInterested}</b>
-            <b>Остыли и ушли {expiredMessages}</b>
-            <b>Оставили заявку {interestedNow}</b>
-            {plan.totals.autoSales > 0 && <b>Купили автоматически {autoSalesNow}</b>}
-            <b>Готовы к продаже {readyForSalesNow}</b>
+            <b>Новых лидов: {newLeads}</b>
+            <b>Требуют ответа: {Math.max(0, requiredAnswerNow - answeredIds.length - expiredMessages)}</b>
+            <b>Не оставили заявку: {notInterested}</b>
+            <b>Остыли и ушли: {expiredMessages}</b>
+            <b>Оставили заявку: {interestedNow}</b>
+            {plan.totals.autoSales > 0 && <b>Купили автоматически: {autoSalesNow}</b>}
+            <b>Готовы к продаже: {readyForSalesNow}</b>
           </div>
           <h2>Продажи</h2>
           <div className={`v3-message ${lastResult?.buy ? 'is-sale' : lastResult && !lastResult.buy ? 'is-no-sale' : ''}`}>
@@ -771,7 +771,7 @@ function ReportCard({
       <dl className="v3-report-list">
         <div>
           <dt>Длительность</dt>
-          <dd>{report.daysSpent} дней</dd>
+          <dd>{formatCount(report.daysSpent, 'день', 'дня', 'дней')}</dd>
         </div>
         <div>
           <dt>Энергия</dt>
@@ -793,10 +793,10 @@ function ReportCard({
       <div className="v3-report-section">
         <strong>Поток заявок</strong>
         <p>{report.views.toLocaleString('ru-RU')} просмотров</p>
-        <p>{report.newLeads} новых лидов</p>
-        <p>{applications} оставили заявку</p>
-        <p>{report.lost} заявок остыли и ушли</p>
-        <p>{Math.max(0, applications - report.lost)} дошли до продаж</p>
+        <p>Новых лидов: {report.newLeads}</p>
+        <p>Оставили заявку: {applications}</p>
+        <p>Остыли и ушли: {report.lost}</p>
+        <p>Дошли до продаж: {Math.max(0, applications - report.lost)}</p>
       </div>
       {full && (
         <>
@@ -897,4 +897,16 @@ function activeOptionDescription(
 
 function formatConversion(value: number): string {
   return `${(value * 100).toLocaleString('ru-RU', { maximumFractionDigits: 1 })}%`;
+}
+
+function formatCount(value: number, one: string, few: string, many: string): string {
+  const absolute = Math.abs(value);
+  const mod10 = absolute % 10;
+  const mod100 = absolute % 100;
+  const word = mod10 === 1 && mod100 !== 11
+    ? one
+    : mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)
+      ? few
+      : many;
+  return `${value.toLocaleString('ru-RU')} ${word}`;
 }

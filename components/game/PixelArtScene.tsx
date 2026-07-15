@@ -34,11 +34,11 @@ export function PixelArtScene({
       {variant === 'notebook' && <div className="v3-notebook"><i /><b /></div>}
       {variant === 'laptop' && <div className="v3-laptop"><i /><i /><i /></div>}
       {variant === 'active' && (
-        <div className="v3-active-visual">
-          <span>Рилс</span><span>Бот</span><span>Чат</span><span>$</span>
+        <div className="v3-active-visual" aria-hidden="true">
+          <span data-label="Рилс" /><span data-label="Бот" /><span data-label="Чат" /><span data-label="₽" />
         </div>
       )}
-      {variant === 'summary' && <div className="v3-trophy">$</div>}
+      {variant === 'summary' && <div className="v3-trophy" aria-hidden="true" />}
     </div>
   );
 }
