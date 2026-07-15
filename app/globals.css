@@ -1583,7 +1583,8 @@ body {
 
 .choice-card--selected,
 .setup-choice-btn--selected,
-.v3-select-button--selected {
+.v3-select-button--selected,
+.v3-red-button--owned {
   background:
     linear-gradient(180deg, #8df2b1 0%, var(--pixel-green) 58%, #2dbb67 59%, #2dbb67 100%);
   border-color: #106a3a;
@@ -1608,6 +1609,20 @@ body {
     linear-gradient(180deg, #f0ead7 0%, #d8cfbd 100%);
   filter: saturate(0.65);
   box-shadow: 2px 2px 0 rgba(36,24,41,.16);
+}
+
+.v3-red-button--owned:disabled {
+  color: #17291e;
+  background:
+    linear-gradient(180deg, #8df2b1 0%, var(--pixel-green) 58%, #2dbb67 59%, #2dbb67 100%);
+  border-color: #106a3a;
+  filter: saturate(0.9);
+  opacity: 1;
+  box-shadow: 3px 3px 0 rgba(16, 106, 58, 0.22);
+}
+
+.v3-red-button--owned small {
+  opacity: 0.82;
 }
 
 .choice-card--disabled .choice-title,

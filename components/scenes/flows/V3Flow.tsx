@@ -192,8 +192,8 @@ export function V3Flow({ state, config: _config, dispatch, busy }: Props) {
               <div key={definition.id} className="v3-text-card">
                 <strong>{definition.title}</strong>
                 <div className="v3-grid">
-                  <PrepareButton definitionId={definition.id} area={prepareArea} mode="self" dispatch={dispatch} />
-                  <PrepareButton definitionId={definition.id} area={prepareArea} mode="expert" dispatch={dispatch} />
+                  <PrepareButton state={state} definitionId={definition.id} area={prepareArea} mode="self" dispatch={dispatch} />
+                  <PrepareButton state={state} definitionId={definition.id} area={prepareArea} mode="expert" dispatch={dispatch} />
                 </div>
               </div>
             ))}
@@ -346,7 +346,7 @@ export function V3Flow({ state, config: _config, dispatch, busy }: Props) {
                 onClick={() => setChoosing(kind)}
               >
                 <span>{isSelected ? '✓ ' : ''}Выбрать {KIND_TITLES[kind]}</span>
-                <small>{selectedTitle(state, kind)}</small>
+                <small>{selectedOptionSummary(state, kind)}</small>
               </button>
             );
           })}
@@ -421,20 +421,42 @@ function V3Screen({
   );
 }
 
-function PrepareButton({ definitionId, area, mode, dispatch }: { definitionId: string; area: V3PreparationArea; mode: V3PreparationMode; dispatch: Dispatch }) {
+function PrepareButton({
+  state,
+  definitionId,
+  area,
+  mode,
+  dispatch,
+}: {
+  state: GameState;
+  definitionId: string;
+  area: V3PreparationArea;
+  mode: V3PreparationMode;
+  dispatch: Dispatch;
+}) {
   const definition = getV3PreparationDefinitions(area).find((item) => item.id === definitionId);
   const price = definition?.[mode === 'self' ? 'self' : 'expert'];
   if (!definition || !price) return null;
+  const purchased = isPreparationPurchased(state, area, definition.id, mode);
+  const permanentPurchased = purchased && area !== 'ads';
   return (
-    <button className="v3-red-button" onClick={() => {
+    <button className={`v3-red-button${purchased ? ' v3-red-button--owned' : ''}`} disabled={permanentPurchased} onClick={() => {
       if (confirm(`${definition.title}: подтвердить вариант "${mode === 'self' ? 'самостоятельно' : 'со специалистом'}"?`)) {
         void dispatch('v3_confirm_preparation', { area, instrumentId: definition.id, mode });
       }
     }}>
-      Сделать {mode === 'self' ? 'самостоятельно' : 'со специалистом'}
+      {purchased ? area === 'ads' ? 'Куплено · купить еще' : 'Куплено' : `Сделать ${mode === 'self' ? 'самостоятельно' : 'со специалистом'}`}
       <small>{price.cost > 0 ? `${price.cost.toLocaleString('ru-RU')} ₽` : 'без денег'} · {price.energy} энергии · {price.days} дн.</small>
     </button>
   );
+}
+
+function isPreparationPurchased(state: GameState, area: V3PreparationArea, instrumentId: string, mode: V3PreparationMode): boolean {
+  return state.v3.plannedPreparations.some((item) => item.area === area && item.instrumentId === instrumentId && item.mode === mode)
+    || state.v3.lastPreparationSummary?.items.some((item) => item.area === area && item.instrumentId === instrumentId && item.mode === mode) === true
+    || (area === 'ads'
+      ? state.v3.preparedAds.some((item) => item.instrumentId === instrumentId && item.mode === mode)
+      : state.v3.preparedTools.some((item) => item.area === area && item.instrumentId === instrumentId && item.mode === mode));
 }
 
 function ActiveChoiceModal({ state, kind, dispatch, onClose }: { state: GameState; kind: V3SelectionKind; dispatch: Dispatch; onClose: () => void }) {
@@ -459,7 +481,7 @@ function ActiveChoiceModal({ state, kind, dispatch, onClose }: { state: GameStat
               >
                 <span className="choice-content">
                   <strong className="choice-title">{option.locked ? 'ЗАКРЫТО · ' : ''}{isSelected ? '✓ ' : ''}{option.title}</strong>
-                  <span className="choice-desc">{activeOptionDescription(state, kind, option, isSelected)}</span>
+                  <span className="choice-desc">{activeOptionDescription(option, isSelected)}</span>
                 </span>
               </button>
             );
@@ -771,10 +793,14 @@ function ReportCard({
   );
 }
 
-function selectedTitle(state: GameState, kind: V3SelectionKind): string {
+function selectedOptionSummary(state: GameState, kind: V3SelectionKind): string {
   const key = state.v3.activeSelection[kind];
   if (!key) return 'Не выбрано';
-  return getV3ActiveOptions(state, kind).find((option) => option.key === key)?.title ?? 'Не выбрано';
+  const option = getV3ActiveOptions(state, kind).find((item) => item.key === key);
+  if (!option) return 'Не выбрано';
+  return option.known
+    ? `${option.title} · ${formatConversion(option.effectiveConversion)}`
+    : `${option.title} · конверсия скрыта`;
 }
 
 function approvedDreams(gender: GameState['player']['avatarGender']) {
@@ -817,30 +843,13 @@ function adviceOptionDescription(option: V3AdviceOption, category: V3AdviceCateg
 }
 
 function activeOptionDescription(
-  state: GameState,
-  kind: V3SelectionKind,
-  option: { locked: boolean; known: boolean; baseConversion: number },
+  option: { locked: boolean; known: boolean; effectiveConversion: number },
   isSelected: boolean,
 ): string {
-  const conversion = effectiveDisplayConversion(state, kind, option.baseConversion);
-  if (option.locked) return option.known ? `Не готово · ${formatConversion(conversion)}` : 'Не готово';
+  if (option.locked) return option.known ? `Не готово · ${formatConversion(option.effectiveConversion)}` : 'Не готово';
   const prefix = isSelected ? 'Выбрано сейчас' : option.known ? 'Конверсия видна' : 'Конверсия пока скрыта';
   if (!option.known) return prefix;
-  return `${prefix} · ${formatConversion(conversion)}`;
-}
-
-function effectiveDisplayConversion(state: GameState, kind: V3SelectionKind, baseConversion: number): number {
-  const category = kind === 'ad' ? 'ads' : kind;
-  const superpowerBonus =
-    category === 'ads' && state.player.superpower === 'ads' ? 1.16
-      : category === 'warmup' && state.player.superpower === 'marketing' ? 1.14
-        : category === 'sales' && state.player.superpower === 'sales' ? 1.14
-          : 1;
-  const adviceBonus = state.v3.loopAdviceEffects[category]?.multiplier ?? 1;
-  const salesFloor = category === 'sales' && (state.launchPlan.productPrice ?? 0) > 0 && (state.launchPlan.productPrice ?? 0) <= 15_000
-    ? 0.10
-    : 0;
-  return Math.min(0.95, Math.max(baseConversion, salesFloor) * superpowerBonus * adviceBonus);
+  return `${prefix} · ${formatConversion(option.effectiveConversion)}`;
 }
 
 function formatConversion(value: number): string {

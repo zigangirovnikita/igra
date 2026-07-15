@@ -39,7 +39,7 @@ type ActiveDef = {
   viewsBase?: number;
 };
 
-type ActiveOption = ActiveDef & { locked: boolean; known: boolean };
+type ActiveOption = ActiveDef & { locked: boolean; known: boolean; effectiveConversion: number };
 
 const ACTIVE_STAGE_SECONDS = 60;
 const CALL_DURATION_SECONDS = 6;
@@ -228,7 +228,7 @@ export function confirmV3Preparation(
   state.metrics.expenses += price.cost;
   state.v3.plannedPreparations.push(item);
   state.history.push({ day: state.resources.day, type: 'v3_preparation_planned', message: item.title, payload: { itemId: item.id } });
-  state.flow.step = 'v3_reflection';
+  state.flow.step = 'v3_prepare_category';
   return state;
 }
 
@@ -366,52 +366,50 @@ export function getV3PreparationDefinitions(area?: V3PreparationArea): PrepDef[]
 export function getV3ActiveOptions(state: GameState, kind: V3SelectionKind): ActiveOption[] {
   ensureV3AdviceState(state);
   const recovered = permanentToolsFromLastSummary(state);
-  const base = BASE_ACTIVE.filter((item) => item.area === kind).map((item) => ({ ...item, locked: false, known: isConversionKnown(state, kind, true) }));
+  const enrich = (item: ActiveDef, locked: boolean, ownKnown: boolean): ActiveOption => ({
+    ...item,
+    locked,
+    known: isConversionKnown(state, kind, ownKnown),
+    effectiveConversion: effectiveOptionConversion(state, kind, item.baseConversion),
+  });
+  const base = BASE_ACTIVE.filter((item) => item.area === kind).map((item) => enrich(item, false, true));
   if (kind === 'ad') {
-    const prepared = state.v3.preparedAds.map((item) => ({
+    const prepared = state.v3.preparedAds.map((item) => enrich({
       key: item.key,
       title: item.title,
-      area: 'ad' as const,
+      area: 'ad',
       baseConversion: getPreparation('ads', item.instrumentId)[item.mode === 'self' ? 'self' : 'expert'].conversion,
       manualShare: 0,
       viewsBase: AD_VIEW_BASE[item.instrumentId] ?? 3_000,
-      locked: false,
-      known: isConversionKnown(state, kind, item.known),
-    }));
-    const locked = V3_PREPARATIONS.filter((item) => item.area === 'ads').flatMap((item) => (['self', 'expert'] as const).map((mode) => ({
+    }, false, item.known));
+    const locked = V3_PREPARATIONS.filter((item) => item.area === 'ads').flatMap((item) => (['self', 'expert'] as const).map((mode) => enrich({
       key: `locked:ads:${item.id}:${mode}`,
       title: `${item.title} - ${mode === 'self' ? 'самостоятельно' : 'со специалистом'}`,
-      area: 'ad' as const,
+      area: 'ad',
       baseConversion: item[mode].conversion,
       manualShare: 0,
       viewsBase: AD_VIEW_BASE[item.id] ?? 3_000,
-      locked: true,
-      known: isConversionKnown(state, kind, false),
-    })));
+    }, true, false)));
     return [...base, ...prepared, ...locked];
   }
   const area = kind === 'warmup' ? 'warmup' : 'sales';
   const prepared = [...state.v3.preparedTools, ...recovered].filter((item, index, list) =>
     item.area === area && list.findIndex((candidate) => candidate.key === item.key) === index
-  ).map((item) => ({
+  ).map((item) => enrich({
     key: item.key,
     title: item.title,
     area: kind,
     baseConversion: getPreparation(area, item.instrumentId)[item.mode === 'self' ? 'self' : 'expert'].conversion,
     manualShare: manualShareFor(area, item.instrumentId),
     autoSalesShare: autoSalesShareFor(area, item.instrumentId),
-    locked: false,
-    known: isConversionKnown(state, kind, item.known),
-  }));
-  const locked = V3_PREPARATIONS.filter((item) => item.area === area).flatMap((item) => (['self', 'expert'] as const).map((mode) => ({
+  }, false, item.known));
+  const locked = V3_PREPARATIONS.filter((item) => item.area === area).flatMap((item) => (['self', 'expert'] as const).map((mode) => enrich({
     key: `locked:${area}:${item.id}:${mode}`,
     title: `${item.title} - ${mode === 'self' ? 'самостоятельно' : 'со специалистом'}`,
     area: kind,
     baseConversion: item[mode].conversion,
     manualShare: 0,
-    locked: true,
-    known: isConversionKnown(state, kind, false),
-  })));
+  }, true, false)));
   return [...base, ...prepared, ...locked];
 }
 
@@ -675,9 +673,9 @@ function resolveStageContext(state: GameState): {
     ad: resolveActive(state, 'ad', state.v3.activeSelection.ad),
     warmup: resolveActive(state, 'warmup', state.v3.activeSelection.warmup),
     sales: resolveActive(state, 'sales', state.v3.activeSelection.sales),
-    adBonus: (state.player.superpower === 'ads' ? 1.16 : 1) * adviceMultiplier(state, 'ads'),
-    warmupBonus: (state.player.superpower === 'marketing' ? 1.14 : 1) * adviceMultiplier(state, 'warmup'),
-    salesBonus: (state.player.superpower === 'sales' ? 1.14 : 1) * adviceMultiplier(state, 'sales'),
+    adBonus: superpowerMultiplier(state.player.superpower, 'ads') * adviceMultiplier(state, 'ads'),
+    warmupBonus: superpowerMultiplier(state.player.superpower, 'warmup') * adviceMultiplier(state, 'warmup'),
+    salesBonus: superpowerMultiplier(state.player.superpower, 'sales') * adviceMultiplier(state, 'sales'),
   };
 }
 
@@ -833,6 +831,14 @@ function planKey(state: GameState, stageNumber: number, label: string): string {
 
 function clampConversion(value: number): number {
   return Math.max(0, Math.min(0.95, value));
+}
+
+function effectiveOptionConversion(state: GameState, kind: V3SelectionKind, baseConversion: number): number {
+  const category = kind === 'ad' ? 'ads' : kind;
+  const bonus = superpowerMultiplier(state.player.superpower, category) * adviceMultiplier(state, category);
+  return kind === 'sales'
+    ? effectiveSalesConversion(state, baseConversion, bonus)
+    : clampConversion(baseConversion * bonus);
 }
 
 function effectiveSalesConversion(state: GameState, baseConversion: number, bonus: number): number {
@@ -992,6 +998,13 @@ function superpowerRevealsCategory(superpower: Superpower, category: V3AdviceCat
   if (superpower === 'marketing') return category === 'warmup';
   if (superpower === 'sales') return category === 'sales';
   return false;
+}
+
+function superpowerMultiplier(superpower: Superpower, category: V3AdviceCategory): number {
+  if (superpower === 'ads' && category === 'ads') return 1.16;
+  if (superpower === 'marketing' && category === 'warmup') return 1.14;
+  if (superpower === 'sales' && category === 'sales') return 1.14;
+  return 1;
 }
 
 function buildAdviceResult(

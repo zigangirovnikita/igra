@@ -98,6 +98,7 @@ describe('commands and invariants', () => {
     expect(state.resources.bank - next.resources.bank).toBe(20_000);
     expect(state.resources.energy - next.resources.energy).toBe(0);
     expect(next.v3.plannedPreparations[0]?.days).toBe(3);
+    expect(next.flow.step).toBe('v3_prepare_category');
   });
 
   it('unlocks a confirmed v3 preparation for active stage selection', () => {
@@ -261,20 +262,33 @@ describe('commands and invariants', () => {
     );
   });
 
-  it('reveals sales conversions from sales superpower and sales consultation', () => {
+  it('reveals effective active option conversions from superpowers and consultations', () => {
     const superpowered = createInitialState({ ...scenarios[0].setup, superpower: 'sales' }, config, 'v3_sales_superpower_seed');
     const salesOptions = getV3ActiveOptions(superpowered, 'sales');
-    expect(salesOptions.find((option) => option.key.includes('locked:sales:call_script:self'))).toEqual(
-      expect.objectContaining({ known: true, baseConversion: 0.20 }),
-    );
+    const superpoweredCall = salesOptions.find((option) => option.key.includes('locked:sales:call_script:self'));
+    expect(superpoweredCall).toEqual(expect.objectContaining({ known: true, baseConversion: 0.20 }));
+    expect(superpoweredCall?.effectiveConversion).toBeCloseTo(0.228);
 
     const consulted = createInitialState(scenarios[0].setup, config, 'v3_sales_advice_seed');
     consulted.v3.loopAdviceEffects = {
       sales: { category: 'sales', multiplier: 1.10, precision: 'exact' },
     };
-    expect(getV3ActiveOptions(consulted, 'sales').find((option) => option.key.includes('locked:sales:chat_script:expert'))).toEqual(
-      expect.objectContaining({ known: true, baseConversion: 0.20 }),
-    );
+    const consultedChat = getV3ActiveOptions(consulted, 'sales').find((option) => option.key.includes('locked:sales:chat_script:expert'));
+    expect(consultedChat).toEqual(expect.objectContaining({ known: true, baseConversion: 0.20 }));
+    expect(consultedChat?.effectiveConversion).toBeCloseTo(0.22);
+
+    const ads = createInitialState({ ...scenarios[0].setup, superpower: 'ads' }, config, 'v3_ads_superpower_seed');
+    const adsStories = getV3ActiveOptions(ads, 'ad').find((option) => option.key.includes('locked:ads:stories:self'));
+    expect(adsStories).toEqual(expect.objectContaining({ known: true, baseConversion: 0.10 }));
+    expect(adsStories?.effectiveConversion).toBeCloseTo(0.116);
+
+    const warmed = createInitialState(scenarios[0].setup, config, 'v3_warmup_advice_seed');
+    warmed.v3.loopAdviceEffects = {
+      warmup: { category: 'warmup', multiplier: 1.05, precision: 'rough' },
+    };
+    const warmedBot = getV3ActiveOptions(warmed, 'warmup').find((option) => option.key.includes('locked:warmup:ai_bot:expert'));
+    expect(warmedBot).toEqual(expect.objectContaining({ known: true, baseConversion: 0.27 }));
+    expect(warmedBot?.effectiveConversion).toBeCloseTo(0.32319);
   });
 
   it('uses high-conversion low-reach stories and telegram ads in v3', () => {
