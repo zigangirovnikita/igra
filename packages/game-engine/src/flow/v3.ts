@@ -52,6 +52,17 @@ type V3AttemptInsight = {
   bullets: string[];
   recommendation: string;
 };
+type V3AttemptInsightContext = {
+  productType?: V3ProductType | null;
+  productName?: string | null;
+  productPrice?: number | null;
+};
+type V3ProductContext = {
+  type: V3ProductType | null;
+  label: string;
+  price: number;
+  band: 'low' | 'mid' | 'high';
+};
 
 const ACTIVE_STAGE_SECONDS = 60;
 const CALL_DURATION_SECONDS = 6;
@@ -392,27 +403,35 @@ export function getV3PreparationDisplayOptions(state: GameState, area: V3Prepara
   }));
 }
 
-export function getV3AttemptInsight(report: V3StageReport, productPrice: number): V3AttemptInsight {
+export function getV3AttemptInsight(
+  report: V3StageReport,
+  productPrice: number,
+  insightContext?: V3AttemptInsightContext,
+): V3AttemptInsight {
+  const product = resolveProductContext(productPrice, insightContext);
   const applications = report.applications ?? report.interested;
   const readyForSales = Math.max(0, applications - report.lost);
   const salesTargetFromReady = Math.max(0, Math.round(readyForSales * 0.25));
   const missedSales = Math.max(0, salesTargetFromReady - report.salesCount);
-  const missedRevenue = missedSales * Math.max(0, productPrice);
+  const missedRevenue = missedSales * Math.max(0, product.price);
   const salesActions = report.callsHeld + report.chatsHeld + report.siteVisits;
   const closeRate = readyForSales > 0 ? report.salesCount / readyForSales : 0;
+  const instrumentLines = instrumentInsightLines(report);
+  const productLine = productPressureLine(product);
 
   if (report.goalReached) {
     return {
       severity: 'win',
-      headline: 'Связка сработала. Теперь ее надо масштабировать.',
+      headline: `${product.label}: связка сработала. Теперь ее надо масштабировать.`,
       lossLabel: missedRevenue > 0 ? `Еще можно было добрать ${formatEngineMoney(missedRevenue)}` : 'План закрыт',
       missedRevenue,
       bullets: [
         `${report.salesCount} продаж на ${formatEngineMoney(report.revenue)}`,
         `${applications} заявок дошли до решения`,
+        productLine,
         'Главная задача теперь - понять, какая часть воронки дала результат, и повторить ее.',
       ],
-      recommendation: 'Разберите удачную связку на консультации и масштабируйте самый сильный участок.',
+      recommendation: `Разберите удачную связку по продукту "${product.label}" и масштабируйте самый сильный участок: ${scaleRecommendation(product)}.`,
     };
   }
 
@@ -425,9 +444,11 @@ export function getV3AttemptInsight(report: V3StageReport, productPrice: number)
       bullets: [
         `Энергия этапа: -${report.energySpent}`,
         `${report.lost} заявок остыли или не были обработаны`,
+        productLine,
+        instrumentLines.processing,
         'Без специалистов и понятной системы ручные действия съедают запуск быстрее, чем приносят продажи.',
       ],
-      recommendation: 'Нужен разбор воронки: что автоматизировать, что отдать специалисту, где перестать тащить руками.',
+      recommendation: `Нужен разбор воронки под "${product.label}": ${burnoutRecommendation(product)}.`,
     };
   }
 
@@ -440,24 +461,28 @@ export function getV3AttemptInsight(report: V3StageReport, productPrice: number)
       bullets: [
         `${applications} заявок оставили интерес`,
         `${report.lost} заявок остыли и ушли`,
+        productLine,
+        instrumentLines.processing,
         'Проблема не только в трафике. Дыра в обработке заявок.',
       ],
-      recommendation: 'Покупайте консультацию по прогреву или подключайте бота/специалиста, иначе лиды будут сгорать.',
+      recommendation: `Покупайте консультацию по прогреву: ${warmupRecommendation(product)}.`,
     };
   }
 
   if (readyForSales > 0 && (report.salesCount === 0 || closeRate < 0.1)) {
     return {
       severity: 'danger',
-      headline: 'Продажи не закрывают спрос.',
+      headline: `${product.label}: спрос был, но продажная часть не дожала оплату.`,
       lossLabel: missedRevenue > 0 ? `Упущено около ${formatEngineMoney(missedRevenue)}` : 'Заявки дошли, но денег почти нет',
       missedRevenue,
       bullets: [
         `${readyForSales} заявок дошли до продаж`,
         `${report.salesCount} оплат на ${formatEngineMoney(report.revenue)}`,
+        productLine,
+        instrumentLines.sales,
         'Люди заинтересовались, но продажная часть не дожала оплату.',
       ],
-      recommendation: 'Здесь нужна консультация по продажам или подготовленный скрипт со специалистом.',
+      recommendation: `Здесь нужна консультация по продажам: ${salesRecommendation(product, report.salesTitle)}.`,
     };
   }
 
@@ -470,9 +495,11 @@ export function getV3AttemptInsight(report: V3StageReport, productPrice: number)
       bullets: [
         `${report.newLeads} новых лидов`,
         `${applications} заявок после прогрева`,
+        productLine,
+        instrumentLines.warmup,
         'Реклама дала поток, но смыслы прогрева не довели людей до решения.',
       ],
-      recommendation: 'Нужен разбор прогрева: оффер, доверие, последовательность сообщений и точка заявки.',
+      recommendation: `Нужен разбор прогрева для "${product.label}": ${warmupRecommendation(product)}.`,
     };
   }
 
@@ -485,24 +512,175 @@ export function getV3AttemptInsight(report: V3StageReport, productPrice: number)
       bullets: [
         `${readyForSales} заявок были готовы к продаже`,
         'Продажных действий почти не было',
+        productLine,
+        instrumentLines.sales,
         'Без обработки даже хорошая воронка не превращается в деньги.',
       ],
-      recommendation: 'Сначала разберите, кто и как должен закрывать заявки: переписка, созвон, сайт или автовебинар.',
+      recommendation: `Сначала разберите, кто должен закрывать заявки по "${product.label}": ${salesRouteRecommendation(product)}.`,
     };
   }
 
   return {
     severity: missedRevenue > 0 ? 'warning' : 'win',
-    headline: missedRevenue > 0 ? 'Воронка работает, но деньги остаются внутри дыр.' : 'Потери небольшие, связка стала понятнее.',
+    headline: missedRevenue > 0 ? `${product.label}: воронка работает, но деньги остаются внутри дыр.` : `${product.label}: потери небольшие, связка стала понятнее.`,
     lossLabel: missedRevenue > 0 ? `Недобор около ${formatEngineMoney(missedRevenue)}` : 'Критичных потерь нет',
     missedRevenue,
     bullets: [
       `${report.views.toLocaleString('ru-RU')} просмотров -> ${report.newLeads} лидов`,
       `${applications} заявок -> ${report.salesCount} продаж`,
+      productLine,
+      instrumentLines.sales,
       'Следующий рост даст не больше хаоса, а точечное усиление слабого этапа.',
     ],
-    recommendation: 'На консультации нужно найти узкое место и решить, что покупать: рекламу, прогрев или продажи.',
+    recommendation: `На консультации нужно найти узкое место под "${product.label}" и решить, что покупать первым: рекламу, прогрев или продажи.`,
   };
+}
+
+function resolveProductContext(productPrice: number, context?: V3AttemptInsightContext): V3ProductContext {
+  const type = context?.productType ?? null;
+  const fallbackPrice = type ? PRODUCT_PLACEHOLDERS[type] : productPrice;
+  const rawPrice = context?.productPrice ?? productPrice;
+  const price = Math.max(0, rawPrice > 0 ? rawPrice : fallbackPrice);
+  const label = (context?.productName?.trim() || (type ? V3_PRODUCT_TITLES[type] : 'Продукт')).trim();
+  return { type, label, price, band: priceBand(type, price) };
+}
+
+function stateProductContext(state: GameState): V3ProductContext {
+  return resolveProductContext(state.launchPlan.productPrice ?? state.v3.productPrice ?? 0, {
+    productType: state.v3.productType ?? asV3ProductType(state.launchPlan.productType),
+    productName: state.launchPlan.productName,
+    productPrice: state.launchPlan.productPrice ?? state.v3.productPrice,
+  });
+}
+
+function asV3ProductType(value: string | null): V3ProductType | null {
+  if (!value) return null;
+  return Object.prototype.hasOwnProperty.call(V3_PRODUCT_TITLES, value) ? value as V3ProductType : null;
+}
+
+function priceBand(type: V3ProductType | null, price: number): V3ProductContext['band'] {
+  const limits: Record<V3ProductType, [number, number]> = {
+    consultation: [7_000, 20_000],
+    service: [15_000, 60_000],
+    recorded_course: [5_000, 20_000],
+    live_course: [15_000, 50_000],
+    membership: [2_000, 7_000],
+    mentorship: [30_000, 120_000],
+  };
+  const [low, mid] = type ? limits[type] : [7_000, 30_000];
+  if (price <= low) return 'low';
+  if (price <= mid) return 'mid';
+  return 'high';
+}
+
+function productPressureLine(product: V3ProductContext): string {
+  const priceText = product.price > 0 ? `${product.price.toLocaleString('ru-RU')} ₽` : 'без понятного чека';
+  if (product.type === 'mentorship') {
+    return product.band === 'high'
+      ? `Сопровождение за ${priceText} не покупают с одного касания: нужны доверие, квалификация и сильный созвон.`
+      : `Сопровождение требует доказать личную ценность, иначе даже теплые заявки будут просить "подумать".`;
+  }
+  if (product.type === 'consultation') {
+    return product.band === 'low'
+      ? `Консультация за ${priceText} живет на скорости ответа: одна остывшая заявка сразу режет прибыль.`
+      : `Дорогая консультация продается через диагноз боли и доверие к эксперту, а не через общую переписку.`;
+  }
+  if (product.type === 'service') {
+    return `Услуга за ${priceText} продается, когда человек видит свой кейс и понятный следующий шаг, а не просто "мы поможем".`;
+  }
+  if (product.type === 'recorded_course') {
+    return product.band === 'low'
+      ? `Курс в записи за ${priceText} должен покупать быстро и массово: сложная ручная продажа съедает экономику.`
+      : `Дорогой курс в записи требует прогрева с доказательствами, иначе люди не верят, что запись доведет до результата.`;
+  }
+  if (product.type === 'live_course') {
+    return `Живое обучение за ${priceText} нуждается в дедлайне, доверии к программе и ясном обещании результата.`;
+  }
+  if (product.type === 'membership') {
+    return `Подписка за ${priceText} держится на объеме и понятном первом результате, иначе лиды не видят смысла платить каждый месяц.`;
+  }
+  return `При чеке ${priceText} слабый этап воронки быстро превращается в недобор выручки.`;
+}
+
+function instrumentInsightLines(report: V3StageReport): { processing: string; warmup: string; sales: string } {
+  const warmup = report.warmupTitle.toLowerCase();
+  const sales = report.salesTitle.toLowerCase();
+  const ad = report.adTitle.toLowerCase();
+  const adLine = ad.includes('без подготовки')
+    ? 'Реклама была запущена без подготовленной гипотезы: вы покупали шанс, а не управляемый поток.'
+    : ad.includes('рилс')
+      ? 'Рилсы дали охват рывками: без точного прогрева такой поток легко превращается в шум.'
+      : ad.includes('сторис') || ad.includes('тг')
+        ? 'Источник дал более теплые касания, поэтому особенно больно терять людей после клика.'
+        : 'Трафик был, значит следующий вопрос не "где взять людей", а "почему они не дошли до денег".';
+  const warmupLine = warmup.includes('руками')
+    ? 'Ручной прогрев создал очередь: когда заявок больше, чем внимания, деньги начинают остывать.'
+    : warmup.includes('ии')
+      ? 'ИИ-бот может вести людей лучше ручного хаоса, но ему все равно нужна ясная точка заявки.'
+      : warmup.includes('автовебинар')
+        ? 'Автовебинар объясняет ценность, но без продажного маршрута часть теплых людей зависает.'
+        : warmup.includes('гайд')
+          ? 'Гайд собирает интерес, но слабый следующий шаг превращает скачивания в молчание.'
+          : warmup.includes('видеоурок')
+            ? 'Видеоурок греет через экспертность, но ему нужна сильная заявка в конце.'
+            : adLine;
+  const salesLine = sales.includes('наитию')
+    ? 'Продажи по наитию не дают повторяемой конверсии: каждый лид заново проходит через хаос.'
+    : sales.includes('созвон')
+      ? 'Созвон дает шанс закрывать дорогие сомнения, но только если есть структура и квалификация.'
+      : sales.includes('переписк')
+        ? 'Переписка работает, когда сценарий быстро снимает страхи и ведет к оплате без лишней воды.'
+        : sales.includes('сайт')
+          ? 'Сайт снимает ручную нагрузку, но не спасает слабое доверие и неотвеченные вопросы.'
+          : sales.includes('автовебинар')
+            ? 'Автовебинар продает часть аудитории сам, но оставшиеся вопросы все равно надо дожимать.'
+            : 'Продажный маршрут должен быть очевидным: кто закрывает, где закрывает и что говорит.';
+  return { processing: warmupLine, warmup: warmupLine, sales: salesLine };
+}
+
+function warmupRecommendation(product: V3ProductContext): string {
+  if (product.type === 'mentorship' || product.band === 'high') {
+    return 'собрать доверительный прогрев с кейсами, квалификацией и переходом на созвон, а не просто ждать сообщений.';
+  }
+  if (product.type === 'membership' || product.type === 'recorded_course') {
+    return 'сделать короткий прогрев, который быстро показывает первый результат и ведет на простую покупку.';
+  }
+  return 'упаковать оффер, последовательность сообщений и точку заявки так, чтобы лид понимал, зачем писать сейчас.';
+}
+
+function salesRecommendation(product: V3ProductContext, salesTitle: string): string {
+  const sales = salesTitle.toLowerCase();
+  if (product.type === 'mentorship' || product.band === 'high') {
+    return sales.includes('созвон')
+      ? 'разобрать сценарий созвона, квалификацию и момент оффера, потому что высокий чек не закрывается случайными аргументами.'
+      : 'перевести теплые заявки в созвон со сценарием, иначе высокий чек будет проседать даже на хороших лидах.';
+  }
+  if (product.type === 'recorded_course' || product.type === 'membership') {
+    return 'упростить путь к оплате через сайт, автовебинар или короткую переписку, чтобы низкий чек не съедался ручной работой.';
+  }
+  if (product.type === 'consultation') {
+    return 'собрать короткий сценарий диагностики: боль, результат, формат, оплата. Без этого консультации превращаются в бесплатные советы.';
+  }
+  return 'подготовить сценарий переписки или созвона под реальные возражения, а не продавать одинаково всем заявкам.';
+}
+
+function salesRouteRecommendation(product: V3ProductContext): string {
+  if (product.type === 'mentorship' || product.band === 'high') return 'созвон со специалистом и жесткая квалификация перед оффером.';
+  if (product.type === 'recorded_course' || product.type === 'membership') return 'сайт или автовебинар плюс быстрый дожим в переписке.';
+  if (product.type === 'consultation') return 'короткая переписка для квалификации и созвон/оплата без длинных объяснений.';
+  return 'подготовленная переписка для простых заявок и созвон для дорогих или сомневающихся.';
+}
+
+function burnoutRecommendation(product: V3ProductContext): string {
+  if (product.band === 'high') return 'оставить ручную энергию только на квалифицированные созвоны, а прогрев и первичные ответы автоматизировать.';
+  if (product.type === 'membership' || product.type === 'recorded_course') return 'не продавать низкий чек вручную каждому человеку, а строить автоматический путь к оплате.';
+  return 'разделить поток: бот/специалист забирает рутину, вы подключаетесь только там, где это влияет на оплату.';
+}
+
+function scaleRecommendation(product: V3ProductContext): string {
+  if (product.type === 'mentorship' || product.band === 'high') return 'масштабировать только квалифицированный трафик и созвоны, иначе вырастет не выручка, а очередь сомневающихся';
+  if (product.type === 'membership') return 'усилить вход и удержание, потому что прибыль подписки раскрывается через повторные платежи';
+  return 'увеличить поток на сильный прогрев и не ломать тот продажный маршрут, который уже дал оплаты';
 }
 
 export function getV3ActiveOptions(state: GameState, kind: V3SelectionKind): ActiveOption[] {
@@ -1165,11 +1343,12 @@ function buildAdviceResult(
 ): V3AdviceResult {
   const precision = advicePrecision(option);
   const topic = adviceTopic(category);
+  const product = stateProductContext(state);
   return {
     category,
     option,
     cost,
-    title: `${adviceOptionTitle(option)}: ${topic}`,
+    title: `${adviceOptionTitle(option)}: ${topic} для "${product.label}"`,
     adviser: option === 'friend' ? 'Знакомый спец' : option === 'consult_5k' ? 'Профильный консультант' : 'Сильный стратег',
     paragraphs: adviceParagraphs(state, category, option),
     conversionRows: precision ? conversionRows(category, precision) : [],
@@ -1179,20 +1358,72 @@ function buildAdviceResult(
 }
 
 function adviceParagraphs(state: GameState, category: V3AdviceCategory, option: V3AdviceOption): string[] {
-  const productPrice = state.launchPlan.productPrice ?? 0;
+  const product = stateProductContext(state);
+  const productLine = productAdviceLine(product);
+  const priceLine = priceAdviceLine(product);
+  const categoryLine = categoryAdviceLine(category, product);
+  const routeLine = category === 'sales' ? salesRouteRecommendation(product) : category === 'warmup' ? warmupRecommendation(product) : adsRecommendation(product);
   if (option === 'friend') {
-    if (category === 'ads') return ['Если хочешь больше заявок, не распыляйся. Выбери один источник трафика и доведи его до нормального результата перед активным этапом.'];
-    if (category === 'warmup') return ['Если лидов станет много, руками всех не прогреешь. Лучше заранее подготовить бот, гайд или автовебинар, чтобы часть людей доходила до продажи без твоего постоянного участия.'];
-    return ['Не продавай всем одинаково. Чем выше чек, тем важнее созвон или сильный сценарий переписки. Для простого продукта сайт может снять часть ручной нагрузки.'];
+    return [
+      `Со стороны видно главное: "${product.label}" нельзя запускать как абстрактный продукт. ${productLine}`,
+      `${categoryLine} ${priceLine}`,
+      `Это общий совет без цифр. Он дает направление, но не показывает, сколько денег вы теряете на этом участке.`,
+    ];
   }
   if (option === 'consult_5k') {
-    if (category === 'ads') return ['Если задача получить как можно больше трафика из Инсты, выбирай рилсы. Они нестабильные, но могут дать самый большой поток показов.', 'Сторис и ТГ дают меньше показов за активный этап, зато заметно лучше конвертируют просмотр в лид.'];
-    if (category === 'warmup') return ['Если лиды холодные, обычный бот лучше, чем ручной прогрев без структуры. Он отсекает часть случайных людей и помогает не сгореть на ответах.', 'Для более теплой аудитории сильнее всего работает бот с ИИ, а автовебинар может дополнительно давать автопродажи.'];
-    return [productPrice >= 20_000 ? 'С вашим чеком лучше не надеяться только на переписку. Созвон обычно дает выше конверсию, если есть нормальный сценарий.' : 'С вашим чеком можно продавать через переписку или сайт. Главное - не оставлять людей без быстрого ответа.', 'Подготовленный скрипт продаж почти всегда сильнее продажи по наитию.'];
+    return [
+      `Консультация показывает примерную картину по "${product.label}": ${productLine}`,
+      `${categoryLine} Первое решение: ${routeLine}`,
+      `При чеке ${formatEngineMoney(product.price)} уже нельзя выбирать инструмент "на глаз": даже несколько потерянных заявок быстро отбивают стоимость разбора.`,
+    ];
   }
-  if (category === 'ads') return ['Круто работает связка ТГ-канала и таргетированной рекламы. ТГ дает более спокойный прогрев, а таргетированная реклама дает ровный поток новых людей.', 'Внутри ТГ лучше давать лид-магнит в виде ИИ-бота. Продавать с вашим чеком лучше через созвоны.'];
-  if (category === 'warmup') return ['Сильная связка для прогрева: рилсы или таргет ведут в ИИ-бота, а бот доводит людей до заявки. Так ты меньше тратишь энергию на случайные вопросы.', 'Если продукт сложный, добавь автовебинар: он лучше объясняет ценность перед продажей.'];
-  return ['Сильная связка продаж: теплый лид после бота или автовебинара идет на созвон. Для низкого чека можно вести на сайт, но для высокого чека созвон надежнее.', 'Если выбираешь переписку, обязательно используй подготовленный скрипт, иначе часть людей потеряется на возражениях.'];
+  return [
+    `Точный разбор собирает связку под "${product.label}", а не просто советует модный инструмент. ${productLine}`,
+    `${categoryLine} Для этого чека логика такая: ${priceLine}`,
+    `Рекомендуемый следующий шаг: ${routeLine} Так игрок перестает угадывать и видит, какой участок воронки чинить первым.`,
+  ];
+}
+
+function productAdviceLine(product: V3ProductContext): string {
+  if (product.type === 'mentorship') return 'Сопровождение продается через доверие, разбор ситуации и ощущение, что эксперт доведет до результата лично.';
+  if (product.type === 'consultation') return 'Консультация покупается, когда человек узнает свою боль и верит, что за один контакт получит ясность.';
+  if (product.type === 'service') return 'Услуга покупается, когда лид видит свой кейс, понятный процесс и снижение риска.';
+  if (product.type === 'recorded_course') return 'Курс в записи требует простого обещания и доказательства, что человек не останется один с уроками.';
+  if (product.type === 'live_course') return 'Живое обучение держится на дедлайне, группе, программе и доверии к результату.';
+  if (product.type === 'membership') return 'Подписка продается через быстрый первый результат и ощущение постоянной пользы.';
+  return 'У продукта должен быть свой маршрут от первого касания до оплаты.';
+}
+
+function priceAdviceLine(product: V3ProductContext): string {
+  if (product.band === 'low') {
+    return `Чек ${formatEngineMoney(product.price)} требует объема и скорости: длинная ручная продажа легко съедает экономику.`;
+  }
+  if (product.band === 'high') {
+    return `Чек ${formatEngineMoney(product.price)} требует доверия, квалификации и сильной продажи: случайные охваты без прогрева почти не конвертируются.`;
+  }
+  return `Чек ${formatEngineMoney(product.price)} уже достаточно заметный: нужны и понятный прогрев, и нормальная обработка возражений.`;
+}
+
+function categoryAdviceLine(category: V3AdviceCategory, product: V3ProductContext): string {
+  if (category === 'ads') {
+    if (product.band === 'high') return 'В рекламе важнее не максимум просмотров, а поток людей, которые узнают дорогую боль и готовы к разговору.';
+    if (product.type === 'membership' || product.type === 'recorded_course') return 'В рекламе нужна простая причина кликнуть прямо сейчас: быстрый результат, пробный шаг или понятный лид-магнит.';
+    return 'В рекламе нужно проверять не только охваты, а стоимость перехода в лид и качество людей после клика.';
+  }
+  if (category === 'warmup') {
+    if (product.band === 'high') return 'В прогреве надо не развлекать, а довести человека до мысли: "мне нужен разбор, сам не вывезу".';
+    if (product.type === 'membership') return 'В прогреве подписки надо показать первый результат до оплаты и объяснить, зачем оставаться дальше.';
+    return 'В прогреве главная задача - превратить интерес в заявку, а не просто выдать полезный контент.';
+  }
+  if (product.band === 'high') return 'В продажах высокий чек требует сценария: диагностика, боль, результат, рамки работы и следующий шаг.';
+  if (product.type === 'recorded_course' || product.type === 'membership') return 'В продажах низкого чека важна короткая дорога к оплате без лишних касаний.';
+  return 'В продажах нельзя говорить со всеми одинаково: возражения зависят от продукта, чека и уровня доверия.';
+}
+
+function adsRecommendation(product: V3ProductContext): string {
+  if (product.band === 'high') return 'вести не на случайный лид-магнит, а на диагностический прогрев, который квалифицирует человека до разговора.';
+  if (product.type === 'membership' || product.type === 'recorded_course') return 'дать простой вход через сторис/ТГ или рилсы с быстрым обещанием и понятной оплатой дальше.';
+  return 'сравнить широкий охват рилсов с более теплым источником и оставить тот, где лиды потом доходят до заявки.';
 }
 
 function adviceEffectLines(category: V3AdviceCategory, option: V3AdviceOption): string[] {

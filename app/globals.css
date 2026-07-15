@@ -2266,6 +2266,58 @@ body {
     linear-gradient(180deg, #8df2b1 0%, #42cf7b 100%);
 }
 
+.diagnosis-attempts {
+  display: grid;
+  gap: 12px;
+}
+
+.diagnosis-attempt-row {
+  display: grid;
+  gap: 7px;
+  padding: 12px;
+  border: 3px solid var(--color-border);
+  background: #fffdf0;
+  box-shadow: 4px 4px 0 rgba(36,24,41,.16);
+}
+
+.diagnosis-attempt-row span {
+  justify-self: start;
+  padding: 4px 7px;
+  border: 2px solid var(--color-border);
+  background: #241829;
+  color: #ffe763;
+  font-size: 12px;
+  font-weight: 950;
+}
+
+.diagnosis-attempt-row strong {
+  font-size: 16px;
+  line-height: 1.18;
+}
+
+.diagnosis-attempt-row em {
+  font-style: normal;
+  font-weight: 950;
+  color: #bd1845;
+}
+
+.diagnosis-attempt-row p {
+  margin: 0;
+  font-weight: 800;
+}
+
+.diagnosis-attempt-row--danger {
+  background: linear-gradient(180deg, #ffe5e8 0%, #ffc2cb 100%);
+}
+
+.diagnosis-attempt-row--warning {
+  background: linear-gradient(180deg, #fff7c4 0%, #ffe094 100%);
+}
+
+.diagnosis-attempt-row--win {
+  background: linear-gradient(180deg, #dfffe9 0%, #a9f2c3 100%);
+}
+
 /* ── Error banner ── */
 .scene-error { position: fixed; top: 0; left: 50%; transform: translateX(-50%); width: min(100%, 420px); z-index: 100; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 14px; background: #c0392b; color: white; font-size: 13px; font-weight: 700; border-bottom: 3px solid #8f183d; }
 .scene-error-dismiss { background: none; border: none; color: white; font-size: 16px; cursor: pointer; }

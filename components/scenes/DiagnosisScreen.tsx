@@ -21,7 +21,11 @@ export function DiagnosisScreen({ state, diagnostics, aiReport, reportSource, on
   const formatMoney = (value: number) => `${value.toLocaleString('ru-RU')} ₽`;
   const startingBank = diagnostics.financials.bankRemaining + diagnostics.financials.expenses;
   const productPrice = state.launchPlan.productPrice ?? 0;
-  const attemptInsights = state.v3.stageReports.map((report) => getV3AttemptInsight(report, productPrice));
+  const attemptInsights = state.v3.stageReports.map((report) => getV3AttemptInsight(report, productPrice, {
+    productType: state.v3.productType,
+    productName: state.launchPlan.productName,
+    productPrice,
+  }));
   const missedRevenue = attemptInsights.reduce((sum, item) => sum + item.missedRevenue, 0);
   const worstInsight = attemptInsights.find((item) => item.severity === 'danger') ?? attemptInsights.find((item) => item.severity === 'warning') ?? attemptInsights[0];
 
@@ -60,6 +64,24 @@ export function DiagnosisScreen({ state, diagnostics, aiReport, reportSource, on
 
           <Card title="Комментарий к цели"><p>{aiReport.goalComment}</p></Card>
           <Card title="Энергия"><p>{aiReport.energyComment}</p></Card>
+
+          {state.v3.stageReports.length > 0 && (
+            <Card title="Разбор попыток">
+              <div className="diagnosis-attempts">
+                {state.v3.stageReports.map((report, index) => {
+                  const insight = attemptInsights[index];
+                  return (
+                    <div className={`diagnosis-attempt-row diagnosis-attempt-row--${insight.severity}`} key={report.id}>
+                      <span>Попытка №{report.stageNumber}</span>
+                      <strong>{insight.headline}</strong>
+                      <em>{insight.lossLabel}</em>
+                      <p>{insight.recommendation}</p>
+                    </div>
+                  );
+                })}
+              </div>
+            </Card>
+          )}
 
           <Card title="Мечты">
             {diagnostics.dreams.length === 0 ? <p>Покупки на старте не выбирались.</p> : (

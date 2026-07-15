@@ -299,7 +299,7 @@ export function V3Flow({ state, config: _config, dispatch, busy }: Props) {
         {state.v3.stageReports.length === 0 ? <p>Активных этапов еще не было.</p> : (
           <div className="v3-attempt-list">
             {state.v3.stageReports.map((report) => (
-              <PastAttemptCard key={report.id} report={report} productPrice={state.launchPlan.productPrice ?? 0} />
+              <PastAttemptCard key={report.id} report={report} state={state} productPrice={state.launchPlan.productPrice ?? 0} />
             ))}
           </div>
         )}
@@ -381,7 +381,7 @@ export function V3Flow({ state, config: _config, dispatch, busy }: Props) {
     return (
       <V3Screen gender={gender} image="summary" title={`Активный этап №${report?.stageNumber ?? ''} завершен`} busy={busy}
         button={state.endingReason ? 'Смотреть итог запуска' : 'Перейти к рефлексии'} onClick={() => dispatch('v3_return_reflection')}>
-        {report ? <ReportCard report={report} productPrice={state.launchPlan.productPrice ?? 0} full /> : <p>Отчет не найден.</p>}
+        {report ? <ReportCard report={report} state={state} productPrice={state.launchPlan.productPrice ?? 0} full /> : <p>Отчет не найден.</p>}
       </V3Screen>
     );
   }
@@ -712,7 +712,15 @@ function activeSalesMode(key: string | null): 'intuition' | 'call' | 'chat' | 's
   return 'intuition';
 }
 
-function PastAttemptCard({ report, productPrice }: { report: NonNullable<GameState['v3']['lastStageReport']>; productPrice: number }) {
+function PastAttemptCard({
+  report,
+  state,
+  productPrice,
+}: {
+  report: NonNullable<GameState['v3']['lastStageReport']>;
+  state: GameState;
+  productPrice: number;
+}) {
   const [expanded, setExpanded] = useState(false);
   return (
     <div className={`v3-attempt${expanded ? ' v3-attempt--open' : ''}`}>
@@ -725,24 +733,30 @@ function PastAttemptCard({ report, productPrice }: { report: NonNullable<GameSta
         <span>Попытка №{report.stageNumber}</span>
         <span aria-hidden="true">{expanded ? 'Свернуть' : 'Развернуть'}</span>
       </button>
-      {expanded && <ReportCard report={report} productPrice={productPrice} full />}
+      {expanded && <ReportCard report={report} state={state} productPrice={productPrice} full />}
     </div>
   );
 }
 
 function ReportCard({
   report,
+  state,
   productPrice,
   full = false,
   showAttemptTitle = false,
 }: {
   report: NonNullable<GameState['v3']['lastStageReport']>;
+  state: GameState;
   productPrice: number;
   full?: boolean;
   showAttemptTitle?: boolean;
 }) {
   const applications = report.applications ?? report.interested;
-  const insight = getV3AttemptInsight(report, productPrice);
+  const insight = getV3AttemptInsight(report, productPrice, {
+    productType: state.v3.productType,
+    productName: state.launchPlan.productName,
+    productPrice: state.launchPlan.productPrice,
+  });
   return (
     <div className="v3-report">
       {showAttemptTitle && <h2 className="v3-report-title">Попытка №{report.stageNumber}</h2>}

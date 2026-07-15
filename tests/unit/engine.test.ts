@@ -154,6 +154,27 @@ describe('commands and invariants', () => {
     expect(state.v3.lastAdvice?.effectLines).toContain('Результативность рекламы стала выше на 10%.');
   });
 
+  it('personalizes v3 advice for product type and price', () => {
+    let state = createInitialState(scenarios[0].setup, config, 'v3_personal_advice_seed');
+    state.v3.productType = 'mentorship';
+    state.launchPlan.productType = 'mentorship';
+    state.launchPlan.productName = 'Сопровождение';
+    state.launchPlan.productPrice = 150_000;
+
+    state = applyCommand(state, config, {
+      commandId: 'advice_sales_10k',
+      type: 'v3_request_advice',
+      payload: { category: 'sales', option: 'consult_10k' },
+    });
+
+    const text = state.v3.lastAdvice?.paragraphs.join(' ') ?? '';
+    const normalizedText = text.replace(/\s/g, ' ');
+    expect(state.v3.lastAdvice?.title).toContain('Сопровождение');
+    expect(text).toContain('Сопровождение продается через доверие');
+    expect(normalizedText).toContain('Чек 150 000 ₽ требует доверия');
+    expect(text).toContain('созвон');
+  });
+
   it('applies v3 advice bonus to the matching active-stage conversion and resets it after the stage', () => {
     const base = createInitialState(scenarios[0].setup, config, 'v3_advice_bonus_seed');
     base.v3.activeSelection = {
@@ -341,6 +362,52 @@ describe('commands and invariants', () => {
     expect(insight.severity).toBe('danger');
     expect(insight.headline).toContain('не вывезли обработку');
     expect(insight.bullets).toContain('30 заявок остыли и ушли');
+  });
+
+  it('personalizes v3 attempt insight by product and selected instruments', () => {
+    const report: NonNullable<GameState['v3']['lastStageReport']> = {
+      id: 'attempt-mentorship-sales',
+      stageNumber: 1,
+      startedDay: 2,
+      finishedDay: 6,
+      daysSpent: 4,
+      energySpent: 40,
+      adTitle: 'Контент для рилс - самостоятельно',
+      warmupTitle: 'Бот с ИИ - со специалистом',
+      salesTitle: 'Продавать по наитию',
+      views: 80_000,
+      newLeads: 800,
+      notInterested: 600,
+      interested: 80,
+      requiredAnswer: 0,
+      lost: 0,
+      applications: 80,
+      callsHeld: 0,
+      callsNoBuy: 0,
+      callsBuy: 0,
+      chatsHeld: 24,
+      chatsNoBuy: 24,
+      chatsBuy: 0,
+      siteVisits: 0,
+      siteBuys: 0,
+      siteMessages: 0,
+      autoSales: 0,
+      salesCount: 0,
+      revenue: 0,
+      goalReached: false,
+      endedByBurnout: false,
+    };
+
+    const insight = getV3AttemptInsight(report, 150_000, {
+      productType: 'mentorship',
+      productName: 'Сопровождение',
+      productPrice: 150_000,
+    });
+
+    expect(insight.headline).toContain('Сопровождение');
+    expect(insight.bullets).toContain('Продажи по наитию не дают повторяемой конверсии: каждый лид заново проходит через хаос.');
+    expect(insight.recommendation).toContain('высокий чек');
+    expect(insight.recommendation).toContain('созвон');
   });
 
   it('uses high-conversion low-reach stories and telegram ads in v3', () => {
