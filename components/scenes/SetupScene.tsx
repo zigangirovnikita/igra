@@ -40,7 +40,7 @@ export function SetupScene({ config: _config, onComplete, busy, initialDraft }: 
 
       {/* ── WELCOME ── */}
       {step === 'welcome' && (
-        <div className="setup-step setup-step--center">
+        <div className="setup-step setup-step--center setup-step--welcome">
           <PixelArtScene variant="sunset-duo" gender={draft.gender} />
           <h1 className="setup-headline">Проживи 30 дней запуска за 10 минут</h1>
           <p className="setup-subtext">
