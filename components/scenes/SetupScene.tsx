@@ -126,7 +126,7 @@ export function SetupScene({ config: _config, onComplete, busy, initialDraft }: 
             {SUPERPOWERS.map((power) => (
               <button
                 key={power.id}
-                className={`choice-card${draft.superpower === power.id ? ' setup-choice-btn--selected' : ''}`}
+                className={`choice-card${draft.superpower === power.id ? ' choice-card--selected' : ''}`}
                 onClick={() => set('superpower', power.id)}
               >
                 <span className="choice-content">

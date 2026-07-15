@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import type { Diagnostics, GameState } from '@/packages/game-engine/src';
 import type { AiReport } from '@/lib/ai/report';
+import { PixelArtScene } from '@/components/game/PixelArtScene';
 
 type Props = {
   state: GameState;
@@ -22,9 +23,10 @@ export function DiagnosisScreen({ state, diagnostics, aiReport, reportSource, on
 
   return (
     <div className="scene-screen diagnosis-screen scrollable">
-      <h1 style={{ fontSize: '24px', marginBottom: '8px' }}>{aiReport.headline}</h1>
+      <PixelArtScene variant="summary" gender={state.player.avatarGender} />
+      <h1 className="diagnosis-main-title">{aiReport.headline}</h1>
       <p className="scene-paragraph">{aiReport.resultSummary}</p>
-      <p className="scene-paragraph" style={{ opacity: 0.7 }}>
+      <p className="scene-paragraph diagnosis-source">
         Источник объяснения: {reportSource === 'ai' ? 'ИИ по рассчитанным данным игры' : 'детерминированный резервный отчёт'}.
       </p>
 
@@ -118,7 +120,7 @@ export function DiagnosisScreen({ state, diagnostics, aiReport, reportSource, on
 function Card({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="diagnosis-card">
-      <h2 style={{ fontSize: '18px', marginBottom: '8px' }}>{title}</h2>
+      <h2 className="diagnosis-card-title">{title}</h2>
       {children}
     </div>
   );

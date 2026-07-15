@@ -197,7 +197,13 @@ export function V3Flow({ state, config: _config, dispatch, busy }: Props) {
                 </div>
               </div>
             ))}
-            <button className="btn-secondary" onClick={() => setPrepareArea(null)}>К категориям</button>
+            <div className="v3-secondary-actions">
+              <button className="btn-secondary" onClick={() => setPrepareArea(null)}>К категориям</button>
+              <button className="btn-secondary" onClick={() => {
+                setPrepareArea(null);
+                void dispatch('v3_return_reflection');
+              }}>В меню рефлексии</button>
+            </div>
           </div>
         )}
       </V3Screen>
@@ -227,7 +233,13 @@ export function V3Flow({ state, config: _config, dispatch, busy }: Props) {
                 <small>{adviceOptionDescription(option, adviceCategory)}</small>
               </button>
             ))}
-            <button className="btn-secondary" onClick={() => setAdviceCategory(null)}>К советам</button>
+            <div className="v3-secondary-actions">
+              <button className="btn-secondary" onClick={() => setAdviceCategory(null)}>К советам</button>
+              <button className="btn-secondary" onClick={() => {
+                setAdviceCategory(null);
+                void dispatch('v3_return_reflection');
+              }}>В меню рефлексии</button>
+            </div>
           </div>
         )}
       </V3Screen>
@@ -333,7 +345,7 @@ export function V3Flow({ state, config: _config, dispatch, busy }: Props) {
                 className={`v3-red-button v3-select-button${isSelected ? ' v3-select-button--selected' : ''}`}
                 onClick={() => setChoosing(kind)}
               >
-                <span>{isSelected ? '✓ ' : ''}Выбрать {KIND_TITLES[kind]} 👇</span>
+                <span>{isSelected ? '✓ ' : ''}Выбрать {KIND_TITLES[kind]}</span>
                 <small>{selectedTitle(state, kind)}</small>
               </button>
             );
@@ -342,6 +354,7 @@ export function V3Flow({ state, config: _config, dispatch, busy }: Props) {
             onClick={() => dispatch('v3_start_active_stage')}>
             Начать активный этап
           </button>
+          <button className="btn-secondary" disabled={busy} onClick={() => dispatch('v3_return_reflection')}>Вернуться к рефлексии</button>
         </div>
         {choosing && <ActiveChoiceModal state={state} kind={choosing} dispatch={dispatch} onClose={() => setChoosing(null)} />}
       </V3Screen>
@@ -443,7 +456,7 @@ function ActiveChoiceModal({ state, kind, dispatch, onClose }: { state: GameStat
                 }}
               >
                 <span className="choice-content">
-                  <strong className="choice-title">{option.locked ? '🔒 ' : ''}{isSelected ? '✓ ' : ''}{option.title}</strong>
+                  <strong className="choice-title">{option.locked ? 'ЗАКРЫТО · ' : ''}{isSelected ? '✓ ' : ''}{option.title}</strong>
                   <span className="choice-desc">{activeOptionDescription(state, kind, option, isSelected)}</span>
                 </span>
               </button>

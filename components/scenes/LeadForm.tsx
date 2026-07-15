@@ -1,7 +1,8 @@
 import type { GameState } from '@/packages/game-engine/src';
+import { PixelArtScene } from '@/components/game/PixelArtScene';
 
 export function LeadForm({ state, busy, status, onSubmit, onBack }: { state: GameState; busy: boolean; status: string | null; onSubmit: (data: FormData) => void; onBack: () => void }) {
-  return <div className="scene-screen"><div className="scene-image scene-image--character_happy" aria-hidden="true" />
+  return <div className="scene-screen"><PixelArtScene variant="summary" gender={state.player.avatarGender} />
     <form className="lead-form" action={onSubmit}>
       <h2 className="lead-form-title">Получить бесплатную консультацию</h2>
       <p className="lead-form-sub">Оставьте контакт — мы разберём вашу ситуацию и найдём, где теряются заявки.</p>
