@@ -6,6 +6,7 @@ import {
   createInitialState,
   finishGame,
   getActionAvailability,
+  getV3AttemptInsight,
   getV3ActiveOptions,
   getV3PreparationDefinitions,
   getV3PreparationDisplayOptions,
@@ -297,6 +298,49 @@ describe('commands and invariants', () => {
     const warmedBot = getV3ActiveOptions(warmed, 'warmup').find((option) => option.key.includes('locked:warmup:ai_bot:expert'));
     expect(warmedBot).toEqual(expect.objectContaining({ known: true, baseConversion: 0.27 }));
     expect(warmedBot?.effectiveConversion).toBeCloseTo(0.32319);
+  });
+
+  it('turns v3 stage reports into a clear funnel loss diagnosis', () => {
+    const state = createInitialState(scenarios[0].setup, config, 'v3_attempt_insight_seed');
+    state.launchPlan.productPrice = 15_000;
+    const report = {
+      id: 'stage-test',
+      stageNumber: 1,
+      startedDay: 1,
+      finishedDay: 6,
+      daysSpent: 5,
+      energySpent: 25,
+      adTitle: 'Реклама',
+      warmupTitle: 'Прогрев',
+      salesTitle: 'Продажи',
+      views: 13_000,
+      newLeads: 120,
+      notInterested: 80,
+      interested: 30,
+      requiredAnswer: 30,
+      lost: 30,
+      applications: 30,
+      callsHeld: 0,
+      callsNoBuy: 0,
+      callsBuy: 0,
+      chatsHeld: 0,
+      chatsNoBuy: 0,
+      chatsBuy: 0,
+      siteVisits: 0,
+      siteBuys: 0,
+      siteMessages: 0,
+      autoSales: 0,
+      salesCount: 0,
+      revenue: 0,
+      goalReached: false,
+      endedByBurnout: false,
+    };
+
+    const insight = getV3AttemptInsight(report, state.launchPlan.productPrice);
+
+    expect(insight.severity).toBe('danger');
+    expect(insight.headline).toContain('не вывезли обработку');
+    expect(insight.bullets).toContain('30 заявок остыли и ушли');
   });
 
   it('uses high-conversion low-reach stories and telegram ads in v3', () => {

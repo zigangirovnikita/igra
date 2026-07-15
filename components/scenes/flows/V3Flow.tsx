@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import {
   buildV3ActiveStagePlan,
+  getV3AttemptInsight,
   getV3ActiveOptions,
   getV3PreparationDisplayOptions,
   type GameConfig,
@@ -298,7 +299,7 @@ export function V3Flow({ state, config: _config, dispatch, busy }: Props) {
         {state.v3.stageReports.length === 0 ? <p>Активных этапов еще не было.</p> : (
           <div className="v3-attempt-list">
             {state.v3.stageReports.map((report) => (
-              <PastAttemptCard key={report.id} report={report} />
+              <PastAttemptCard key={report.id} report={report} productPrice={state.launchPlan.productPrice ?? 0} />
             ))}
           </div>
         )}
@@ -380,7 +381,7 @@ export function V3Flow({ state, config: _config, dispatch, busy }: Props) {
     return (
       <V3Screen gender={gender} image="summary" title={`Активный этап №${report?.stageNumber ?? ''} завершен`} busy={busy}
         button={state.endingReason ? 'Смотреть итог запуска' : 'Перейти к рефлексии'} onClick={() => dispatch('v3_return_reflection')}>
-        {report ? <ReportCard report={report} full /> : <p>Отчет не найден.</p>}
+        {report ? <ReportCard report={report} productPrice={state.launchPlan.productPrice ?? 0} full /> : <p>Отчет не найден.</p>}
       </V3Screen>
     );
   }
@@ -567,6 +568,8 @@ function ActiveStage({ state, dispatch, busy: _busy }: { state: GameState; dispa
   const currentPostCallChat = postCallQueue[chats.postCall];
   const currentDirectChat = plan.chatOutcomes[chats.direct];
   const currentChat = currentPostCallChat ?? currentDirectChat;
+  const currentSales = calls.buy + chats.buy + autoSalesNow;
+  const productPrice = state.launchPlan.productPrice ?? 0;
   const salesMessage = lastResult?.buy
     ? 'Купили!'
     : salesMode === 'call'
@@ -576,6 +579,18 @@ function ActiveStage({ state, dispatch, busy: _busy }: { state: GameState; dispa
         : salesMode === 'site'
           ? currentChat?.text ?? 'Сайт продает автоматически'
           : currentChat?.text;
+  const hotAdVisible = plan.adEvents.some((event) => event.hot && event.second <= elapsed);
+  const stageAlert = lastResult?.buy
+    ? `ОПЛАТА! +${productPrice.toLocaleString('ru-RU')} ₽`
+    : expiredMessages > 0
+      ? `ГОРИТ ОЧЕРЕДЬ: ${expiredMessages} заявок остыли`
+      : hotAdVisible
+        ? 'КОНТЕНТ ЗАЛЕТЕЛ: поток лидов ускорился'
+        : currentSales > 0
+          ? `Уже ${currentSales} продаж. Дожимайте заявки.`
+          : readyForSalesNow > 0
+            ? `${readyForSalesNow} заявок готовы к продаже`
+            : 'Идет трафик. Следите за узким местом.';
 
   const runAction = (durationSeconds: number, label: string, update: () => void) => {
     if (blocked || seconds <= 0) return;
@@ -630,6 +645,9 @@ function ActiveStage({ state, dispatch, busy: _busy }: { state: GameState; dispa
         <h1>Время активного этапа №{state.v3.stageReports.length + 1}</h1>
         <div className="v3-timer"><span style={{ width: `${progress}%` }} /></div>
         <div className="v3-active-board">
+          <div className={`v3-stage-alert${lastResult?.buy ? ' is-win' : expiredMessages > 0 ? ' is-danger' : hotAdVisible ? ' is-hot' : ''}`}>
+            {stageAlert}
+          </div>
           <h2>Реклама</h2>
           <div className="v3-runner">
             {plan.adEvents.map((event) => (
@@ -655,9 +673,10 @@ function ActiveStage({ state, dispatch, busy: _busy }: { state: GameState; dispa
             <b>Готовы к продаже {readyForSalesNow}</b>
           </div>
           <h2>Продажи</h2>
-          <div className={`v3-message ${lastResult?.buy ? 'is-sale' : ''}`}>
+          <div className={`v3-message ${lastResult?.buy ? 'is-sale' : lastResult && !lastResult.buy ? 'is-no-sale' : ''}`}>
             {salesMessage}
-            {lastResult?.buy && <span className="v3-money-burst">$ $ $</span>}
+            {lastResult?.buy && <span className="v3-money-burst">+{productPrice.toLocaleString('ru-RU')} ₽</span>}
+            {lastResult && !lastResult.buy && <span className="v3-loss-burst">не закрыли</span>}
           </div>
           <div className="v3-grid">
             {salesMode !== 'chat' && salesMode !== 'site' && salesMode !== 'webinar' && (
@@ -693,7 +712,7 @@ function activeSalesMode(key: string | null): 'intuition' | 'call' | 'chat' | 's
   return 'intuition';
 }
 
-function PastAttemptCard({ report }: { report: NonNullable<GameState['v3']['lastStageReport']> }) {
+function PastAttemptCard({ report, productPrice }: { report: NonNullable<GameState['v3']['lastStageReport']>; productPrice: number }) {
   const [expanded, setExpanded] = useState(false);
   return (
     <div className={`v3-attempt${expanded ? ' v3-attempt--open' : ''}`}>
@@ -706,24 +725,35 @@ function PastAttemptCard({ report }: { report: NonNullable<GameState['v3']['last
         <span>Попытка №{report.stageNumber}</span>
         <span aria-hidden="true">{expanded ? 'Свернуть' : 'Развернуть'}</span>
       </button>
-      {expanded && <ReportCard report={report} full />}
+      {expanded && <ReportCard report={report} productPrice={productPrice} full />}
     </div>
   );
 }
 
 function ReportCard({
   report,
+  productPrice,
   full = false,
   showAttemptTitle = false,
 }: {
   report: NonNullable<GameState['v3']['lastStageReport']>;
+  productPrice: number;
   full?: boolean;
   showAttemptTitle?: boolean;
 }) {
   const applications = report.applications ?? report.interested;
+  const insight = getV3AttemptInsight(report, productPrice);
   return (
     <div className="v3-report">
       {showAttemptTitle && <h2 className="v3-report-title">Попытка №{report.stageNumber}</h2>}
+      <div className={`v3-attempt-diagnosis v3-attempt-diagnosis--${insight.severity}`}>
+        <strong>{insight.headline}</strong>
+        <span>{insight.lossLabel}</span>
+        <ul>
+          {insight.bullets.map((item) => <li key={item}>{item}</li>)}
+        </ul>
+        <p>{insight.recommendation}</p>
+      </div>
       <dl className="v3-report-list">
         <div>
           <dt>Длительность</dt>

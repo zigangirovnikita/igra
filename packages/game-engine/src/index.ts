@@ -12,6 +12,7 @@ export {
   V3_PREPARATIONS,
   V3_PRODUCT_TITLES,
   buildV3ActiveStagePlan,
+  getV3AttemptInsight,
   getV3ActiveOptions,
   getV3PreparationDefinitions,
   getV3PreparationDisplayOptions,

@@ -75,8 +75,8 @@ export function FinishedFlow({ state, dispatch, busy }: FlowProps) {
       <>
         {finishError && <div className="scene-error" role="alert">{finishError}</div>}
         <NarrativeScreen
-          title="Запуск завершён"
-          paragraphs={[`Причина: ${endingReasonLabel(finalState.endingReason)}`]}
+          title={endingReasonTitle(finalState.endingReason)}
+          paragraphs={endingReasonParagraphs(finalState.endingReason)}
           buttonText={finishBusy ? 'Считаем итог…' : 'Посмотреть итоги'}
           busy={finishBusy}
           onNext={loadFinalReport}
@@ -137,4 +137,30 @@ function endingReasonLabel(reason: GameState['endingReason']): string {
   if (reason === 'resource_finished') return 'закончился критический ресурс';
   if (reason === 'manual_finished') return 'вы завершили запуск досрочно';
   return 'завершение запуска';
+}
+
+function endingReasonTitle(reason: GameState['endingReason']): string {
+  if (reason === 'time_finished') return 'Время вышло';
+  if (reason === 'resource_finished') return 'Вы выгорели';
+  if (reason === 'goal_finished') return 'Цель закрыта';
+  if (reason === 'manual_finished') return 'Запуск остановлен';
+  return 'Запуск завершён';
+}
+
+function endingReasonParagraphs(reason: GameState['endingReason']): string[] {
+  if (reason === 'time_finished') return [
+    '30 дней закончились. Теперь видно, где воронка не успела превратить заявки в деньги.',
+    'Сейчас посчитаем, сколько выручки осталось на столе и какой этап нужно чинить первым.',
+  ];
+  if (reason === 'resource_finished') return [
+    'Энергия закончилась. Запуск держался на ручных действиях и перегрел систему.',
+    'Сейчас покажем, какие заявки и продажи сгорели из-за хаоса в воронке.',
+  ];
+  if (reason === 'goal_finished') return [
+    'Вы закрыли цель. Теперь важно понять, какая связка сработала и как ее масштабировать без выгорания.',
+  ];
+  if (reason === 'manual_finished') return [
+    'Вы остановили запуск. Сейчас разберем, что уже видно по воронке и где могли быть деньги.',
+  ];
+  return [`Причина: ${endingReasonLabel(reason)}`];
 }

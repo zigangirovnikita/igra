@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import type { Diagnostics, GameState } from '@/packages/game-engine/src';
+import { getV3AttemptInsight, type Diagnostics, type GameState } from '@/packages/game-engine/src';
 import type { AiReport } from '@/lib/ai/report';
 import { PixelArtScene } from '@/components/game/PixelArtScene';
 
@@ -20,12 +20,22 @@ export function DiagnosisScreen({ state, diagnostics, aiReport, reportSource, on
   const [tab, setTab] = useState<Tab>('summary');
   const formatMoney = (value: number) => `${value.toLocaleString('ru-RU')} ₽`;
   const startingBank = diagnostics.financials.bankRemaining + diagnostics.financials.expenses;
+  const productPrice = state.launchPlan.productPrice ?? 0;
+  const attemptInsights = state.v3.stageReports.map((report) => getV3AttemptInsight(report, productPrice));
+  const missedRevenue = attemptInsights.reduce((sum, item) => sum + item.missedRevenue, 0);
+  const worstInsight = attemptInsights.find((item) => item.severity === 'danger') ?? attemptInsights.find((item) => item.severity === 'warning') ?? attemptInsights[0];
 
   return (
     <div className="scene-screen diagnosis-screen scrollable">
       <PixelArtScene variant="summary" gender={state.player.avatarGender} />
       <h1 className="diagnosis-main-title">{aiReport.headline}</h1>
       <p className="scene-paragraph">{aiReport.resultSummary}</p>
+      <section className={`diagnosis-verdict diagnosis-verdict--${state.endingReason ?? 'manual'}`}>
+        <span>{endingReasonPunch(state.endingReason)}</span>
+        <strong>{missedRevenue > 0 ? `Вы могли недобрать около ${formatMoney(missedRevenue)}` : 'Деньги были не в удаче, а в управлении воронкой'}</strong>
+        <p>{worstInsight?.headline ?? 'Главный вопрос - где воронка теряет деньги и заявки.'}</p>
+        <p>{worstInsight?.recommendation ?? 'На разборе нужно понять, какой этап чинить первым: трафик, прогрев или продажи.'}</p>
+      </section>
       <p className="scene-paragraph diagnosis-source">
         Источник объяснения: {reportSource === 'ai' ? 'ИИ по рассчитанным данным игры' : 'детерминированный резервный отчёт'}.
       </p>
@@ -124,6 +134,14 @@ function Card({ title, children }: { title: string; children: React.ReactNode })
       {children}
     </div>
   );
+}
+
+function endingReasonPunch(reason: GameState['endingReason']): string {
+  if (reason === 'time_finished') return 'ВРЕМЯ ВЫШЛО';
+  if (reason === 'resource_finished') return 'ВЫГОРАНИЕ';
+  if (reason === 'goal_finished') return 'ЦЕЛЬ ЗАКРЫТА';
+  if (reason === 'manual_finished') return 'ЗАПУСК ОСТАНОВЛЕН';
+  return 'ВЕРДИКТ ЗАПУСКА';
 }
 
 function labelEntry(value: string): string {

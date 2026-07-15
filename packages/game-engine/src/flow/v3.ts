@@ -44,6 +44,14 @@ type PreparationDisplayOption = PrepDef & {
   self: PrepDef['self'] & { known: boolean; effectiveConversion: number };
   expert: PrepDef['expert'] & { known: boolean; effectiveConversion: number };
 };
+type V3AttemptInsight = {
+  severity: 'win' | 'warning' | 'danger';
+  headline: string;
+  lossLabel: string;
+  missedRevenue: number;
+  bullets: string[];
+  recommendation: string;
+};
 
 const ACTIVE_STAGE_SECONDS = 60;
 const CALL_DURATION_SECONDS = 6;
@@ -382,6 +390,119 @@ export function getV3PreparationDisplayOptions(state: GameState, area: V3Prepara
       effectiveConversion: effectiveOptionConversion(state, kind, item.expert.conversion),
     },
   }));
+}
+
+export function getV3AttemptInsight(report: V3StageReport, productPrice: number): V3AttemptInsight {
+  const applications = report.applications ?? report.interested;
+  const readyForSales = Math.max(0, applications - report.lost);
+  const salesTargetFromReady = Math.max(0, Math.round(readyForSales * 0.25));
+  const missedSales = Math.max(0, salesTargetFromReady - report.salesCount);
+  const missedRevenue = missedSales * Math.max(0, productPrice);
+  const salesActions = report.callsHeld + report.chatsHeld + report.siteVisits;
+  const closeRate = readyForSales > 0 ? report.salesCount / readyForSales : 0;
+
+  if (report.goalReached) {
+    return {
+      severity: 'win',
+      headline: 'Связка сработала. Теперь ее надо масштабировать.',
+      lossLabel: missedRevenue > 0 ? `Еще можно было добрать ${formatEngineMoney(missedRevenue)}` : 'План закрыт',
+      missedRevenue,
+      bullets: [
+        `${report.salesCount} продаж на ${formatEngineMoney(report.revenue)}`,
+        `${applications} заявок дошли до решения`,
+        'Главная задача теперь - понять, какая часть воронки дала результат, и повторить ее.',
+      ],
+      recommendation: 'Разберите удачную связку на консультации и масштабируйте самый сильный участок.',
+    };
+  }
+
+  if (report.endedByBurnout) {
+    return {
+      severity: 'danger',
+      headline: 'Вы выгорели: запуск держался на ручном труде.',
+      lossLabel: missedRevenue > 0 ? `Упущено около ${formatEngineMoney(missedRevenue)}` : 'Потеряны энергия и темп запуска',
+      missedRevenue,
+      bullets: [
+        `Энергия этапа: -${report.energySpent}`,
+        `${report.lost} заявок остыли или не были обработаны`,
+        'Без специалистов и понятной системы ручные действия съедают запуск быстрее, чем приносят продажи.',
+      ],
+      recommendation: 'Нужен разбор воронки: что автоматизировать, что отдать специалисту, где перестать тащить руками.',
+    };
+  }
+
+  if (report.lost > Math.max(2, applications * 0.18)) {
+    return {
+      severity: 'danger',
+      headline: 'Заявки были, но вы не вывезли обработку.',
+      lossLabel: missedRevenue > 0 ? `Упущено около ${formatEngineMoney(missedRevenue)}` : 'Потеряны горячие заявки',
+      missedRevenue,
+      bullets: [
+        `${applications} заявок оставили интерес`,
+        `${report.lost} заявок остыли и ушли`,
+        'Проблема не только в трафике. Дыра в обработке заявок.',
+      ],
+      recommendation: 'Покупайте консультацию по прогреву или подключайте бота/специалиста, иначе лиды будут сгорать.',
+    };
+  }
+
+  if (readyForSales > 0 && (report.salesCount === 0 || closeRate < 0.1)) {
+    return {
+      severity: 'danger',
+      headline: 'Продажи не закрывают спрос.',
+      lossLabel: missedRevenue > 0 ? `Упущено около ${formatEngineMoney(missedRevenue)}` : 'Заявки дошли, но денег почти нет',
+      missedRevenue,
+      bullets: [
+        `${readyForSales} заявок дошли до продаж`,
+        `${report.salesCount} оплат на ${formatEngineMoney(report.revenue)}`,
+        'Люди заинтересовались, но продажная часть не дожала оплату.',
+      ],
+      recommendation: 'Здесь нужна консультация по продажам или подготовленный скрипт со специалистом.',
+    };
+  }
+
+  if (report.newLeads > 0 && applications < Math.max(2, report.newLeads * 0.12)) {
+    return {
+      severity: 'warning',
+      headline: 'Трафик пришел, но прогрев не создал заявки.',
+      lossLabel: missedRevenue > 0 ? `Недобор около ${formatEngineMoney(missedRevenue)}` : 'Большая часть лидов не созрела',
+      missedRevenue,
+      bullets: [
+        `${report.newLeads} новых лидов`,
+        `${applications} заявок после прогрева`,
+        'Реклама дала поток, но смыслы прогрева не довели людей до решения.',
+      ],
+      recommendation: 'Нужен разбор прогрева: оффер, доверие, последовательность сообщений и точка заявки.',
+    };
+  }
+
+  if (salesActions === 0 && readyForSales > 0) {
+    return {
+      severity: 'warning',
+      headline: 'Вы довели людей до покупки, но не начали продавать.',
+      lossLabel: missedRevenue > 0 ? `На столе осталось около ${formatEngineMoney(missedRevenue)}` : 'Продажные действия не запущены',
+      missedRevenue,
+      bullets: [
+        `${readyForSales} заявок были готовы к продаже`,
+        'Продажных действий почти не было',
+        'Без обработки даже хорошая воронка не превращается в деньги.',
+      ],
+      recommendation: 'Сначала разберите, кто и как должен закрывать заявки: переписка, созвон, сайт или автовебинар.',
+    };
+  }
+
+  return {
+    severity: missedRevenue > 0 ? 'warning' : 'win',
+    headline: missedRevenue > 0 ? 'Воронка работает, но деньги остаются внутри дыр.' : 'Потери небольшие, связка стала понятнее.',
+    lossLabel: missedRevenue > 0 ? `Недобор около ${formatEngineMoney(missedRevenue)}` : 'Критичных потерь нет',
+    missedRevenue,
+    bullets: [
+      `${report.views.toLocaleString('ru-RU')} просмотров -> ${report.newLeads} лидов`,
+      `${applications} заявок -> ${report.salesCount} продаж`,
+      'Следующий рост даст не больше хаоса, а точечное усиление слабого этапа.',
+    ],
+    recommendation: 'На консультации нужно найти узкое место и решить, что покупать: рекламу, прогрев или продажи.',
+  };
 }
 
 export function getV3ActiveOptions(state: GameState, kind: V3SelectionKind): ActiveOption[] {
@@ -864,6 +985,10 @@ function effectiveOptionConversion(state: GameState, kind: V3SelectionKind, base
 
 function selectionKindForPreparationArea(area: V3PreparationArea): V3SelectionKind {
   return area === 'ads' ? 'ad' : area;
+}
+
+function formatEngineMoney(value: number): string {
+  return `${Math.round(value).toLocaleString('ru-RU')} ₽`;
 }
 
 function effectiveSalesConversion(state: GameState, baseConversion: number, bonus: number): number {
