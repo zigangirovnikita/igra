@@ -1155,6 +1155,42 @@ textarea {
   font-weight: 900;
 }
 
+.v3-active-board button.v3-action-button {
+  color: rgba(36, 24, 41, 0.68);
+  background:
+    repeating-linear-gradient(45deg, rgba(36,24,41,.08) 0 6px, transparent 6px 12px),
+    linear-gradient(180deg, #f0ead7 0%, #d8cfbd 100%);
+  filter: saturate(0.65);
+}
+
+.v3-active-board button.v3-action-button--ready:not(:disabled) {
+  color: #17291e;
+  background:
+    linear-gradient(180deg, #8df2b1 0%, #58d987 58%, #2dbb67 59%, #2dbb67 100%);
+  border-color: #106a3a;
+  filter: none;
+}
+
+.v3-active-board button.v3-action-button--danger:not(:disabled) {
+  color: #fff;
+  background:
+    linear-gradient(180deg, #ff7480 0%, #ff4f65 48%, #c91f49 49%, #c91f49 100%);
+  border-color: #7b1231;
+  text-shadow: 2px 2px 0 rgba(36, 24, 41, 0.38);
+  animation: v3-action-danger-pulse .7s steps(2) infinite;
+  filter: none;
+}
+
+.v3-active-board button.v3-action-button:disabled {
+  color: rgba(36, 24, 41, 0.62);
+  opacity: 1;
+  cursor: default;
+}
+
+@keyframes v3-action-danger-pulse {
+  50% { filter: brightness(1.18) saturate(1.18); }
+}
+
 .v3-action-row {
   display: grid;
   grid-template-columns: minmax(120px, 1fr) minmax(0, 1fr);

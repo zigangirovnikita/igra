@@ -492,15 +492,14 @@ function PrepareButton({
 }) {
   const price = definition[mode === 'self' ? 'self' : 'expert'];
   const purchased = isPreparationPurchased(state, area, definition.id, mode);
-  const permanentPurchased = purchased && area !== 'ads';
   const conversionLine = price.known ? ` · конверсия ${formatConversion(price.effectiveConversion)}` : '';
   return (
-    <button className={`v3-red-button${purchased ? ' v3-red-button--owned' : ''}`} disabled={permanentPurchased} onClick={() => {
+    <button className={`v3-red-button${purchased ? ' v3-red-button--owned' : ''}`} disabled={purchased} onClick={() => {
       if (confirm(`${definition.title}: подтвердить вариант "${mode === 'self' ? 'самостоятельно' : 'со специалистом'}"?`)) {
         void dispatch('v3_confirm_preparation', { area, instrumentId: definition.id, mode });
       }
     }}>
-      {purchased ? area === 'ads' ? 'Куплено · купить еще' : 'Куплено' : `Сделать ${mode === 'self' ? 'самостоятельно' : 'со специалистом'}`}
+      {purchased ? 'Куплено' : `Сделать ${mode === 'self' ? 'самостоятельно' : 'со специалистом'}`}
       <small>{price.cost > 0 ? `${price.cost.toLocaleString('ru-RU')} ₽` : 'без денег'} · {price.energy} энергии · {price.days} дн.{conversionLine}</small>
     </button>
   );
@@ -508,7 +507,7 @@ function PrepareButton({
 
 function isPreparationPurchased(state: GameState, area: V3PreparationArea, instrumentId: string, mode: V3PreparationMode): boolean {
   return state.v3.plannedPreparations.some((item) => item.area === area && item.instrumentId === instrumentId && item.mode === mode)
-    || state.v3.lastPreparationSummary?.items.some((item) => item.area === area && item.instrumentId === instrumentId && item.mode === mode) === true
+    || (area !== 'ads' && state.v3.lastPreparationSummary?.items.some((item) => item.area === area && item.instrumentId === instrumentId && item.mode === mode) === true)
     || (area === 'ads'
       ? state.v3.preparedAds.some((item) => item.instrumentId === instrumentId && item.mode === mode)
       : state.v3.preparedTools.some((item) => item.area === area && item.instrumentId === instrumentId && item.mode === mode));
@@ -624,11 +623,22 @@ function ActiveStage({ state, dispatch, busy: _busy }: { state: GameState; dispa
       ? Math.max(0, siteMessageLimit - chats.held)
       : Math.max(0, readyForSalesNow + postCallQueue.length - calls.held - chats.direct - chats.postCall);
   const currentWarmupText = visibleMessages[0]?.text ?? (plan.totals.requiredAnswer > 0 ? 'Сообщений для ответа пока нет' : 'Прогрев работает без ручных ответов');
+  const currentAnswer = visibleMessages[0];
+  const answerSecondsLeft = currentAnswer ? currentAnswer.expiresSecond - elapsed : 0;
+  const answerButtonState = blocked || !currentAnswer
+    ? 'idle'
+    : answerSecondsLeft <= 3 || expiredMessages > 0
+      ? 'danger'
+      : 'ready';
   const currentCall = plan.callOutcomes[calls.held];
   const currentPostCallChat = postCallQueue[chats.postCall];
   const currentDirectChat = plan.chatOutcomes[chats.direct];
   const currentChat = currentPostCallChat ?? currentDirectChat;
   const currentSales = calls.buy + chats.buy + autoSalesNow;
+  const callButtonState = blocked || availableCallCount <= 0 || !currentCall ? 'idle' : 'ready';
+  const adHeading = activeInstrumentHeading(state, 'ad', 'Реклама');
+  const warmupHeading = activeInstrumentHeading(state, 'warmup', 'Прогрев');
+  const salesHeading = activeInstrumentHeading(state, 'sales', 'Продажи');
   const productPrice = state.launchPlan.productPrice ?? 0;
   const salesMessage = lastResult?.buy
     ? 'Купили!'
@@ -719,7 +729,7 @@ function ActiveStage({ state, dispatch, busy: _busy }: { state: GameState; dispa
           <div className={`v3-stage-alert${lastResult?.buy ? ' is-win' : expiredMessages > 0 ? ' is-danger' : hotAdVisible ? ' is-hot' : ''}`}>
             {stageAlert}
           </div>
-          <h2>Реклама</h2>
+          <h2>{adHeading}</h2>
           <div className="v3-runner">
             <div className="v3-runner-track">
               {[0, 1].flatMap((copy) => plan.adEvents.map((event) => (
@@ -730,10 +740,16 @@ function ActiveStage({ state, dispatch, busy: _busy }: { state: GameState; dispa
             </div>
           </div>
           <b>Количество показов {views.toLocaleString('ru-RU')}</b>
-          <h2>Прогрев</h2>
+          <h2>{warmupHeading}</h2>
           <div className="v3-message">{currentWarmupText}</div>
           <div className="v3-action-row">
-            <button disabled={blocked || !visibleMessages[0]} onClick={answerMessage}>Ответить</button>
+            <button
+              className={`v3-action-button v3-action-button--${answerButtonState}`}
+              disabled={blocked || !currentAnswer}
+              onClick={answerMessage}
+            >
+              Нужно ответить
+            </button>
             <span>{blocked ? `${blockLabel ?? 'занято'}: ${blockLeft} сек.` : `в очереди: ${visibleMessages.length}`}</span>
           </div>
           <div className="v3-counter-grid">
@@ -745,7 +761,7 @@ function ActiveStage({ state, dispatch, busy: _busy }: { state: GameState; dispa
             {plan.totals.autoSales > 0 && <b>Купили автоматически: {autoSalesNow}</b>}
             <b>Готовы к продаже: {readyForSalesNow}</b>
           </div>
-          <h2>Продажи</h2>
+          <h2>{salesHeading}</h2>
           <div className={`v3-message ${lastResult?.buy ? 'is-sale' : lastResult && !lastResult.buy ? 'is-no-sale' : ''}`}>
             {salesMessage}
             {lastResult?.buy && <span className="v3-money-burst">+{productPrice.toLocaleString('ru-RU')} ₽</span>}
@@ -753,7 +769,13 @@ function ActiveStage({ state, dispatch, busy: _busy }: { state: GameState; dispa
           </div>
           <div className="v3-grid">
             {salesMode !== 'chat' && salesMode !== 'site' && salesMode !== 'webinar' && (
-              <button disabled={blocked || availableCallCount <= 0} onClick={runCall}>Провести созвон</button>
+              <button
+                className={`v3-action-button v3-action-button--${callButtonState}`}
+                disabled={blocked || availableCallCount <= 0}
+                onClick={runCall}
+              >
+                Провести созвон
+              </button>
             )}
             {salesMode !== 'call' || postCallQueue.length > chats.postCall ? (
               <button disabled={blocked || availableChatCount <= 0} onClick={runChat}>Продать в переписке</button>
@@ -783,6 +805,21 @@ function activeSalesMode(key: string | null): 'intuition' | 'call' | 'chat' | 's
   if (key.includes('auto_webinar')) return 'webinar';
   if (key.includes('website')) return 'site';
   return 'intuition';
+}
+
+function activeInstrumentHeading(state: GameState, kind: V3SelectionKind, label: string): string {
+  const key = state.v3.activeSelection[kind];
+  if (!key) return label;
+  const option = getV3ActiveOptions(state, kind).find((item) => item.key === key);
+  if (!option) return label;
+  return `${label} - ${normalizeActiveInstrumentTitle(option.title)}`;
+}
+
+function normalizeActiveInstrumentTitle(title: string): string {
+  return title
+    .replace(/\s*[-—]\s*(самостоятельно|со специалистом)\s*$/i, '')
+    .replace(/\s*\((самостоятельно|со специалистом)\)\s*$/i, '')
+    .trim();
 }
 
 function displayAdEventLabel(label: string): string {

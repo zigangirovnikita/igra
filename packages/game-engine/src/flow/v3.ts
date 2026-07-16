@@ -295,7 +295,7 @@ export function confirmV3Preparation(
 ): GameState {
   const definition = getPreparation(area, instrumentId);
   const price = definition[mode === 'self' ? 'self' : 'expert'];
-  if (area !== 'ads' && isPermanentPrepared(state, area, instrumentId, mode)) {
+  if (isPreparationAlreadyReadyOrPlanned(state, area, instrumentId, mode)) {
     throw new Error('Этот инструмент уже готов');
   }
   if (state.resources.bank < price.cost) throw new Error('Не хватает денег в банке');
@@ -1534,6 +1534,14 @@ function isConflictingWebinarSelection(state: GameState, kind: V3SelectionKind, 
 function isPermanentPrepared(state: GameState, area: V3PreparationArea, instrumentId: string, mode: V3PreparationMode): boolean {
   return state.v3.preparedTools.some((item) => item.area === area && item.instrumentId === instrumentId && item.mode === mode)
     || state.v3.plannedPreparations.some((item) => item.area === area && item.instrumentId === instrumentId && item.mode === mode);
+}
+
+function isPreparationAlreadyReadyOrPlanned(state: GameState, area: V3PreparationArea, instrumentId: string, mode: V3PreparationMode): boolean {
+  if (area === 'ads') {
+    return state.v3.preparedAds.some((item) => item.instrumentId === instrumentId && item.mode === mode)
+      || state.v3.plannedPreparations.some((item) => item.area === area && item.instrumentId === instrumentId && item.mode === mode);
+  }
+  return isPermanentPrepared(state, area, instrumentId, mode);
 }
 
 function getPreparation(area: V3PreparationArea, instrumentId: string): PrepDef {

@@ -103,6 +103,26 @@ describe('commands and invariants', () => {
     expect(next.flow.step).toBe('v3_prepare_category');
   });
 
+  it('does not charge resources for duplicate ad preparation', () => {
+    let state = createInitialState(scenarios[0].setup, config, 'duplicate_ad_preparation_seed');
+    state = applyCommand(state, config, {
+      commandId: 'prepare_reels_self',
+      type: 'v3_confirm_preparation',
+      payload: { area: 'ads', instrumentId: 'reels', mode: 'self' },
+    });
+
+    const bank = state.resources.bank;
+    const energy = state.resources.energy;
+
+    expect(() => applyCommand(state, config, {
+      commandId: 'prepare_reels_self_again',
+      type: 'v3_confirm_preparation',
+      payload: { area: 'ads', instrumentId: 'reels', mode: 'self' },
+    })).toThrow('Этот инструмент уже готов');
+    expect(state.resources.bank).toBe(bank);
+    expect(state.resources.energy).toBe(energy);
+  });
+
   it('unlocks a confirmed v3 preparation for active stage selection', () => {
     let state = createInitialState(scenarios[0].setup, config, 'v3_unlock_preparation_seed');
     state = applyCommand(state, config, {
