@@ -5,6 +5,7 @@ import { signPayload } from '@/lib/security/hmac';
 import { globalRateLimiter } from '@/lib/api/rate-limit';
 import { hasSessionAccess, sessionAccessDenied } from '@/lib/security/session-access';
 import { prisma } from '@/lib/db/client';
+import { deliverLeadToTelegram, isTelegramLeadDeliveryConfigured } from '@/lib/game/telegramLeadDelivery';
 
 export async function POST(request: Request) {
   const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? 'anonymous';
@@ -74,11 +75,26 @@ export async function POST(request: Request) {
 
   const webhookUrl = process.env.LEAD_WEBHOOK_URL;
   const webhookSecret = process.env.LEAD_WEBHOOK_SECRET;
+  if (isTelegramLeadDeliveryConfigured()) {
+    try {
+      lead.attempts = 1;
+      await deliverLeadToTelegram(payload);
+      lead.status = 'delivered';
+      await saveLead(lead);
+      return NextResponse.json({ ok: true, leadId });
+    } catch (error) {
+      lead.status = 'delivery_failed';
+      lead.lastError = error instanceof Error ? error.message : 'unknown';
+      await saveLead(lead);
+      return NextResponse.json({ error: 'telegram_delivery_failed', leadId }, { status: 502 });
+    }
+  }
+
   if (!webhookUrl || !webhookSecret) {
     lead.status = 'delivery_failed';
-    lead.lastError = 'LEAD_WEBHOOK_URL or LEAD_WEBHOOK_SECRET is not configured';
+    lead.lastError = 'Telegram delivery or lead webhook is not configured';
     await saveLead(lead);
-    return NextResponse.json({ error: 'webhook_not_configured', leadId }, { status: 503 });
+    return NextResponse.json({ error: 'lead_delivery_not_configured', leadId }, { status: 503 });
   }
 
   const serialized = JSON.stringify(payload);

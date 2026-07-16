@@ -165,6 +165,9 @@ export function applyCommand(input: GameState, config: GameConfig, command: Game
     case 'v3_set_dream':
       state = V3.setV3Dream(state, config, command.payload.dreamId, command.payload.customTitle, command.payload.customPrice);
       break;
+    case 'v3_set_dreams':
+      state = V3.setV3Dreams(state, config, command.payload.dreams, command.payload.customTitle, command.payload.customPrice);
+      break;
     case 'v3_open_reflection':
       state = V3.openV3Reflection(state, command.payload.target);
       break;

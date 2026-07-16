@@ -128,6 +128,83 @@ describe('commands and invariants', () => {
     );
   });
 
+  it('keeps prepared ad selectable after returning from action selection', () => {
+    let state = createInitialState(scenarios[0].setup, config, 'v3_ad_prepare_return_seed');
+    state = applyCommand(state, config, {
+      commandId: 'begin_without_ad',
+      type: 'v3_begin_action_plan',
+      payload: {},
+    });
+    state = applyCommand(state, config, {
+      commandId: 'return_without_ad',
+      type: 'v3_return_reflection',
+      payload: {},
+    });
+    state = applyCommand(state, config, {
+      commandId: 'prepare_reels_self',
+      type: 'v3_confirm_preparation',
+      payload: { area: 'ads', instrumentId: 'reels', mode: 'self' },
+    });
+    state = applyCommand(state, config, {
+      commandId: 'begin_with_ad',
+      type: 'v3_begin_action_plan',
+      payload: {},
+    });
+
+    const reelsOptions = getV3ActiveOptions(state, 'ad').filter((option) =>
+      option.title === 'Контент для рилс - самостоятельно'
+    );
+    expect(reelsOptions).toHaveLength(1);
+    expect(reelsOptions[0]).toEqual(expect.objectContaining({ locked: false }));
+
+    state = applyCommand(state, config, {
+      commandId: 'ack_summary',
+      type: 'v3_ack_pre_action_summary',
+      payload: {},
+    });
+    state = applyCommand(state, config, {
+      commandId: 'return_again',
+      type: 'v3_return_reflection',
+      payload: {},
+    });
+    state = applyCommand(state, config, {
+      commandId: 'begin_again',
+      type: 'v3_begin_action_plan',
+      payload: {},
+    });
+
+    const repeatedReelsOptions = getV3ActiveOptions(state, 'ad').filter((option) =>
+      option.title === 'Контент для рилс - самостоятельно'
+    );
+    expect(repeatedReelsOptions).toHaveLength(1);
+    expect(repeatedReelsOptions[0]).toEqual(expect.objectContaining({ locked: false }));
+  });
+
+  it('keeps multiple v3 dreams until explicit confirmation and sums their prices', () => {
+    let state = createInitialState(scenarios[0].setup, config, 'v3_multiple_dreams_seed');
+    state.launchPlan.productPrice = 10_000;
+    state.v3.productPrice = 10_000;
+
+    state = applyCommand(state, config, {
+      commandId: 'set_multiple_dreams',
+      type: 'v3_set_dreams',
+      payload: {
+        dreams: [
+          { id: 'tsum', title: 'Поход в ЦУМ', price: 300_000 },
+          { id: 'vacation', title: 'Отпуск', price: 300_000 },
+        ],
+        customTitle: 'Курс по стилю',
+        customPrice: 120_000,
+      },
+    });
+
+    expect(state.flow.step).toBe('v3_goal_summary');
+    expect(state.v3.dreamChoices.map((dream) => dream.title)).toEqual(['Поход в ЦУМ', 'Отпуск', 'Курс по стилю']);
+    expect(state.targets.personalGoal).toBe(720_000);
+    expect(state.targets.targetRevenue).toBe(720_000);
+    expect(state.targets.targetSales).toBe(72);
+  });
+
   it('shows v3 advice result and keeps the strongest advice bonus for the loop', () => {
     let state = createInitialState(scenarios[0].setup, config, 'v3_advice_seed');
     const bankBefore = state.resources.bank;
@@ -470,6 +547,18 @@ describe('commands and invariants', () => {
     const plan = buildV3ActiveStagePlan(state);
     expect(plan.totals.autoSales).toBeGreaterThan(0);
 
+    const highTicketState = createInitialState(scenarios[0].setup, config, 'v3_warmup_rates_seed');
+    highTicketState.v3.productType = 'live_course';
+    highTicketState.v3.productPrice = 50_000;
+    highTicketState.launchPlan.productType = 'live_course';
+    highTicketState.launchPlan.productPrice = 50_000;
+    highTicketState.v3.preparedAds = state.v3.preparedAds;
+    highTicketState.v3.preparedTools = state.v3.preparedTools;
+    highTicketState.v3.activeSelection = state.v3.activeSelection;
+    const highTicketPlan = buildV3ActiveStagePlan(highTicketState);
+    expect(highTicketPlan.totals.autoSales).toBeLessThan(plan.totals.autoSales);
+    expect(highTicketPlan.totals.autoSales).toBeLessThanOrEqual(Math.ceil(highTicketPlan.totals.interested * 0.02));
+
     const completed = applyCommand(state, config, {
       commandId: 'complete_auto_webinar_sales',
       type: 'v3_complete_active_stage',
@@ -497,6 +586,46 @@ describe('commands and invariants', () => {
       payload: { manualAnswers: 56, directSalesChats: 24, salesChats: 24, calls: 0 },
     });
     expect(completed.v3.lastStageReport?.chatsBuy).toBeGreaterThanOrEqual(3);
+  });
+
+  it('uses hidden visitor and viewer pools for automatic high-ticket sales', () => {
+    const state = createInitialState(scenarios[0].setup, config, 'v3_hidden_auto_pool_seed');
+    state.v3.productType = 'live_course';
+    state.v3.productPrice = 50_000;
+    state.launchPlan.productType = 'live_course';
+    state.launchPlan.productPrice = 50_000;
+    state.v3.preparedAds = [
+      { key: 'ad:reels:expert:hidden', instrumentId: 'reels', mode: 'expert', title: 'Контент для рилс - со специалистом', known: false, uses: 0 },
+    ];
+    state.v3.preparedTools = [
+      { key: 'warmup:auto_webinar:expert', area: 'warmup', instrumentId: 'auto_webinar', mode: 'expert', title: 'Автовебинар - со специалистом', known: false, uses: 0 },
+      { key: 'sales:website:expert', area: 'sales', instrumentId: 'website', mode: 'expert', title: 'Сайт - со специалистом', known: false, uses: 0 },
+    ];
+    state.v3.activeSelection = {
+      ad: 'ad:reels:expert:hidden',
+      warmup: 'warmup:auto_webinar:expert',
+      sales: 'sales:website:expert',
+    };
+
+    const plan = buildV3ActiveStagePlan(state);
+    expect(plan.totals.warmupAutoAudience).toBeGreaterThan(0);
+    expect(plan.totals.warmupAutoAudience).toBeLessThan(plan.totals.newLeads);
+    expect(plan.totals.autoSales).toBeLessThanOrEqual(Math.ceil(plan.totals.warmupAutoAudience * 0.023));
+    expect(plan.totals.salesAutoAudience).toBeGreaterThan(0);
+    expect(plan.totals.salesAutoAudience).toBeLessThan(plan.totals.interested);
+
+    const completed = applyCommand(state, config, {
+      commandId: 'complete_hidden_auto_pool',
+      type: 'v3_complete_active_stage',
+      payload: {
+        manualAnswers: plan.totals.requiredAnswer,
+        salesChats: plan.totals.siteMessages,
+      },
+    });
+    const report = completed.v3.lastStageReport;
+    expect(report?.siteVisits).toBe(plan.totals.salesAutoAudience);
+    expect(report?.siteBuys).toBeLessThanOrEqual(Math.ceil(plan.totals.salesAutoAudience * 0.055));
+    expect(report?.salesCount).toBe((report?.autoSales ?? 0) + (report?.siteBuys ?? 0) + (report?.chatsBuy ?? 0));
   });
 
   it('keeps every v3 ad, warmup, sales, and superpower conversion combination consistent', () => {

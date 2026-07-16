@@ -53,6 +53,12 @@ export function SceneEngine({ config }: Props) {
       .finally(() => setBusy(false));
   }, []);
 
+  useEffect(() => {
+    if (!error) return;
+    const timeoutId = window.setTimeout(() => setError(null), 3000);
+    return () => window.clearTimeout(timeoutId);
+  }, [error]);
+
   async function handleSetupComplete(draft: SetupDraft) {
     setBusy(true);
     setError(null);

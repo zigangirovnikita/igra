@@ -10,6 +10,8 @@ type Variant =
   | 'price'
   | 'dream'
   | 'goal'
+  | 'rules'
+  | 'resume'
   | 'reflection'
   | 'prepare'
   | 'advice'
@@ -35,6 +37,8 @@ export function PixelArtScene({
     price: 'price',
     dream: 'dream',
     goal: 'goal',
+    rules: 'rules',
+    resume: 'resume',
     reflection: 'reflection',
     prepare: 'prepare',
     advice: 'advice',

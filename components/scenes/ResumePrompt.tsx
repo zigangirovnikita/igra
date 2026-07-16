@@ -5,7 +5,7 @@ export function ResumePrompt({ state, onResume, onRestart }: { state: GameState;
   return (
     <div className="scene-screen scene-screen--setup">
       <div className="setup-step setup-step--center">
-        <PixelArtScene variant="reflection" gender={state.player.avatarGender} />
+        <PixelArtScene variant="resume" gender={state.player.avatarGender} />
         <h1 className="setup-headline">Продолжить запуск?</h1>
         <p className="setup-subtext">Сохранён прогресс: день {state.resources.day}/30, банк {Math.round(state.resources.bank).toLocaleString('ru-RU')} ₽, энергия {Math.round(state.resources.energy)}%.</p>
         <button className="btn-primary" onClick={onResume}>Продолжить</button>

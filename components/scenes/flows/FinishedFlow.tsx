@@ -6,6 +6,7 @@ import type { AiReport } from '@/lib/ai/report';
 import { MultiChoiceScreen, NarrativeScreen } from '../ui';
 import { LeadForm } from '../LeadForm';
 import { DiagnosisScreen } from '../DiagnosisScreen';
+import { LiveAuditLanding } from '../LiveAuditLanding';
 import { submitLead } from '@/lib/game/leadClient';
 
 type FlowProps = {
@@ -18,9 +19,9 @@ type FlowProps = {
 export function FinishedFlow({ state, dispatch, busy }: FlowProps) {
   const [finalState, setFinalState] = useState(state);
   const [report, setReport] = useState<AiReport | null>(null);
-  const [reportSource, setReportSource] = useState<'ai' | 'fallback' | null>(null);
   const [finishBusy, setFinishBusy] = useState(false);
   const [finishError, setFinishError] = useState<string | null>(null);
+  const [showAuditLanding, setShowAuditLanding] = useState(false);
   const [showLead, setShowLead] = useState(false);
   const [leadBusy, setLeadBusy] = useState(false);
   const [leadStatus, setLeadStatus] = useState<string | null>(null);
@@ -49,7 +50,6 @@ export function FinishedFlow({ state, dispatch, busy }: FlowProps) {
       if (!response.ok) throw new Error(data.error ?? 'Не удалось завершить игру');
       setFinalState(data.state);
       setReport(data.report);
-      setReportSource(data.reportSource);
     } catch (error) {
       setFinishError(error instanceof Error ? error.message : 'Не удалось получить диагностику');
     } finally {
@@ -57,11 +57,18 @@ export function FinishedFlow({ state, dispatch, busy }: FlowProps) {
     }
   }, [finalState.sessionId, finalState.stateVersion, finishBusy, report]);
 
+  const isFinalReportStep = finalState.flow.step === 'final_reason' || finalState.flow.step === 'final_diagnosis';
+
   useEffect(() => {
-    if (finalState.flow.step === 'final_diagnosis' && !report && !finishBusy && !finishError) {
+    if (isFinalReportStep && !report && !finishBusy && !finishError) {
       void loadFinalReport();
     }
-  }, [finalState.flow.step, finishBusy, finishError, loadFinalReport, report]);
+  }, [finishBusy, finishError, isFinalReportStep, loadFinalReport, report]);
+
+  const restartGame = () => {
+    localStorage.removeItem('launch-game-cache');
+    window.location.href = '/';
+  };
 
   if (finalState.flow.step === 'finish_confirmation') {
     return <MultiChoiceScreen title="Завершить запуск прямо сейчас?" choices={[
@@ -70,34 +77,19 @@ export function FinishedFlow({ state, dispatch, busy }: FlowProps) {
     ]} onConfirm={(action) => dispatch('resolve_pending_decision', { action })} busy={busy} />;
   }
 
-  if (finalState.flow.step === 'final_reason') {
+  if (isFinalReportStep && !report) {
     return (
-      <>
-        {finishError && <div className="scene-error" role="alert">{finishError}</div>}
-        <NarrativeScreen
-          title={endingReasonTitle(finalState.endingReason)}
-          paragraphs={endingReasonParagraphs(finalState.endingReason)}
-          buttonText={finishBusy ? 'Считаем итог…' : 'Посмотреть итоги'}
-          busy={finishBusy}
-          onNext={loadFinalReport}
-        />
-      </>
+      <NarrativeScreen
+        title={finishError ? 'Не удалось загрузить диагностику' : 'Считаем диагностику'}
+        paragraphs={finishError ? [finishError] : ['Проверяем воронку, деньги, потери и альтернативные решения.']}
+        buttonText={finishError ? 'Повторить' : 'Загрузка…'}
+        onNext={loadFinalReport}
+        busy={finishBusy}
+      />
     );
   }
 
-  if (finalState.flow.step === 'final_diagnosis' && finalState.diagnostics) {
-    if (!report) {
-      return (
-        <NarrativeScreen
-          title={finishError ? 'Не удалось загрузить диагностику' : 'Считаем диагностику'}
-          paragraphs={finishError ? [finishError] : ['Проверяем воронку, деньги, потери и альтернативные решения.']}
-          buttonText={finishError ? 'Повторить' : 'Загрузка…'}
-          onNext={loadFinalReport}
-          busy={finishBusy}
-        />
-      );
-    }
-
+  if (finalState.flow.step === 'final_diagnosis' && finalState.diagnostics && report) {
     if (showLead) {
       return <LeadForm state={finalState} busy={leadBusy} status={leadStatus} onBack={() => setShowLead(false)} onSubmit={async (formData) => {
         setLeadBusy(true);
@@ -110,7 +102,16 @@ export function FinishedFlow({ state, dispatch, busy }: FlowProps) {
         } finally {
           setLeadBusy(false);
         }
-      }} />;
+      }} onRestart={restartGame} />;
+    }
+
+    if (showAuditLanding) {
+      return (
+        <LiveAuditLanding
+          onLead={() => setShowLead(true)}
+          onBack={() => setShowAuditLanding(false)}
+        />
+      );
     }
 
     return (
@@ -118,49 +119,11 @@ export function FinishedFlow({ state, dispatch, busy }: FlowProps) {
         state={finalState}
         diagnostics={finalState.diagnostics}
         aiReport={report}
-        reportSource={reportSource ?? 'fallback'}
-        onLead={() => setShowLead(true)}
-        onRestart={() => {
-          localStorage.removeItem('launch-game-cache');
-          window.location.href = '/';
-        }}
+        onLead={() => setShowAuditLanding(true)}
+        onRestart={restartGame}
       />
     );
   }
 
   return <NarrativeScreen title="Диагностика недоступна" paragraphs={[]} buttonText="Обновить" onNext={loadFinalReport} busy={finishBusy} />;
-}
-
-function endingReasonLabel(reason: GameState['endingReason']): string {
-  if (reason === 'time_finished') return 'закончились 30 игровых дней';
-  if (reason === 'goal_finished') return 'бизнес-цель достигнута';
-  if (reason === 'resource_finished') return 'закончился критический ресурс';
-  if (reason === 'manual_finished') return 'вы завершили запуск досрочно';
-  return 'завершение запуска';
-}
-
-function endingReasonTitle(reason: GameState['endingReason']): string {
-  if (reason === 'time_finished') return 'Время вышло';
-  if (reason === 'resource_finished') return 'Вы выгорели';
-  if (reason === 'goal_finished') return 'Цель закрыта';
-  if (reason === 'manual_finished') return 'Запуск остановлен';
-  return 'Запуск завершён';
-}
-
-function endingReasonParagraphs(reason: GameState['endingReason']): string[] {
-  if (reason === 'time_finished') return [
-    '30 дней закончились. Теперь видно, где воронка не успела превратить заявки в деньги.',
-    'Сейчас посчитаем, сколько выручки осталось на столе и какой этап нужно чинить первым.',
-  ];
-  if (reason === 'resource_finished') return [
-    'Энергия закончилась. Запуск держался на ручных действиях и перегрел систему.',
-    'Сейчас покажем, какие заявки и продажи сгорели из-за хаоса в воронке.',
-  ];
-  if (reason === 'goal_finished') return [
-    'Вы закрыли цель. Теперь важно понять, какая связка сработала и как ее масштабировать без выгорания.',
-  ];
-  if (reason === 'manual_finished') return [
-    'Вы остановили запуск. Сейчас разберем, что уже видно по воронке и где могли быть деньги.',
-  ];
-  return [`Причина: ${endingReasonLabel(reason)}`];
 }

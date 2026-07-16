@@ -20,6 +20,7 @@ export function SetupScene({ config: _config, onComplete, busy, initialDraft }: 
     setDraft((prev) => ({ ...prev, [key]: value }));
 
   const next = () => {
+    if (step === 'superpower' && !draft.superpower) return;
     const i = SETUP_STEPS.indexOf(step);
     if (i < SETUP_STEPS.length - 1) setStep(SETUP_STEPS[i + 1]);
     else onComplete(draft);
@@ -42,7 +43,7 @@ export function SetupScene({ config: _config, onComplete, busy, initialDraft }: 
       {step === 'welcome' && (
         <div className="setup-step setup-step--center setup-step--welcome">
           <PixelArtScene variant="sunset-duo" gender={draft.gender} />
-          <h1 className="setup-headline">Проживи 30 дней запуска за 10 минут</h1>
+          <h1 className="setup-headline">Проживи 30 дней запуска<br />за 10 минут</h1>
           <p className="setup-subtext">
             Первая игра в продажи своего онлайн-продукта.
           </p>
@@ -86,8 +87,7 @@ export function SetupScene({ config: _config, onComplete, busy, initialDraft }: 
 
       {/* ── NAME ── */}
       {step === 'name' && (
-        <div className="setup-step">
-          <SetupVisual variant="product" gender={draft.gender} />
+        <div className="setup-step setup-step--back-spaced">
           <SetupSummary draft={draft} />
           <h2 className="setup-question">Введите имя персонажа:</h2>
           <input
@@ -105,8 +105,7 @@ export function SetupScene({ config: _config, onComplete, busy, initialDraft }: 
 
       {/* ── NICHE ── */}
       {step === 'niche' && (
-        <div className="setup-step">
-          <SetupVisual variant="product" gender={draft.gender} />
+        <div className="setup-step setup-step--back-spaced">
           <SetupSummary draft={draft} />
           <h2 className="setup-question">Введите какая ниша или чем занимается {draft.name || 'персонаж'}</h2>
           <input
@@ -122,10 +121,9 @@ export function SetupScene({ config: _config, onComplete, busy, initialDraft }: 
       )}
 
       {step === 'superpower' && (
-        <div className="setup-step">
-          <SetupVisual variant="goal" gender={draft.gender} />
+        <div className="setup-step setup-step--back-spaced setup-step--compact">
           <SetupSummary draft={draft} />
-          <h2 className="setup-question">Введите суперсилу для персонажа</h2>
+          <h2 className="setup-question">Выберите одну суперсилу на игру</h2>
           <div className="v3-power-list">
             {SUPERPOWERS.map((power) => (
               <button
@@ -140,16 +138,15 @@ export function SetupScene({ config: _config, onComplete, busy, initialDraft }: 
               </button>
             ))}
           </div>
-          <button className="btn-primary" onClick={next}>Готово, дальше</button>
+          <button className="btn-primary" disabled={!draft.superpower} onClick={next}>Готово, дальше</button>
         </div>
       )}
 
       {step === 'created' && (
-        <div className="setup-step">
-          <SetupVisual variant="goal" gender={draft.gender} />
+        <div className="setup-step setup-step--back-spaced">
           <SetupSummary draft={draft} />
           <h2 className="setup-question">Поздравляем! Персонаж создан!</h2>
-          <div className="v3-text-card">{superpowerText(draft.superpower)}</div>
+          <div className="v3-text-card v3-text-card--copy">{draft.superpower ? superpowerText(draft.superpower) : 'Суперсила пока не выбрана.'}</div>
           <button className="btn-primary" disabled={busy} onClick={() => onComplete(draft)}>
             {busy ? 'Создаём игру...' : 'Начать сюжет!'}
           </button>
@@ -160,10 +157,10 @@ export function SetupScene({ config: _config, onComplete, busy, initialDraft }: 
 }
 
 const SUPERPOWERS: Array<{ id: Superpower; title: string; description: string }> = [
-  { id: 'sales', title: 'Продажи', description: 'Повышает конверсию в продажу и показывает оценки продажных инструментов.' },
-  { id: 'marketing', title: 'Маркетинг', description: 'Повышает конверсию прогрева и показывает оценки инструментов прогрева.' },
-  { id: 'energy', title: 'Энергичность', description: 'Дает 120 единиц энергии на старте вместо 100.' },
-  { id: 'ads', title: 'Реклама', description: 'Повышает эффективность рекламы и показывает примерные просмотры.' },
+  { id: 'sales', title: 'Продажи', description: 'Помогает чаще доводить заявки до оплаты.' },
+  { id: 'marketing', title: 'Маркетинг', description: 'Помогает сильнее прогревать людей перед покупкой.' },
+  { id: 'energy', title: 'Энергичность', description: 'Дает больше энергии на старте игры.' },
+  { id: 'ads', title: 'Реклама', description: 'Помогает получать больше внимания из рекламы.' },
 ];
 
 function SetupVisual({
@@ -188,7 +185,7 @@ function SetupSummary({ draft }: { draft: SetupDraft }) {
         <dt>Имя</dt><dd>{draft.name || 'Не указано'}</dd>
         <dt>Пол</dt><dd>{draft.gender === 'female' ? 'Женщина' : 'Мужчина'}</dd>
         <dt>Ниша</dt><dd>{draft.niche || 'Не указана'}</dd>
-        <dt>Сила</dt><dd>{SUPERPOWERS.find((item) => item.id === draft.superpower)?.title || '{сила}'}</dd>
+        <dt>Сила</dt><dd>{SUPERPOWERS.find((item) => item.id === draft.superpower)?.title || 'Не выбрано'}</dd>
       </dl>
     </div>
   );
@@ -196,9 +193,9 @@ function SetupSummary({ draft }: { draft: SetupDraft }) {
 
 function superpowerText(superpower: Superpower): string {
   if (superpower === 'marketing') {
-    return 'Ты выбрал суперспособность Маркетинг. Помимо повышенной конверсии прогревов она дает зрение маркетолога: вы видите оценку для инструментов прогрева.';
+    return 'Вы выбрали суперсилу "Маркетинг"!\n\nОна повышает конверсию прогрева и показывает результативность инструментов прогрева.';
   }
-  if (superpower === 'sales') return 'Ты выбрал суперспособность Продажи. Она повышает конверсию продаж и заранее показывает оценки продажных инструментов.';
-  if (superpower === 'ads') return 'Ты выбрал суперспособность Реклама. Она усиливает рекламные инструменты и показывает примерные просмотры и стоимость.';
-  return 'Ты выбрал суперспособность Энергичность. На старте у персонажа 120 единиц энергии вместо 100.';
+  if (superpower === 'sales') return 'Вы выбрали суперсилу "Продажи"!\n\nОна повышает конверсию в продажу и показывает результативность инструментов продаж.';
+  if (superpower === 'ads') return 'Вы выбрали суперсилу "Реклама"!\n\nОна усиливает рекламу и показывает примерные просмотры.';
+  return 'Вы выбрали суперсилу "Энергичность"!\n\nНа старте у персонажа 120 единиц энергии вместо 100.';
 }

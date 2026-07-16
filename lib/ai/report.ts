@@ -100,7 +100,7 @@ export async function explainWithAi(state: GameState, diagnostics: Diagnostics):
         input: [
           {
             role: 'system',
-            content: 'Ты маркетинговый аналитик симулятора запуска. Используй только переданный JSON, не придумывай цифры, верни JSON.'
+            content: 'Вы маркетинговый аналитик симулятора запуска. Используйте только переданный JSON, не придумывайте цифры, верните JSON.'
           },
           { role: 'user', content: JSON.stringify({ diagnostics, metrics: state.metrics, targets: state.targets }) }
         ],

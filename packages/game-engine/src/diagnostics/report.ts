@@ -6,7 +6,7 @@ export function calculateDiagnostics(state: GameState, config: GameConfig): Diag
   const expenses = Math.max(0, config.startingBank - bankRemaining);
   const launchProfit = revenue - expenses;
   const totalLiquidity = bankRemaining + revenue;
-  const dreamMoney = Math.max(0, launchProfit);
+  const dreamMoney = Math.max(0, revenue);
   const finalStatus =
     state.metrics.sales >= state.targets.targetSales || (state.targets.targetRevenue > 0 && revenue >= state.targets.targetRevenue) ? 'business_goal_reached' :
     revenue === 0 ? 'zero_revenue' :
@@ -56,6 +56,12 @@ export function buildAIDiagnosticContext(state: GameState, config: GameConfig): 
 function buildDreamResults(state: GameState, config: GameConfig, money: number) {
   let remaining = money;
   return state.launchPlan.dreams.map((id) => {
+    const v3Choice = (state.v3.dreamChoices ?? []).find((item) => id === `v3:${item.id}` || id === `custom:${item.title}`);
+    if (v3Choice) {
+      const affordable = remaining >= v3Choice.price;
+      if (affordable) remaining -= v3Choice.price;
+      return { id, title: v3Choice.title, price: v3Choice.price, affordable };
+    }
     if (id.startsWith('custom:')) {
       const price = state.v3.customDreamPrice ?? 0;
       const affordable = remaining >= price;
@@ -203,47 +209,52 @@ function detectV3Bottlenecks(state: GameState): Array<{ category: string; expect
     notInterested: acc.notInterested + report.notInterested,
     applications: acc.applications + report.applications,
     lost: acc.lost + report.lost,
+    viralEvents: acc.viralEvents + (report.viralEventsCount ?? 0),
+    capacityLoss: acc.capacityLoss + (report.capacityLoss ?? report.lost),
+    readyForSales: acc.readyForSales + Math.max(0, report.applications - report.lost),
     salesActions: acc.salesActions + report.callsHeld + report.chatsHeld + report.siteVisits,
-    noBuys: acc.noBuys + report.callsNoBuy + report.chatsNoBuy + Math.max(0, report.siteVisits - report.siteBuys),
+    noBuys: acc.noBuys + report.callsNoBuy + report.chatsNoBuy + Math.max(0, report.siteVisits - report.siteBuys - report.siteMessages),
   }), {
     views: 0,
     leads: 0,
     notInterested: 0,
     applications: 0,
     lost: 0,
+    viralEvents: 0,
+    capacityLoss: 0,
+    readyForSales: 0,
     salesActions: 0,
     noBuys: 0,
   });
   const targetSalesGap = Math.max(0, state.targets.targetSales - state.metrics.sales);
-  const averageSaleValue = Math.max(price, state.targets.targetRevenue > 0 && state.targets.targetSales > 0
-    ? Math.round(state.targets.targetRevenue / state.targets.targetSales)
-    : price);
+  const saleValue = Math.max(0, price);
+  const observedSalesGap = Math.max(0, targetSalesGap);
   const items = [
     {
       category: 'traffic',
-      expectedLoss: totals.leads < Math.max(60, state.targets.targetSales * 8)
-        ? targetSalesGap * averageSaleValue * 0.35
-        : 0,
+      expectedLoss: totals.leads === 0 ? observedSalesGap * saleValue : 0,
     },
     {
       category: 'warmup',
-      expectedLoss: totals.notInterested > totals.applications
-        ? Math.min(totals.notInterested, targetSalesGap * 6) * averageSaleValue * 0.08
-        : 0,
+      expectedLoss: totals.leads > 0 && totals.applications === 0 ? observedSalesGap * saleValue : 0,
     },
     {
       category: 'processing',
-      expectedLoss: totals.lost * averageSaleValue * 0.12,
+      expectedLoss: Math.min(totals.lost, observedSalesGap) * saleValue,
     },
     {
       category: 'sales',
-      expectedLoss: totals.applications > 0 && totals.noBuys > state.metrics.sales
-        ? Math.min(totals.noBuys, Math.max(1, targetSalesGap * 4)) * averageSaleValue * 0.10
+      expectedLoss: totals.readyForSales > 0 && state.metrics.sales < totals.readyForSales
+        ? Math.min(totals.noBuys, observedSalesGap) * saleValue
         : 0,
     },
     {
       category: 'energy',
-      expectedLoss: state.resources.energy < 30 ? Math.max(state.metrics.revenue * 0.15, averageSaleValue) : 0,
+      expectedLoss: state.resources.energy <= 0 ? observedSalesGap * saleValue : 0,
+    },
+    {
+      category: 'capacity',
+      expectedLoss: totals.viralEvents > 0 ? Math.min(totals.capacityLoss, observedSalesGap) * saleValue : 0,
     },
   ];
   return items.filter((item) => item.expectedLoss > 0).sort((left, right) => right.expectedLoss - left.expectedLoss).slice(0, 3);

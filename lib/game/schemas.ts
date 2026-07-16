@@ -32,6 +32,13 @@ const v3PreparationModeSchema = z.enum(['self', 'expert']);
 const v3AdviceCategorySchema = z.enum(['ads', 'warmup', 'sales']);
 const v3AdviceOptionSchema = z.enum(['friend', 'consult_5k', 'consult_10k']);
 const v3SelectionKindSchema = z.enum(['ad', 'warmup', 'sales']);
+const v3ActiveActionLogEntrySchema = z.object({
+  id: z.string().min(1).max(120),
+  type: z.enum(['answer', 'call', 'direct_chat', 'post_call_chat', 'site_chat']),
+  targetId: z.string().min(1).max(160),
+  startedAtMs: z.number().int().min(0).max(60_000),
+  completedAtMs: z.number().int().min(0).max(60_000),
+}).refine((entry) => entry.completedAtMs >= entry.startedAtMs, 'Action completion cannot be before start');
 const routeSchema = z.object({
   entry: entryPointSchema,
   nurture: z.array(nurtureSchema).min(1).max(3),
@@ -127,6 +134,18 @@ export const commandRequestSchema = z.discriminatedUnion('type', [
     customTitle: z.string().trim().min(2).max(80).optional(),
     customPrice: z.number().int().min(1_000).max(5_000_000).optional(),
   }) }),
+  z.object({ ...base, type: z.literal('v3_set_dreams'), payload: z.object({
+    dreams: z.array(z.object({
+      id: z.string().trim().min(1).max(120),
+      title: z.string().trim().min(2).max(80),
+      price: z.number().int().min(1_000).max(5_000_000),
+      custom: z.boolean().optional(),
+    })).max(10),
+    customTitle: z.string().trim().min(2).max(80).optional(),
+    customPrice: z.number().int().min(1_000).max(5_000_000).optional(),
+  }).refine((payload) => payload.dreams.length > 0 || Boolean(payload.customTitle && payload.customPrice), {
+    message: 'Выберите хотя бы одно желание',
+  }) }),
   z.object({ ...base, type: z.literal('v3_open_reflection'), payload: z.object({ target: z.enum(['prepare', 'advice', 'rest', 'history', 'act']) }) }),
   z.object({ ...base, type: z.literal('v3_confirm_preparation'), payload: z.object({
     area: v3PreparationAreaSchema,
@@ -151,6 +170,7 @@ export const commandRequestSchema = z.discriminatedUnion('type', [
     directSalesChats: z.number().int().min(0).max(200).optional(),
     postCallChats: z.number().int().min(0).max(200).optional(),
     calls: z.number().int().min(0).max(60).optional(),
+    actionLog: z.array(v3ActiveActionLogEntrySchema).max(240).optional(),
   }).optional() }),
   z.object({ ...base, type: z.literal('v3_return_reflection'), payload: z.object({}).optional() }),
 ]);

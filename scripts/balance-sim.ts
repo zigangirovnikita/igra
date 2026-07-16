@@ -1,4 +1,12 @@
-import { applyCommand, assertStateInvariants, createInitialState, type GameCommand, type GameState } from '../packages/game-engine/src';
+import {
+  applyCommand,
+  assertStateInvariants,
+  buildV3ActiveStagePlan,
+  createInitialState,
+  type GameCommand,
+  type GameState,
+  type V3ActiveActionLogEntry,
+} from '../packages/game-engine/src';
 import { loadGameConfig } from '../lib/config/game-config';
 import { scenarios } from '../tests/fixtures/scenarios';
 
@@ -22,7 +30,10 @@ for (let index = 0; index < runs; index += 1) {
   try {
     let state = createInitialState(fixture.setup, config, `${fixture.seed}_${index}`);
     for (const command of fixture.commands) {
-      state = applyCommand(state, config, { ...command, commandId: `${command.commandId}_${index}` });
+      const preparedCommand = command.type === 'v3_complete_active_stage'
+        ? { ...command, payload: { actionLog: buildSimulatedV3ActionLog(state) } }
+        : command;
+      state = applyCommand(state, config, { ...preparedCommand, commandId: `${command.commandId}_${index}` });
       state = resolveAllPending(state, index);
     }
     assertStateInvariants(state, config);
@@ -48,6 +59,48 @@ const report = [...summaries.values()].map((summary) => ({
 console.table(report);
 const violations = report.reduce((sum, item) => sum + item.invariantViolations, 0);
 if (violations > 0) throw new Error(`Balance simulation found ${violations} invariant violations`);
+const allPoliciesLose = report.every((item) => item.winRate === '0%');
+const allPoliciesBurnOut = report.every((item) => item.energyMedian === 0);
+if (allPoliciesLose) console.warn('Balance warning: every policy has 0% win rate. This simulator now reports the problem instead of treating it as a healthy balance.');
+if (allPoliciesBurnOut) throw new Error('Balance simulation quality gate failed: every policy ends with zero median energy');
+
+function buildSimulatedV3ActionLog(state: GameState): V3ActiveActionLogEntry[] {
+  const plan = state.v3.activeStage?.plan ?? buildV3ActiveStagePlan(state);
+  const log: V3ActiveActionLogEntry[] = [];
+  let cursorMs = 0;
+  let sequence = 0;
+  const push = (type: V3ActiveActionLogEntry['type'], targetId: string, startedAtMs: number, durationSeconds: number) => {
+    const completedAtMs = startedAtMs + durationSeconds * 1000;
+    if (completedAtMs > plan.durationSeconds * 1000) return false;
+    sequence += 1;
+    log.push({ id: `sim_${sequence}`, type, targetId, startedAtMs, completedAtMs });
+    cursorMs = completedAtMs;
+    return true;
+  };
+
+  for (const message of plan.warmupMessages) {
+    const startedAtMs = Math.max(cursorMs, message.second * 1000);
+    if (startedAtMs + 1000 > message.expiresSecond * 1000) continue;
+    if (!push('answer', message.id, startedAtMs, 1)) return log;
+  }
+
+  const salesKey = state.v3.activeSelection.sales ?? '';
+  const useCalls = salesKey.includes('call_script') || salesKey === 'sales:intuition';
+  const useSiteChats = salesKey.includes('website') || salesKey.includes('auto_webinar');
+  if (useCalls) {
+    for (const outcome of plan.callOutcomes) {
+      if (!push('call', outcome.id, cursorMs, plan.callDurationSeconds)) return log;
+      if (outcome.followupMessage && !push('post_call_chat', outcome.id, cursorMs, plan.chatDurationSeconds)) return log;
+    }
+    return log;
+  }
+
+  const chatType: V3ActiveActionLogEntry['type'] = useSiteChats ? 'site_chat' : 'direct_chat';
+  for (const outcome of plan.chatOutcomes) {
+    if (!push(chatType, outcome.id, cursorMs, plan.chatDurationSeconds)) return log;
+  }
+  return log;
+}
 
 function resolveAllPending(input: GameState, runIndex: number): GameState {
   let state = input;

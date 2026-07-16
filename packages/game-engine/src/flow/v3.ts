@@ -8,8 +8,10 @@ import type {
   V3AdvicePrecision,
   V3AdviceResult,
   V3ActiveAdEvent,
+  V3ActiveActionLogEntry,
   V3ActiveSaleOutcome,
   V3ActiveStagePlan,
+  V3DreamChoice,
   V3PreparationArea,
   V3PreparationMode,
   V3PreparationPlanItem,
@@ -63,14 +65,25 @@ type V3ProductContext = {
   price: number;
   band: 'low' | 'mid' | 'high';
 };
+type AdviceToolBundle = {
+  ads: string;
+  warmup: string;
+  sales: string;
+  reason: string;
+};
 
 const ACTIVE_STAGE_SECONDS = 60;
 const CALL_DURATION_SECONDS = 6;
 const CHAT_DURATION_SECONDS = 2;
+const ANSWER_DURATION_SECONDS = 1;
 const MESSAGE_TIMEOUT_SECONDS = 6;
 const MAX_OUTCOME_SEQUENCE = 120;
 const SITE_MESSAGE_CONVERSION = 0.25;
 const WEBINAR_MESSAGE_CONVERSION = 0.12;
+const ACTIVE_STAGE_BASE_DAYS = 1;
+const ACTIVE_STAGE_AD_DAYS = 2;
+const ACTIVE_STAGE_WARMUP_DAYS = 1;
+const ACTIVE_STAGE_SALES_DAYS = 1;
 
 const PRODUCT_PLACEHOLDERS: Record<V3ProductType, number> = {
   consultation: 5_000,
@@ -190,15 +203,47 @@ export function setV3Dream(
   customTitle?: string,
   customPrice?: number,
 ): GameState {
-  const selectedId = dreamId === 'custom' ? `custom:${customTitle || 'Моя мечта'}` : dreamId;
-  state.v3.dreamId = dreamId;
-  state.v3.customDreamTitle = customTitle || null;
-  state.v3.customDreamPrice = customPrice || null;
-  state.launchPlan.dreams = [selectedId];
-  const baseTargets = calculateTargets(state.launchPlan.productPrice || 0, dreamId === 'custom' ? [] : [dreamId], config);
-  const personalGoal = dreamId === 'custom'
-    ? Math.max(0, customPrice || 0)
-    : baseTargets.personalGoal;
+  if (dreamId === 'custom') {
+    return setV3Dreams(state, config, [], customTitle, customPrice);
+  }
+
+  const dream = config.dreams.find((item) => item.id === dreamId && item.enabled);
+  return setV3Dreams(state, config, [{
+    id: dreamId,
+    title: dream?.title ?? dreamId,
+    price: dream?.price ?? 0,
+  }]);
+}
+
+export function setV3Dreams(
+  state: GameState,
+  config: GameConfig,
+  dreams: V3DreamChoice[],
+  customTitle?: string,
+  customPrice?: number,
+): GameState {
+  const selected = sanitizeDreamChoices(dreams);
+  const trimmedCustomTitle = customTitle?.trim() ?? '';
+  const normalizedCustomPrice = Math.trunc(customPrice ?? 0);
+  if (trimmedCustomTitle && normalizedCustomPrice >= 1_000) {
+    selected.push({
+      id: `custom:${trimmedCustomTitle}`,
+      title: trimmedCustomTitle,
+      price: normalizedCustomPrice,
+      custom: true,
+    });
+  }
+  if (selected.length === 0) throw new Error('Выберите хотя бы одно желание');
+
+  const firstCustom = selected.find((item) => item.custom);
+  state.v3.dreamId = selected.length === 1 ? selected[0].id : 'multiple';
+  state.v3.dreamChoices = selected;
+  state.v3.customDreamTitle = firstCustom?.title ?? null;
+  state.v3.customDreamPrice = firstCustom?.price ?? null;
+  state.launchPlan.dreams = selected.map((item) => item.custom ? `custom:${item.title}` : `v3:${item.id}`);
+
+  const baseTargets = calculateTargets(state.launchPlan.productPrice || 0, [], config);
+  const personalGoal = selected.reduce((sum, item) => sum + item.price, 0);
   const targetRevenue = Math.max(baseTargets.targetRevenue, personalGoal);
   state.targets = {
     targetRevenue,
@@ -207,6 +252,27 @@ export function setV3Dream(
   };
   state.flow.step = 'v3_goal_summary';
   return state;
+}
+
+function sanitizeDreamChoices(dreams: V3DreamChoice[]): V3DreamChoice[] {
+  const seen = new Set<string>();
+  const result: V3DreamChoice[] = [];
+  for (const dream of dreams.slice(0, 10)) {
+    const title = dream.title.trim();
+    const id = dream.id.trim();
+    const price = Math.trunc(dream.price);
+    if (!id || !title || price < 1_000) continue;
+    const key = `${id}:${title}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push({
+      id: id.slice(0, 120),
+      title: title.slice(0, 80),
+      price,
+      custom: Boolean(dream.custom),
+    });
+  }
+  return result;
 }
 
 export function openV3Reflection(state: GameState, target: 'prepare' | 'advice' | 'rest' | 'history' | 'act'): GameState {
@@ -332,15 +398,31 @@ export function startV3ActiveStage(state: GameState): GameState {
     state.flow.step = 'v3_active_intro';
     return state;
   }
-  state.v3.activeStageStartedAt = new Date().toISOString();
+  openV3ActiveStageRuntime(state);
   state.flow.step = 'v3_active_stage';
   return state;
 }
 
 export function startV3ActiveStageAfterIntro(state: GameState): GameState {
-  state.v3.activeStageStartedAt = new Date().toISOString();
+  openV3ActiveStageRuntime(state);
   state.flow.step = 'v3_active_stage';
   return state;
+}
+
+function openV3ActiveStageRuntime(state: GameState): void {
+  const startedAt = new Date();
+  const expiresAt = new Date(startedAt.getTime() + ACTIVE_STAGE_SECONDS * 1000);
+  const stageNumber = state.v3.stageReports.length + 1;
+  const plan = buildV3ActiveStagePlan(state);
+  state.v3.activeStageStartedAt = startedAt.toISOString();
+  state.v3.activeStage = {
+    id: `stage-${stageNumber}-${state.resources.day}`,
+    stageNumber,
+    startedAt: startedAt.toISOString(),
+    expiresAt: expiresAt.toISOString(),
+    startingEnergy: state.resources.energy,
+    plan,
+  };
 }
 
 type V3ActiveInteractions = {
@@ -349,6 +431,7 @@ type V3ActiveInteractions = {
   directSalesChats?: number;
   postCallChats?: number;
   calls?: number;
+  actionLog?: V3ActiveActionLogEntry[];
 } | undefined;
 
 export function completeV3ActiveStage(state: GameState, interactions?: V3ActiveInteractions): GameState {
@@ -366,6 +449,7 @@ export function completeV3ActiveStage(state: GameState, interactions?: V3ActiveI
   state.v3.loopRestEnergy = 0;
   state.v3.lastPreparationSummary = null;
   state.v3.activeStageStartedAt = null;
+  state.v3.activeStage = null;
   state.currentDayReport = null;
   state.flow.step = 'v3_stage_report';
   state.endingReason = v3EndingReasonAfterReport(state, report);
@@ -418,6 +502,9 @@ export function getV3AttemptInsight(
   const closeRate = readyForSales > 0 ? report.salesCount / readyForSales : 0;
   const instrumentLines = instrumentInsightLines(report);
   const productLine = productPressureLine(product);
+  const viralEvents = report.viralEventsCount ?? 0;
+  const viralViews = report.viralViews ?? 0;
+  const capacityLoss = report.capacityLoss ?? report.lost;
 
   if (report.goalReached) {
     return {
@@ -426,7 +513,7 @@ export function getV3AttemptInsight(
       lossLabel: missedRevenue > 0 ? `Еще можно было добрать ${formatEngineMoney(missedRevenue)}` : 'План закрыт',
       missedRevenue,
       bullets: [
-        `${report.salesCount} продаж на ${formatEngineMoney(report.revenue)}`,
+        salesBreakdownLine(report),
         `${applications} заявок дошли до решения`,
         productLine,
         'Главная задача теперь - понять, какая часть воронки дала результат, и повторить ее.',
@@ -449,6 +536,23 @@ export function getV3AttemptInsight(
         'Без специалистов и понятной системы ручные действия съедают запуск быстрее, чем приносят продажи.',
       ],
       recommendation: `Нужен разбор воронки под "${product.label}": ${burnoutRecommendation(product)}`,
+    };
+  }
+
+  if (viralEvents > 0 && capacityLoss > 0) {
+    return {
+      severity: 'danger',
+      headline: 'Контент залетел, но система не выдержала поток заявок.',
+      lossLabel: missedRevenue > 0 ? `Упущено около ${formatEngineMoney(missedRevenue)}` : 'Потеряны заявки после всплеска',
+      missedRevenue,
+      bullets: [
+        `Залетевших событий: ${viralEvents}, дополнительных просмотров: ${viralViews.toLocaleString('ru-RU')}`,
+        `Заявки с интересом: ${applications}`,
+        `Остыли и ушли: ${capacityLoss}`,
+        productLine,
+        'Проблема не в том, что трафика мало. Проблема в том, что входящий поток некому было стабильно обработать.',
+      ],
+      recommendation: `Перед следующим всплеском нужно усилить обработку заявок под "${product.label}": ${warmupRecommendation(product)}`,
     };
   }
 
@@ -477,7 +581,7 @@ export function getV3AttemptInsight(
       missedRevenue,
       bullets: [
         `${readyForSales} заявок дошли до продаж`,
-        `${report.salesCount} оплат на ${formatEngineMoney(report.revenue)}`,
+        salesBreakdownLine(report),
         productLine,
         instrumentLines.sales,
         'Люди заинтересовались, но продажная часть не дожала оплату.',
@@ -527,13 +631,28 @@ export function getV3AttemptInsight(
     missedRevenue,
     bullets: [
       `${report.views.toLocaleString('ru-RU')} просмотров -> ${report.newLeads} лидов`,
-      `${applications} заявок -> ${report.salesCount} продаж`,
+      `${applications} заявок дошли до решения`,
+      salesBreakdownLine(report),
       productLine,
       instrumentLines.sales,
       'Следующий рост даст не больше хаоса, а точечное усиление слабого этапа.',
     ],
     recommendation: `На консультации нужно найти узкое место под "${product.label}" и решить, что покупать первым: рекламу, прогрев или продажи.`,
   };
+}
+
+function salesBreakdownLine(report: V3StageReport): string {
+  const autoSales = Math.max(0, report.autoSales ?? 0);
+  const assistedSales = Math.max(0, report.salesCount - autoSales);
+  const totalLine = `всего ${report.salesCount} оплат на ${formatEngineMoney(report.revenue)}`;
+
+  if (autoSales > 0 && assistedSales > 0) {
+    return `Продажный инструмент закрыл ${assistedSales}, автопродажи прогрева дали ${autoSales}; ${totalLine}.`;
+  }
+  if (autoSales > 0) {
+    return `Автопродажи прогрева дали ${autoSales}; ручных оплат не было; ${totalLine}.`;
+  }
+  return `Продажный инструмент закрыл ${assistedSales} оплат на ${formatEngineMoney(report.revenue)}.`;
 }
 
 function resolveProductContext(productPrice: number, context?: V3AttemptInsightContext): V3ProductContext {
@@ -694,6 +813,7 @@ export function getV3ActiveOptions(state: GameState, kind: V3SelectionKind): Act
   });
   const base = BASE_ACTIVE.filter((item) => item.area === kind).map((item) => enrich(item, false, true));
   if (kind === 'ad') {
+    const preparedVariants = new Set(state.v3.preparedAds.map((item) => `${item.instrumentId}:${item.mode}`));
     const prepared = state.v3.preparedAds.map((item) => enrich({
       key: item.key,
       title: item.title,
@@ -702,7 +822,9 @@ export function getV3ActiveOptions(state: GameState, kind: V3SelectionKind): Act
       manualShare: 0,
       viewsBase: AD_VIEW_BASE[item.instrumentId] ?? 3_000,
     }, false, item.known));
-    const locked = V3_PREPARATIONS.filter((item) => item.area === 'ads').flatMap((item) => (['self', 'expert'] as const).map((mode) => enrich({
+    const locked = V3_PREPARATIONS.filter((item) => item.area === 'ads').flatMap((item) => (['self', 'expert'] as const)
+      .filter((mode) => !preparedVariants.has(`${item.id}:${mode}`))
+      .map((mode) => enrich({
       key: `locked:ads:${item.id}:${mode}`,
       title: `${item.title} - ${mode === 'self' ? 'самостоятельно' : 'со специалистом'}`,
       area: 'ad',
@@ -715,7 +837,9 @@ export function getV3ActiveOptions(state: GameState, kind: V3SelectionKind): Act
   const area = kind === 'warmup' ? 'warmup' : 'sales';
   const prepared = [...state.v3.preparedTools, ...recovered].filter((item, index, list) =>
     item.area === area && list.findIndex((candidate) => candidate.key === item.key) === index
-  ).map((item) => enrich({
+  );
+  const preparedVariants = new Set(prepared.map((item) => `${item.instrumentId}:${item.mode}`));
+  const preparedOptions = prepared.map((item) => enrich({
     key: item.key,
     title: item.title,
     area: kind,
@@ -723,32 +847,51 @@ export function getV3ActiveOptions(state: GameState, kind: V3SelectionKind): Act
     manualShare: manualShareFor(area, item.instrumentId),
     autoSalesShare: autoSalesShareFor(area, item.instrumentId),
   }, false, item.known));
-  const locked = V3_PREPARATIONS.filter((item) => item.area === area).flatMap((item) => (['self', 'expert'] as const).map((mode) => enrich({
+  const locked = V3_PREPARATIONS.filter((item) => item.area === area).flatMap((item) => (['self', 'expert'] as const)
+    .filter((mode) => !preparedVariants.has(`${item.id}:${mode}`))
+    .map((mode) => enrich({
     key: `locked:${area}:${item.id}:${mode}`,
     title: `${item.title} - ${mode === 'self' ? 'самостоятельно' : 'со специалистом'}`,
     area: kind,
     baseConversion: item[mode].conversion,
     manualShare: 0,
   }, true, false)));
-  return [...base, ...prepared, ...locked];
+  return [...base, ...preparedOptions, ...locked];
 }
 
 export function buildV3ActiveStagePlan(state: GameState): V3ActiveStagePlan {
   const context = resolveStageContext(state);
   const { stageNumber, ad, warmup, salesBonus } = context;
   const rand = (name: string) => hashToUnitInterval(state.seed, stageNumber, name, state.resources.day);
-  const views = resolveAdViews(state, stageNumber, ad, context.adBonus);
+  const viewBreakdown = resolveAdViewBreakdown(state, stageNumber, ad, context.adBonus);
+  const views = viewBreakdown.totalViews;
   const newLeads = Math.max(1, stochasticRound(views * ad.baseConversion * (0.9 + rand('leads') * 0.2), planKey(state, stageNumber, 'leads')));
   const interested = Math.max(0, stochasticRound(newLeads * warmup.baseConversion * context.warmupBonus, planKey(state, stageNumber, 'interested')));
   const notInterested = Math.max(0, newLeads - interested);
   const requiredAnswer = Math.min(56, Math.max(0, Math.round(interested * warmup.manualShare)));
-  const autoSales = Math.max(0, stochasticRound(interested * (warmup.autoSalesShare ?? 0), planKey(state, stageNumber, 'warmup-auto-sales')));
+  const warmupAutoAudience = countHiddenAutoAudience(
+    newLeads,
+    warmupAutoAudienceRate(state, warmup),
+    planKey(state, stageNumber, 'warmup-auto-audience'),
+  );
+  const warmupAutoPurchaseConversion = effectiveWarmupAutoPurchaseConversion(state, warmup, context.warmupBonus);
+  const autoSales = Math.min(
+    interested,
+    countDeterministicSuccesses(warmupAutoAudience, warmupAutoPurchaseConversion, planKey(state, stageNumber, 'warmup-auto-sales')),
+  );
   const salesConversion = effectiveSalesConversion(state, context.sales.baseConversion, salesBonus);
   const salesPool = Math.max(0, interested - autoSales);
   const messageConversion = autoSalesMessageConversion(context.sales.key);
+  const salesAutoAudience = countHiddenAutoAudience(
+    salesPool,
+    salesAutoAudienceRate(state, context.sales),
+    planKey(state, stageNumber, 'sales-auto-audience'),
+  );
+  const salesAutoPurchaseConversion = effectiveSalesAutoPurchaseConversion(state, context.sales, salesBonus);
+  const plannedSiteBuys = countDeterministicSuccesses(salesAutoAudience, salesAutoPurchaseConversion, planKey(state, stageNumber, 'site-buys'));
   const siteMessages = messageConversion > 0
     ? countDeterministicSuccesses(
-      Math.max(0, salesPool - countDeterministicSuccesses(salesPool, salesConversion, planKey(state, stageNumber, 'site-buys'))),
+      Math.max(0, salesAutoAudience - plannedSiteBuys),
       messageConversion,
       planKey(state, stageNumber, 'sales-auto-messages'),
     )
@@ -760,7 +903,7 @@ export function buildV3ActiveStagePlan(state: GameState): V3ActiveStagePlan {
     chatDurationSeconds: CHAT_DURATION_SECONDS,
     messageTimeoutSeconds: MESSAGE_TIMEOUT_SECONDS,
     adLabel: adEventLabel(ad.key),
-    adEvents: buildAdEvents(state, stageNumber, ad, views),
+    adEvents: buildAdEvents(state, stageNumber, ad, viewBreakdown),
     warmupMessages: buildWarmupMessages(state, stageNumber, requiredAnswer),
     callOutcomes: buildSaleOutcomes(state, stageNumber, 'call', salesConversion, true),
     chatOutcomes: buildSaleOutcomes(state, stageNumber, 'chat', salesConversion, false),
@@ -770,8 +913,13 @@ export function buildV3ActiveStagePlan(state: GameState): V3ActiveStagePlan {
       notInterested,
       interested,
       requiredAnswer,
+      warmupAutoAudience,
       autoSales,
+      salesAutoAudience,
       siteMessages,
+      baseViews: viewBreakdown.baseViews,
+      viralViews: viewBreakdown.viralViews,
+      viralEventsCount: viewBreakdown.viralEventsCount,
     },
   };
 }
@@ -843,11 +991,12 @@ function buildStageReport(state: GameState, interactions?: V3ActiveInteractions)
   ensureV3AdviceState(state);
   const context = resolveStageContext(state);
   const { stageNumber, ad, warmup, sales } = context;
-  const plan = buildV3ActiveStagePlan(state);
+  const plan = state.v3.activeStage?.plan ?? buildV3ActiveStagePlan(state);
   const { views, newLeads, notInterested, interested, requiredAnswer } = plan.totals;
+  const actionSummary = summarizeV3ActionLog(plan, interactions?.actionLog);
   const hasInteractions = hasActiveInteractions(interactions);
   const handledCapacity = hasInteractions
-    ? Math.max(0, interactions.manualAnswers ?? 0)
+    ? actionSummary.manualAnswers ?? Math.max(0, interactions.manualAnswers ?? 0)
     : Math.max(0, Math.floor(state.resources.energy / 3));
   const lost = Math.max(0, requiredAnswer - handledCapacity);
   const warmed = Math.max(0, interested - lost);
@@ -861,11 +1010,11 @@ function buildStageReport(state: GameState, interactions?: V3ActiveInteractions)
   let siteVisits = 0;
   let siteBuys = 0;
   let siteMessages = 0;
-  let energySpent = Math.min(state.resources.energy, Math.round(requiredAnswer * 1.2));
-  const requestedCalls = Math.max(0, interactions?.calls ?? 0);
-  const requestedChats = Math.max(0, interactions?.salesChats ?? 0);
-  const requestedDirectChats = Math.max(0, interactions?.directSalesChats ?? requestedChats);
-  const requestedPostCallChats = Math.max(0, interactions?.postCallChats ?? requestedChats);
+  let energySpent = (actionSummary.manualAnswers ?? Math.max(0, interactions?.manualAnswers ?? 0)) * 1;
+  const requestedCalls = actionSummary.calls ?? Math.max(0, interactions?.calls ?? 0);
+  const requestedChats = actionSummary.salesChats ?? Math.max(0, interactions?.salesChats ?? 0);
+  const requestedDirectChats = actionSummary.directSalesChats ?? Math.max(0, interactions?.directSalesChats ?? requestedChats);
+  const requestedPostCallChats = actionSummary.postCallChats ?? Math.max(0, interactions?.postCallChats ?? requestedChats);
 
   if (sales.key.includes('call_script')) {
     const postCallChatConversion = effectiveSalesConversion(state, sales.baseConversion, context.salesBonus);
@@ -878,15 +1027,16 @@ function buildStageReport(state: GameState, interactions?: V3ActiveInteractions)
     chatsBuy = countDeterministicSuccesses(chatsHeld, postCallChatConversion, planKey(state, stageNumber, 'post-call-chat-buys'));
     energySpent += callsHeld * 5 + chatsHeld * 2;
   } else if (sales.key.includes('website') || sales.key.includes('auto_webinar')) {
-    const websiteSalesConversion = effectiveSalesConversion(state, sales.baseConversion, context.salesBonus);
+    const autoPurchaseConversion = effectiveSalesAutoPurchaseConversion(state, sales, context.salesBonus);
+    const assistedSalesConversion = effectiveSalesConversion(state, sales.baseConversion, context.salesBonus);
     const messageConversion = autoSalesMessageConversion(sales.key);
-    siteVisits = salesPool;
-    siteBuys = countDeterministicSuccesses(siteVisits, websiteSalesConversion, planKey(state, stageNumber, 'site-buys'));
+    siteVisits = Math.min(salesPool, plan.totals.salesAutoAudience ?? salesPool);
+    siteBuys = countDeterministicSuccesses(siteVisits, autoPurchaseConversion, planKey(state, stageNumber, 'site-buys'));
     siteMessages = countDeterministicSuccesses(Math.max(0, siteVisits - siteBuys), messageConversion, planKey(state, stageNumber, 'sales-auto-messages'));
     chatsHeld = hasInteractions
       ? Math.max(0, Math.min(siteMessages, requestedChats))
       : Math.max(0, Math.min(siteMessages, Math.floor((state.resources.energy - energySpent) / 2)));
-    chatsBuy = countDeterministicSuccesses(chatsHeld, websiteSalesConversion, planKey(state, stageNumber, 'site-chat-buys'));
+    chatsBuy = countDeterministicSuccesses(chatsHeld, assistedSalesConversion, planKey(state, stageNumber, 'site-chat-buys'));
     energySpent += chatsHeld * 2;
   } else if (sales.key === 'sales:intuition') {
     const postCallChatConversion = effectiveSalesConversion(state, sales.baseConversion, context.salesBonus);
@@ -915,7 +1065,14 @@ function buildStageReport(state: GameState, interactions?: V3ActiveInteractions)
   const chatsNoBuy = Math.max(0, chatsHeld - chatsBuy);
   const salesCount = Math.max(0, autoSales + callsBuy + chatsBuy + siteBuys);
   const revenue = salesCount * (state.launchPlan.productPrice || 0);
-  const daysSpent = 5;
+  const workloadSeconds = requiredAnswer * ANSWER_DURATION_SECONDS
+    + callsHeld * CALL_DURATION_SECONDS
+    + chatsHeld * CHAT_DURATION_SECONDS;
+  const handledWorkloadSeconds = Math.min(ACTIVE_STAGE_SECONDS, handledCapacity * ANSWER_DURATION_SECONDS
+    + callsHeld * CALL_DURATION_SECONDS
+    + chatsHeld * CHAT_DURATION_SECONDS);
+  const capacityLoss = lost;
+  const daysSpent = activeStageDays(state);
   const endedByBurnout = state.resources.energy - energySpent <= 0;
 
   return {
@@ -929,11 +1086,17 @@ function buildStageReport(state: GameState, interactions?: V3ActiveInteractions)
     warmupTitle: warmup.title,
     salesTitle: sales.title,
     views,
+    baseViews: plan.totals.baseViews,
+    viralViews: plan.totals.viralViews,
+    viralEventsCount: plan.totals.viralEventsCount,
     newLeads,
     notInterested,
     interested,
     requiredAnswer,
     lost,
+    workloadSeconds,
+    handledWorkloadSeconds,
+    capacityLoss,
     applications: interested,
     callsHeld,
     callsNoBuy,
@@ -974,7 +1137,99 @@ function hasActiveInteractions(interactions: V3ActiveInteractions): interactions
     || typeof interactions.directSalesChats === 'number'
     || typeof interactions.postCallChats === 'number'
     || typeof interactions.calls === 'number'
+    || Array.isArray(interactions.actionLog)
   ));
+}
+
+function summarizeV3ActionLog(plan: V3ActiveStagePlan, actionLog?: V3ActiveActionLogEntry[]): {
+  manualAnswers?: number;
+  salesChats?: number;
+  directSalesChats?: number;
+  postCallChats?: number;
+  calls?: number;
+} {
+  if (!actionLog) return {};
+  const unique = new Map<string, V3ActiveActionLogEntry>();
+  for (const action of actionLog) {
+    if (unique.has(action.id)) continue;
+    unique.set(action.id, action);
+  }
+  const ordered = [...unique.values()].sort((left, right) => left.startedAtMs - right.startedAtMs);
+  let previousCompletedAtMs = 0;
+  const usedTargets = new Set<string>();
+  const warmupTargets = new Map(plan.warmupMessages.map((message) => [message.id, message]));
+  const callTargets = new Set(plan.callOutcomes.map((outcome) => outcome.id));
+  const chatTargets = new Set(plan.chatOutcomes.map((outcome) => outcome.id));
+  let manualAnswers = 0;
+  let calls = 0;
+  let directSalesChats = 0;
+  let postCallChats = 0;
+  let siteChats = 0;
+
+  for (const action of ordered) {
+    if (action.startedAtMs < previousCompletedAtMs) {
+      throw new Error('Активный этап содержит пересекающиеся действия');
+    }
+    if (action.completedAtMs > plan.durationSeconds * 1000) {
+      throw new Error('Активный этап содержит действие после окончания таймера');
+    }
+    const targetKey = `${action.type}:${action.targetId}`;
+    if (usedTargets.has(targetKey)) {
+      throw new Error('Активный этап содержит повторную обработку одной цели');
+    }
+    usedTargets.add(targetKey);
+    previousCompletedAtMs = action.completedAtMs;
+
+    if (action.type === 'answer') {
+      const target = warmupTargets.get(action.targetId);
+      if (!target) throw new Error('Активный этап содержит неизвестное сообщение прогрева');
+      validateActionTiming(action, target.second, ANSWER_DURATION_SECONDS, target.expiresSecond);
+      manualAnswers += 1;
+      continue;
+    }
+    if (action.type === 'call') {
+      if (!callTargets.has(action.targetId)) throw new Error('Активный этап содержит неизвестный созвон');
+      validateActionTiming(action, 0, plan.callDurationSeconds, plan.durationSeconds);
+      calls += 1;
+      continue;
+    }
+    if (action.type === 'direct_chat' || action.type === 'post_call_chat') {
+      const targetExists = action.type === 'post_call_chat'
+        ? callTargets.has(action.targetId) || chatTargets.has(action.targetId)
+        : chatTargets.has(action.targetId);
+      if (!targetExists) throw new Error('Активный этап содержит неизвестную переписку');
+      validateActionTiming(action, 0, plan.chatDurationSeconds, plan.durationSeconds);
+      if (action.type === 'direct_chat') directSalesChats += 1;
+      else postCallChats += 1;
+      continue;
+    }
+    validateActionTiming(action, 0, plan.chatDurationSeconds, plan.durationSeconds);
+    siteChats += 1;
+  }
+
+  return {
+    manualAnswers,
+    salesChats: directSalesChats + postCallChats + siteChats,
+    directSalesChats: directSalesChats + siteChats,
+    postCallChats,
+    calls,
+  };
+}
+
+function validateActionTiming(action: V3ActiveActionLogEntry, availableAtSecond: number, durationSeconds: number, expiresAtSecond: number): void {
+  const minStartedAtMs = availableAtSecond * 1000;
+  const minCompletedAtMs = action.startedAtMs + durationSeconds * 1000;
+  const maxCompletedAtMs = expiresAtSecond * 1000;
+  if (action.startedAtMs < minStartedAtMs || action.completedAtMs < minCompletedAtMs || action.completedAtMs > maxCompletedAtMs) {
+    throw new Error('Активный этап содержит действие с некорректным временем');
+  }
+}
+
+function activeStageDays(state: GameState): number {
+  const adsDays = state.v3.activeSelection.ad ? ACTIVE_STAGE_AD_DAYS : 0;
+  const warmupDays = state.v3.activeSelection.warmup ? ACTIVE_STAGE_WARMUP_DAYS : 0;
+  const salesDays = state.v3.activeSelection.sales ? ACTIVE_STAGE_SALES_DAYS : 0;
+  return ACTIVE_STAGE_BASE_DAYS + Math.max(adsDays, warmupDays, salesDays);
 }
 
 function resolveStageContext(state: GameState): {
@@ -999,39 +1254,59 @@ function resolveStageContext(state: GameState): {
   };
 }
 
-function resolveAdViews(state: GameState, stageNumber: number, ad: ActiveDef, adBonus: number): number {
+function resolveAdViewBreakdown(state: GameState, stageNumber: number, ad: ActiveDef, adBonus: number): {
+  baseViews: number;
+  viralViews: number;
+  viralEventsCount: number;
+  totalViews: number;
+} {
   const rand = (name: string) => hashToUnitInterval(state.seed, stageNumber, name, ad.key, state.resources.day);
   if (isLowReachHighConversionAd(ad.key)) {
     const baseViews = Array.from({ length: 20 }, (_, index) =>
       Math.round(300 + hashToUnitInterval(state.seed, stageNumber, 'low-reach-ad-views', ad.key, index) * 100)
     ).reduce((sum, value) => sum + value, 0);
-    return Math.max(1, Math.round(baseViews * adBonus));
+    const adjustedBaseViews = Math.max(1, Math.round(baseViews * adBonus));
+    return { baseViews: adjustedBaseViews, viralViews: 0, viralEventsCount: 0, totalViews: adjustedBaseViews };
   }
-  const spike = rand('spike') > 0.82 ? 1.7 + rand('spike-size') * 1.6 : 1;
-  return Math.max(1_000, Math.round((ad.viewsBase ?? 12_000) * (0.82 + rand('views') * 0.48) * adBonus * spike));
+  const baseViews = Math.max(1_000, Math.round((ad.viewsBase ?? 12_000) * (0.82 + rand('views') * 0.48) * adBonus));
+  const viralEventsCount = rand('spike') > 0.82 ? 1 : 0;
+  const viralMultiplier = viralEventsCount > 0 ? 0.7 + rand('spike-size') * 1.6 : 0;
+  const viralViews = Math.round(baseViews * viralMultiplier);
+  return { baseViews, viralViews, viralEventsCount, totalViews: baseViews + viralViews };
 }
 
-function buildAdEvents(state: GameState, stageNumber: number, ad: ActiveDef, totalViews: number): V3ActiveAdEvent[] {
+function buildAdEvents(
+  state: GameState,
+  stageNumber: number,
+  ad: ActiveDef,
+  viewBreakdown: { baseViews: number; viralViews: number; viralEventsCount: number; totalViews: number },
+): V3ActiveAdEvent[] {
   const count = 20;
   const label = adEventLabel(ad.key);
-  const hotEvery = ad.key.includes('paid_ads') ? 6 : ad.key.includes('reels') ? 8 : ad.key.includes('telegram') ? 7 : 10;
+  const hotIndex = viewBreakdown.viralEventsCount > 0
+    ? Math.floor(hashToUnitInterval(state.seed, stageNumber, 'viral-index', ad.key) * count)
+    : -1;
   const weights = Array.from({ length: count }, (_, index) => {
     if (isLowReachHighConversionAd(ad.key)) {
       return 0.9 + hashToUnitInterval(state.seed, stageNumber, 'low-reach-ad-weight', ad.key, index) * 0.2;
     }
-    const hot = (index + 1) % hotEvery === 0;
+    const hot = index === hotIndex;
     const spread = 0.75 + hashToUnitInterval(state.seed, stageNumber, 'ad-weight', ad.key, index) * 0.8;
-    return (hot ? 7.5 : 1) * spread;
+    return (hot ? 1.8 : 1) * spread;
   });
   const totalWeight = weights.reduce((sum, weight) => sum + weight, 0);
   let distributed = 0;
   return weights.map((weight, index) => {
     const isLast = index === weights.length - 1;
+    const baseViewsDelta = isLast
+      ? Math.max(0, viewBreakdown.baseViews - distributed)
+      : Math.max(0, Math.round(viewBreakdown.baseViews * (weight / totalWeight)));
+    const hot = index === hotIndex && !isLowReachHighConversionAd(ad.key);
+    const viralViewsDelta = hot ? viewBreakdown.viralViews : 0;
     const viewsDelta = isLast
-      ? Math.max(0, totalViews - distributed)
-      : Math.max(0, Math.round(totalViews * (weight / totalWeight)));
+      ? Math.max(0, viewBreakdown.totalViews - distributed)
+      : baseViewsDelta + viralViewsDelta;
     distributed += viewsDelta;
-    const hot = (index + 1) % hotEvery === 0;
     return {
       id: `ad-${stageNumber}-${index}`,
       second: Math.min(ACTIVE_STAGE_SECONDS - 1, 1 + index * 3),
@@ -1121,13 +1396,14 @@ function buildSaleOutcomes(
   });
 }
 
-function successfulAttemptIndexes(total: number, conversion: number, _key: string): Set<number> {
+function successfulAttemptIndexes(total: number, conversion: number, key: string): Set<number> {
   const normalized = clampConversion(conversion);
   if (normalized <= 0) return new Set();
+  const phase = 0.5 + hashToUnitInterval(key, 'phase') * 0.5;
   return new Set(
     Array.from({ length: total }, (_, index) => index).filter((index) => {
-      const previous = Math.ceil(index * normalized);
-      const next = Math.ceil((index + 1) * normalized);
+      const previous = Math.floor(index * normalized + phase);
+      const next = Math.floor((index + 1) * normalized + phase);
       return next > previous;
     }),
   );
@@ -1179,7 +1455,7 @@ function effectiveSalesConversion(state: GameState, baseConversion: number, bonu
 
 function v3EndingReasonAfterReport(state: GameState, report: V3StageReport): GameState['endingReason'] {
   if (state.endingReason) return state.endingReason;
-  if (report.endedByBurnout || state.resources.energy <= 0 || state.resources.bank <= 0) return 'resource_finished';
+  if (report.endedByBurnout || state.resources.energy <= 0) return 'resource_finished';
   if (report.finishedDay >= 30 || state.resources.day >= 30) return 'time_finished';
   if (
     (state.targets.targetRevenue > 0 && state.metrics.revenue >= state.targets.targetRevenue)
@@ -1193,7 +1469,7 @@ function v3EndingReasonAfterReport(state: GameState, report: V3StageReport): Gam
 
 function finalizeV3IfTerminal(state: GameState): void {
   if (state.endingReason) return;
-  if (state.resources.energy <= 0 || state.resources.bank <= 0) {
+  if (state.resources.energy <= 0) {
     state.endingReason = 'resource_finished';
   } else if (state.resources.day >= 30) {
     state.endingReason = 'time_finished';
@@ -1284,6 +1560,72 @@ function autoSalesShareFor(area: V3PreparationArea, instrumentId: string): numbe
   return 0;
 }
 
+function countHiddenAutoAudience(total: number, rate: number, key: string): number {
+  if (total <= 0 || rate <= 0) return 0;
+  return Math.min(total, Math.max(0, stochasticRound(total * clampConversion(rate), key)));
+}
+
+function warmupAutoAudienceRate(state: GameState, warmup: ActiveDef): number {
+  if (!warmup.key.includes('auto_webinar')) return 0;
+  const product = stateProductContext(state);
+  if (product.type === 'mentorship' || product.band === 'high') return 0.22;
+  if (product.type === 'live_course' && product.price >= 50_000) return 0.25;
+  if (product.type === 'live_course') return 0.30;
+  if (product.type === 'service' || product.type === 'consultation') return 0.32;
+  if (product.band === 'mid') return 0.36;
+  return 0.42;
+}
+
+function effectiveWarmupAutoPurchaseConversion(state: GameState, warmup: ActiveDef, bonus: number): number {
+  const baseShare = Math.max(0, warmup.autoSalesShare ?? 0);
+  if (baseShare <= 0 || !warmup.key.includes('auto_webinar')) return baseShare;
+
+  const product = stateProductContext(state);
+  return clampConversion(Math.min(baseShare, maxWarmupAutoPurchaseConversion(product)) * bonus);
+}
+
+function maxWarmupAutoPurchaseConversion(product: V3ProductContext): number {
+  if (product.type === 'mentorship' || product.band === 'high') return 0.015;
+  if (product.type === 'live_course' && product.price >= 50_000) return 0.02;
+  if (product.type === 'live_course') return 0.035;
+  if (product.type === 'service' || product.type === 'consultation') return 0.04;
+  if (product.band === 'mid') return 0.05;
+  return 0.08;
+}
+
+function salesAutoAudienceRate(state: GameState, sales: ActiveDef): number {
+  const product = stateProductContext(state);
+  if (sales.key.includes('website')) {
+    if (product.type === 'mentorship' || product.band === 'high') return 0.38;
+    if (product.type === 'live_course' && product.price >= 50_000) return 0.50;
+    if (product.band === 'mid') return 0.65;
+    return 0.82;
+  }
+  if (sales.key.includes('auto_webinar')) {
+    if (product.type === 'mentorship' || product.band === 'high') return 0.25;
+    if (product.type === 'live_course' && product.price >= 50_000) return 0.32;
+    if (product.band === 'mid') return 0.45;
+    return 0.58;
+  }
+  return 0;
+}
+
+function effectiveSalesAutoPurchaseConversion(state: GameState, sales: ActiveDef, bonus: number): number {
+  if (!sales.key.includes('website') && !sales.key.includes('auto_webinar')) return 0;
+  const baseConversion = effectiveSalesConversion(state, sales.baseConversion, bonus);
+  return Math.min(baseConversion, maxSalesAutoPurchaseConversion(stateProductContext(state), sales.key));
+}
+
+function maxSalesAutoPurchaseConversion(product: V3ProductContext, key: string): number {
+  const isWebinar = key.includes('auto_webinar');
+  if (product.type === 'mentorship' || product.band === 'high') return isWebinar ? 0.045 : 0.04;
+  if (product.type === 'live_course' && product.price >= 50_000) return isWebinar ? 0.06 : 0.055;
+  if (product.type === 'live_course') return isWebinar ? 0.08 : 0.07;
+  if (product.type === 'service' || product.type === 'consultation') return isWebinar ? 0.09 : 0.08;
+  if (product.band === 'mid') return isWebinar ? 0.12 : 0.11;
+  return 0.23;
+}
+
 function autoSalesMessageConversion(key: string): number {
   if (key.includes('website')) return SITE_MESSAGE_CONVERSION;
   if (key.includes('auto_webinar')) return WEBINAR_MESSAGE_CONVERSION;
@@ -1366,26 +1708,107 @@ function adviceParagraphs(state: GameState, category: V3AdviceCategory, option: 
   const productLine = productAdviceLine(product);
   const priceLine = priceAdviceLine(product);
   const categoryLine = categoryAdviceLine(category, product);
-  const routeLine = category === 'sales' ? salesRouteRecommendation(product) : category === 'warmup' ? warmupRecommendation(product) : adsRecommendation(product);
+  const selectedTool = adviceToolForCategory(product, category);
+  const bundleLine = adviceBundleLine(product);
+  const productGenitive = productGenitiveLabel(product);
   if (option === 'friend') {
     return [
       `Со стороны видно главное: "${product.label}" нельзя запускать как абстрактный продукт. ${productLine}`,
-      `${categoryLine} ${priceLine}`,
-      `Это общий совет без цифр. Он дает направление, но не показывает, сколько денег вы теряете на этом участке.`,
+      `${categoryLine} Я бы начал с инструмента "${selectedTool}", но это общий совет без цифр и без точной связки.`,
+      `Он дает направление, но не показывает, сколько денег вы теряете на этом участке и какой инструмент покупать первым.`,
     ];
   }
   if (option === 'consult_5k') {
     return [
-      `Консультация показывает примерную картину по "${product.label}": ${productLine}`,
-      `${categoryLine} Первое решение: ${routeLine}`,
-      `При чеке ${formatEngineMoney(product.price)} уже нельзя выбирать инструмент "на глаз": даже несколько потерянных заявок быстро отбивают стоимость разбора.`,
+      `Советую для продажи ${productGenitive} в разделе "${adviceTopic(category)}" использовать инструмент "${selectedTool}". ${productLine}`,
+      `${categoryLine} Для вашего чека логика такая: ${priceLine}`,
+      `Это примерная рекомендация на один участок воронки. Она помогает выбрать следующий ход, но еще не собирает всю связку рекламы, прогрева и продаж.`,
     ];
   }
   return [
-    `Точный разбор собирает связку под "${product.label}", а не просто советует модный инструмент. ${productLine}`,
-    `${categoryLine} Для этого чека логика такая: ${priceLine}`,
-    `Рекомендуемый следующий шаг: ${routeLine} Так игрок перестает угадывать и видит, какой участок воронки чинить первым.`,
+    `Для продажи ${productGenitive} советую как рекламу выбрать "${adviceToolBundle(product).ads}", как прогрев - "${adviceToolBundle(product).warmup}", а как продажи - "${adviceToolBundle(product).sales}".`,
+    `В выбранном разделе "${adviceTopic(category)}" главный инструмент для следующего шага - "${selectedTool}". ${adviceToolBundle(product).reason}`,
+    `${productLine} ${priceLine} ${bundleLine}`,
   ];
+}
+
+function productGenitiveLabel(product: V3ProductContext): string {
+  if (product.type === 'consultation') return 'ваших консультаций';
+  if (product.type === 'service') return 'ваших услуг';
+  if (product.type === 'recorded_course') return 'ваших уроков в записи';
+  if (product.type === 'live_course') return 'вашего живого обучения';
+  if (product.type === 'membership') return 'вашего клуба или подписки';
+  if (product.type === 'mentorship') return 'вашего сопровождения';
+  return `продукта "${product.label}"`;
+}
+
+function adviceToolBundle(product: V3ProductContext): AdviceToolBundle {
+  if (product.type === 'consultation') {
+    return {
+      ads: 'Контент для рилс',
+      warmup: 'Бот с ИИ',
+      sales: 'Переписка',
+      reason: 'Консультации часто покупают после узнавания боли: рилс дает поток, ИИ-бот быстро уточняет ситуацию, переписка закрывает на оплату без лишнего длинного созвона.',
+    };
+  }
+  if (product.type === 'service') {
+    return {
+      ads: 'Контент для сторис',
+      warmup: 'Обычный бот',
+      sales: 'Созвон',
+      reason: 'Услуге нужно доверие и понимание процесса: сторис дают теплое касание, бот собирает вводные, а созвон помогает показать план работы под кейс клиента.',
+    };
+  }
+  if (product.type === 'recorded_course') {
+    return {
+      ads: 'Контент для сторис',
+      warmup: 'Видеоурок',
+      sales: 'Сайт',
+      reason: 'Уроки в записи лучше продаются коротким путем: сторис дают теплый вход, видеоурок показывает первый результат, сайт быстро доводит до оплаты.',
+    };
+  }
+  if (product.type === 'live_course') {
+    return {
+      ads: 'Контент для рилс',
+      warmup: 'Автовебинар',
+      sales: 'Созвон',
+      reason: 'Живому обучению нужны охват, дедлайн и доверие: рилс приводит новых людей, автовебинар объясняет программу, созвон закрывает сомнения.',
+    };
+  }
+  if (product.type === 'membership') {
+    return {
+      ads: 'Контент для ТГ-канала',
+      warmup: 'Гайд / лендинг',
+      sales: 'Автовебинар',
+      reason: 'Подписке нужен понятный первый результат и регулярная польза: ТГ хорошо греет аудиторию, гайд дает быстрый вход, автовебинар продает формат без ручной переписки на каждого.',
+    };
+  }
+  if (product.type === 'mentorship') {
+    return {
+      ads: 'Внешняя реклама',
+      warmup: 'Бот с ИИ',
+      sales: 'Созвон',
+      reason: 'Сопровождение с высоким чеком требует квалификации: реклама дает масштаб, ИИ-бот отсекает случайных людей, созвон продает личную работу и рамки результата.',
+    };
+  }
+  return {
+    ads: 'Контент для рилс',
+    warmup: 'Бот с ИИ',
+    sales: 'Переписка',
+    reason: 'Эта связка дает поток, быструю обработку и короткий путь до оплаты.',
+  };
+}
+
+function adviceToolForCategory(product: V3ProductContext, category: V3AdviceCategory): string {
+  const bundle = adviceToolBundle(product);
+  if (category === 'ads') return bundle.ads;
+  if (category === 'warmup') return bundle.warmup;
+  return bundle.sales;
+}
+
+function adviceBundleLine(product: V3ProductContext): string {
+  const bundle = adviceToolBundle(product);
+  return `Итоговая связка: реклама - ${bundle.ads}; прогрев - ${bundle.warmup}; продажи - ${bundle.sales}.`;
 }
 
 function productAdviceLine(product: V3ProductContext): string {
@@ -1424,12 +1847,6 @@ function categoryAdviceLine(category: V3AdviceCategory, product: V3ProductContex
   return 'В продажах нельзя говорить со всеми одинаково: возражения зависят от продукта, чека и уровня доверия.';
 }
 
-function adsRecommendation(product: V3ProductContext): string {
-  if (product.band === 'high') return 'вести не на случайный лид-магнит, а на диагностический прогрев, который квалифицирует человека до разговора.';
-  if (product.type === 'membership' || product.type === 'recorded_course') return 'дать простой вход через сторис/ТГ или рилсы с быстрым обещанием и понятной оплатой дальше.';
-  return 'сравнить широкий охват рилсов с более теплым источником и оставить тот, где лиды потом доходят до заявки.';
-}
-
 function adviceEffectLines(category: V3AdviceCategory, option: V3AdviceOption): string[] {
   if (option === 'friend') return ['Вы получили общий ориентир. Бонус к конверсии не начислен.'];
   const topic = adviceTopicPrepositional(category);
@@ -1459,15 +1876,15 @@ function conversionRows(category: V3AdviceCategory, precision: V3AdvicePrecision
       { label: 'Обычный бот -> интерес', value: approx ? 'около 14-18%' : '14-18%' },
       { label: 'ИИ-бот -> интерес', value: approx ? 'около 20-27%' : '20-27%' },
       { label: 'Видеоурок -> интерес', value: approx ? 'около 16-21%' : '16-21%' },
-      { label: 'Автовебинар -> интерес', value: approx ? 'около 14-19%' : '14-19%' },
+      { label: 'Автовебинар -> заявка', value: approx ? 'около 14-19%' : '14-19%', note: 'автопокупки считаются отдельно от скрытой группы зрителей и зависят от чека' },
     ];
   }
   return [
     { label: 'По наитию -> покупка', value: approx ? 'около 10%' : '8-12%' },
     { label: 'Переписка -> покупка', value: approx ? 'около 14%' : '14-20%' },
     { label: 'Созвон -> покупка', value: approx ? 'около 20%' : '20-28%' },
-    { label: 'Сайт -> покупка', value: approx ? 'около 16%' : '16-23%' },
-    { label: 'Автовебинар -> покупка', value: approx ? 'около 14%' : '14-19%', note: 'часть не купивших пишет в переписку' },
+    { label: 'Сайт -> покупка', value: approx ? 'около 16%' : '16-23%', note: 'прямые покупки считаются от скрытой группы посетителей и снижаются на высоком чеке' },
+    { label: 'Продажный автовебинар -> покупка', value: approx ? 'около 14%' : '14-19%', note: 'покупки считаются среди зрителей; часть не купивших пишет в переписку' },
   ];
 }
 

@@ -20,6 +20,7 @@ async function completeOnboarding(page: Page) {
   await page.locator('input').fill('15000');
   await page.getByRole('button', { name: 'Готово, дальше' }).click();
   await page.getByRole('button').filter({ hasText: 'Новый айфон' }).click();
+  await page.getByRole('button', { name: 'Готово' }).click();
   await page.getByRole('button', { name: 'Цель ясна' }).click();
   await page.getByRole('button', { name: 'Понятно!' }).click();
   await expect(page.getByRole('heading', { name: 'Меню рефлексии' })).toBeVisible();
@@ -105,7 +106,7 @@ test('terminal v3 run reaches final diagnosis and lead form', async ({ page }) =
 
   await page.getByRole('button', { name: 'Посмотреть итоги' }).click();
   await expect(page.getByText('Источник объяснения')).toBeVisible({ timeout: 15_000 });
-  await page.getByRole('button', { name: 'Получить разбор' }).click();
+  await page.getByRole('button', { name: 'Подробнее про реальный разбор' }).click();
   await expect(page.getByRole('heading', { name: 'Получить бесплатную консультацию' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Отправить заявку' })).toBeVisible();
 });

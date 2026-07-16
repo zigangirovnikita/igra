@@ -100,6 +100,7 @@ export function createInitialState(setup: PlayerProfile, config: GameConfig, see
       productType: null,
       productPrice: null,
       dreamId: null,
+      dreamChoices: [],
       customDreamTitle: null,
       customDreamPrice: null,
       explanationSeen: {},
@@ -116,6 +117,7 @@ export function createInitialState(setup: PlayerProfile, config: GameConfig, see
       stageReports: [],
       lastStageReport: null,
       activeStageStartedAt: null,
+      activeStage: null,
     },
   };
 

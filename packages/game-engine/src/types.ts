@@ -510,11 +510,17 @@ export type V3StageReport = {
   warmupTitle: string;
   salesTitle: string;
   views: number;
+  baseViews?: number;
+  viralViews?: number;
+  viralEventsCount?: number;
   newLeads: number;
   notInterested: number;
   interested: number;
   requiredAnswer: number;
   lost: number;
+  workloadSeconds?: number;
+  handledWorkloadSeconds?: number;
+  capacityLoss?: number;
   applications: number;
   callsHeld: number;
   callsNoBuy: number;
@@ -555,6 +561,16 @@ export type V3ActiveSaleOutcome = {
   followupBuy: boolean;
 };
 
+export type V3ActiveActionType = 'answer' | 'call' | 'direct_chat' | 'post_call_chat' | 'site_chat';
+
+export type V3ActiveActionLogEntry = {
+  id: string;
+  type: V3ActiveActionType;
+  targetId: string;
+  startedAtMs: number;
+  completedAtMs: number;
+};
+
 export type V3ActiveStagePlan = {
   durationSeconds: 60;
   callDurationSeconds: number;
@@ -571,15 +587,28 @@ export type V3ActiveStagePlan = {
     notInterested: number;
     interested: number;
     requiredAnswer: number;
+    warmupAutoAudience: number;
     autoSales: number;
+    salesAutoAudience: number;
     siteMessages: number;
+    baseViews: number;
+    viralViews: number;
+    viralEventsCount: number;
   };
+};
+
+export type V3DreamChoice = {
+  id: string;
+  title: string;
+  price: number;
+  custom?: boolean;
 };
 
 export type V3State = {
   productType: V3ProductType | null;
   productPrice: number | null;
   dreamId: string | null;
+  dreamChoices: V3DreamChoice[];
   customDreamTitle: string | null;
   customDreamPrice: number | null;
   explanationSeen: Record<string, boolean>;
@@ -601,6 +630,14 @@ export type V3State = {
   stageReports: V3StageReport[];
   lastStageReport: V3StageReport | null;
   activeStageStartedAt: string | null;
+  activeStage: {
+    id: string;
+    stageNumber: number;
+    startedAt: string;
+    expiresAt: string;
+    startingEnergy: number;
+    plan: V3ActiveStagePlan;
+  } | null;
 };
 
 export type GameState = {
@@ -700,6 +737,7 @@ export type GameCommand =
   | { commandId: string; type: 'v3_set_product'; payload: { productType: V3ProductType } }
   | { commandId: string; type: 'v3_set_price'; payload: { productPrice: number } }
   | { commandId: string; type: 'v3_set_dream'; payload: { dreamId: string; customTitle?: string; customPrice?: number } }
+  | { commandId: string; type: 'v3_set_dreams'; payload: { dreams: V3DreamChoice[]; customTitle?: string; customPrice?: number } }
   | { commandId: string; type: 'v3_open_reflection'; payload: { target: 'prepare' | 'advice' | 'rest' | 'history' | 'act' } }
   | { commandId: string; type: 'v3_confirm_preparation'; payload: { area: V3PreparationArea; instrumentId: string; mode: V3PreparationMode } }
   | { commandId: string; type: 'v3_request_advice'; payload: { category: V3AdviceCategory; option: V3AdviceOption } }
@@ -708,5 +746,5 @@ export type GameCommand =
   | { commandId: string; type: 'v3_ack_pre_action_summary'; payload?: Record<string, never> }
   | { commandId: string; type: 'v3_select_active'; payload: { kind: V3SelectionKind; key: string } }
   | { commandId: string; type: 'v3_start_active_stage'; payload?: Record<string, never> }
-  | { commandId: string; type: 'v3_complete_active_stage'; payload?: { manualAnswers?: number; salesChats?: number; directSalesChats?: number; postCallChats?: number; calls?: number } }
+  | { commandId: string; type: 'v3_complete_active_stage'; payload?: { manualAnswers?: number; salesChats?: number; directSalesChats?: number; postCallChats?: number; calls?: number; actionLog?: V3ActiveActionLogEntry[] } }
   | { commandId: string; type: 'v3_return_reflection'; payload?: Record<string, never> };

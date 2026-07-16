@@ -10,8 +10,10 @@ import {
   type GameConfig,
   type GameState,
   type V3ActiveSaleOutcome,
+  type V3ActiveActionLogEntry,
   type V3AdviceCategory,
   type V3AdviceOption,
+  type V3DreamChoice,
   type V3PreparationArea,
   type V3PreparationMode,
   type V3ProductType,
@@ -48,37 +50,54 @@ export function V3Flow({ state, config: _config, dispatch, busy }: Props) {
   const [choosing, setChoosing] = useState<V3SelectionKind | null>(null);
   const [price, setPrice] = useState('');
   const [customDream, setCustomDream] = useState({ title: '', price: '' });
+  const [selectedDreamIds, setSelectedDreamIds] = useState<string[]>([]);
 
   const step = state.flow.step;
   const name = state.player.name;
   const gender = state.player.avatarGender;
+  const partner = gender === 'male'
+    ? { noun: 'жена', approached: 'подошла', said: 'сказала', went: 'Жена пока поехала' }
+    : { noun: 'муж', approached: 'подошел', said: 'сказал', went: 'Муж пока поехал' };
+
+  useEffect(() => {
+    if (step !== 'v3_dream') return;
+    const savedDreams = state.v3.dreamChoices ?? [];
+    const custom = savedDreams.find((dream) => dream.custom);
+    setSelectedDreamIds(savedDreams.filter((dream) => !dream.custom).map((dream) => dream.id));
+    setCustomDream(custom ? { title: custom.title, price: String(custom.price) } : { title: '', price: '' });
+  }, [step, state.sessionId, state.v3.dreamChoices]);
 
   if (step === 'v3_story_budget') {
     return (
-      <V3Screen gender={gender} image="beach-talk" title={`${name}, у нас в этом месяце все уже хорошо.`} busy={busy}
+      <V3Screen gender={gender} image="beach-talk" title={`Однажды к ${toDativeName(name)} на отдыхе ${partner.approached} ${partner.noun} и ${partner.said}:`} busy={busy}
         button="Далее" onClick={() => dispatch('v3_next')}>
-        <p>Все вопросы с жильем, едой и жизнью решены. Давай выделим 100 000 рублей на твое дело и посвяти этому месяц.</p>
-        <p>У тебя все получится.</p>
+        <p><strong>{name}, у нас сейчас все хорошо. Может в этом месяце выделим деньги и время для твоих желаний и дела?</strong></p>
+        <p>В этом месяце все вопросы с жильем, едой и прочим решены.</p>
+        <p>Что если выделить 100 000 рублей на твое дело?</p>
+        <p>Я думаю, что все получится!</p>
       </V3Screen>
     );
   }
 
   if (step === 'v3_rules') {
     return (
-      <V3Screen gender={gender} image="goal" title="Правила запуска" busy={busy} button="Правила ясны!" onClick={() => dispatch('v3_next')}>
-        <p>Наверху всегда показаны день, банк и энергия.</p>
-        <p>Банк - это остаток стартовых 100 000 рублей. Выручка от продаж в эту сумму не входит.</p>
-        <p>Если энергия закончится, вы выгорели и игра закончится.</p>
-        <p>Цель игры - сделать столько продаж, чтобы выполнить план и купить мечту.</p>
+      <V3Screen gender={gender} image="rules" title="Правила игры" busy={busy} button="Правила ясны!" onClick={() => dispatch('v3_next')}>
+        <p>Сверху экрана всегда показаны день, банк и энергия.</p>
+        <p><strong>День</strong> - показывает сколько дней из 30 прошло. Расходуется по мере работы.</p>
+        <p><strong>Банк</strong> - это остаток стартовых 100 000 рублей. Выручка от продаж в эту сумму не входит. Расходуется при покупках.</p>
+        <p><strong>Энергия</strong> - на сколько вы полны сил для работы. Расходуется почти при любых действиях.</p>
+        <p>Игра считается выиграна, когда вы купите свою мечту и закроете план по продажам.</p>
+        <p>Игра проиграна, если у вас закончилась энергия, банк или дни, но не куплена мечта и не выполнен план по продажам.</p>
+        <p>Удачи!</p>
       </V3Screen>
     );
   }
 
   if (step === 'v3_story_plan') {
     return (
-      <V3Screen gender={gender} image="product" title="Подумайте о продукте и мечте" busy={busy}
+      <V3Screen gender={gender} image="product" title="Время придумать мечту!" busy={busy}
         button="Хорошо" onClick={() => dispatch('v3_next')}>
-        <p>Я сейчас поеду по делам. А ты пока подумай, что ты хочешь продавать и что хочешь купить с продаж.</p>
+        <p>{partner.went} по своим делам. Я могу посвятить этот день тому, чтобы придумать, что я хочу и сколько для этого нужно сделать продаж!</p>
       </V3Screen>
     );
   }
@@ -111,16 +130,39 @@ export function V3Flow({ state, config: _config, dispatch, busy }: Props) {
 
   if (step === 'v3_dream') {
     const dreams = approvedDreams(gender);
+    const selectedDreams = dreams.filter((dream) => selectedDreamIds.includes(dream.id));
+    const customTitle = customDream.title.trim();
+    const customPrice = Number(customDream.price);
+    const hasCustomInput = customTitle.length > 0 || customDream.price.trim().length > 0;
+    const hasCustomDream = customTitle.length > 0 && Number.isFinite(customPrice) && customPrice >= 1_000;
+    const canSubmitDreams = (selectedDreams.length > 0 || hasCustomDream) && (!hasCustomInput || hasCustomDream);
     return (
-      <V3Screen gender={gender} image="dream" title={`Что ${name} хочет купить, когда продажи пойдут?`} busy={busy}>
+      <V3Screen
+        gender={gender}
+        image="dream"
+        title={`Что ${name} хочет купить, когда продажи пойдут?`}
+        busy={busy}
+        button="Готово"
+        buttonDisabled={!canSubmitDreams}
+        onClick={() => dispatch('v3_set_dreams', {
+          dreams: selectedDreams,
+          customTitle: hasCustomDream ? customTitle : undefined,
+          customPrice: hasCustomDream ? customPrice : undefined,
+        })}
+      >
         <div className="v3-dream-list">
           {dreams.map((dream) => (
-            <button key={dream.id} className="v3-dream-row" onClick={() => dispatch('v3_set_dream', {
-              dreamId: 'custom',
-              customTitle: dream.title,
-              customPrice: dream.price,
-            })}>
-              <span>{dream.title}</span>
+            <button
+              key={dream.id}
+              type="button"
+              className={`v3-dream-row${selectedDreamIds.includes(dream.id) ? ' v3-dream-row--selected' : ''}`}
+              onClick={() => setSelectedDreamIds((current) => (
+                current.includes(dream.id)
+                  ? current.filter((id) => id !== dream.id)
+                  : [...current, dream.id]
+              ))}
+            >
+              <span>{selectedDreamIds.includes(dream.id) ? '✓ ' : ''}{dream.title}</span>
               <strong>{dream.price.toLocaleString('ru-RU')} ₽</strong>
             </button>
           ))}
@@ -128,11 +170,6 @@ export function V3Flow({ state, config: _config, dispatch, busy }: Props) {
             <strong>Свой вариант</strong>
             <input className="setup-input" value={customDream.title} onChange={(e) => setCustomDream((prev) => ({ ...prev, title: e.target.value }))} placeholder="Что хотите купить?" />
             <input className="setup-input" inputMode="numeric" value={customDream.price} onChange={(e) => setCustomDream((prev) => ({ ...prev, price: e.target.value }))} placeholder="Стоимость" />
-            <button className="btn-secondary" disabled={!customDream.title || Number(customDream.price) < 1000} onClick={() => dispatch('v3_set_dream', {
-              dreamId: 'custom',
-              customTitle: customDream.title,
-              customPrice: Number(customDream.price),
-            })}>Выбрать свой вариант</button>
           </div>
         </div>
       </V3Screen>
@@ -140,19 +177,31 @@ export function V3Flow({ state, config: _config, dispatch, busy }: Props) {
   }
 
   if (step === 'v3_goal_summary') {
+    const dreamsSummary = selectedDreamSummary(state, gender);
+    const decidedVerb = gender === 'female' ? 'решила' : 'решил';
+    const selectedVerb = gender === 'female' ? 'выбрала' : 'выбрал';
+    const setVerb = gender === 'female' ? 'поставила' : 'поставил';
+    const pronoun = gender === 'female' ? 'она' : 'он';
     return (
       <V3Screen gender={gender} image="goal" title="Цель запуска" busy={busy} button="Цель ясна" onClick={() => dispatch('v3_next')}>
-        <p>Прошел 1 день. {name} придумал{gender === 'female' ? 'а' : ''}, что будет продавать {state.launchPlan.productName} за {(state.launchPlan.productPrice || 0).toLocaleString('ru-RU')} ₽.</p>
-        <p>Для этого цель: сделать {state.targets.targetSales} продаж и заработать {state.targets.targetRevenue.toLocaleString('ru-RU')} рублей.</p>
+        <p>Прошел 1 день. {name} {decidedVerb}, что будет продавать {state.launchPlan.productName} за {formatRubText(state.launchPlan.productPrice || 0)}</p>
+        <p>В качестве желаний {pronoun} {selectedVerb} {dreamsSummary.titles}.</p>
+        <p>Общая сумма желаний - {formatRubText(dreamsSummary.total)}</p>
+        <p>Для этого {pronoun} {setVerb} цель с запасом: сделать {state.targets.targetSales} продаж и заработать {formatRubText(state.targets.targetRevenue)}</p>
       </V3Screen>
     );
   }
 
   if (step === 'v3_reflection_intro') {
     return (
-      <V3Screen gender={gender} image="reflection" title={`${name} начинает цикл запуска`} busy={busy} button="Понятно!" onClick={() => dispatch('v3_next')}>
-        <p>Каждая волна включает рефлексию, подготовку, активный этап и итоги попытки.</p>
-        <p>Подготовьтесь, посоветуйтесь, восстановите энергию или переходите к действиям.</p>
+      <V3Screen gender={gender} title="Вы готовы к старту запусков и продаж" busy={busy} button="Понятно!" onClick={() => dispatch('v3_next')}>
+        <p>Сейчас вы попадете на экран рефлексии. Это место, где вы решаете, что делать перед активной фазой запуска.</p>
+        <p>Пункт <strong>"Подготовиться"</strong> - там вы выбираете, какие инструменты запуска подготовить или купить.</p>
+        <p>Пункт <strong>"Посоветоваться"</strong> - там вы можете получить рекомендации от специалистов, когда не знаете, что делать.</p>
+        <p>Пункт <strong>"Отдохнуть"</strong> - выберите его, когда вам нужно восстановить энергию. Имейте в виду, что каждый активный этап тратит от 25% энергии.</p>
+        <p>Пункт <strong>"Прошлые попытки"</strong> - там вы увидите результаты пройденных активных этапов. Это поможет вам сделать выводы и поменять стратегию.</p>
+        <p>Кнопка <strong>"Действовать"</strong> - для того, чтобы начать активный этап запуска. Нажимайте на нее, когда понимаете, что у вас хватает энергии и готовы все инструменты.</p>
+        <p>Удачи!</p>
       </V3Screen>
     );
   }
@@ -364,10 +413,14 @@ export function V3Flow({ state, config: _config, dispatch, busy }: Props) {
 
   if (step === 'v3_active_intro') {
     return (
-      <V3Screen gender={gender} image="active" title="Сейчас начнется активный этап" busy={busy} button="Понятно!" onClick={() => dispatch('v3_next')}>
-        <p>Вы будете видеть, какие результаты дают реклама, прогрев и продажи.</p>
-        <p>Если нужно отвечать на сообщения или созвоны, старайтесь успевать. Это тратит энергию.</p>
-        <p>Если энергия закончится, необработанные обращения будут потеряны.</p>
+      <V3Screen gender={gender} title="Сейчас начнется активный этап" busy={busy} button="Понятно!" onClick={() => dispatch('v3_next')}>
+        <p>Он идет 60 секунд реального времени.</p>
+        <p>Вы увидите 3 этажа. Реклама, прогрев, продажи. На каждом из них показываются показатели.</p>
+        <p>Ваша задача успевать делать целевые действия, нажимая на кнопки на этажах прогрева и продаж.</p>
+        <p>Когда вы нажимаете на кнопку - на какое-то время нажать на другую кнопку нельзя. Например пока вы проводите созвон - вы не можете отвечать на сообщения.</p>
+        <p>Ваша задача - сделать как можно больше продаж. Результаты зависят от ваших действий и от инструментов, которые вы выбрали.</p>
+        <p>После завершения активного этапа вы увидите результаты, анализ и цифры этапа. Это поможет вам сделать выводы и скорректировать стратегию при необходимости.</p>
+        <p>Удачи!</p>
       </V3Screen>
     );
   }
@@ -379,7 +432,7 @@ export function V3Flow({ state, config: _config, dispatch, busy }: Props) {
   if (step === 'v3_stage_report') {
     const report = state.v3.lastStageReport;
     return (
-      <V3Screen gender={gender} image="summary" title={`Активный этап №${report?.stageNumber ?? ''} завершен`} busy={busy}
+      <V3Screen gender={gender} title={`Активный этап №${report?.stageNumber ?? ''} завершен`} busy={busy}
         button={state.endingReason ? 'Смотреть итог запуска' : 'Перейти к рефлексии'} onClick={() => dispatch('v3_return_reflection')}>
         {report ? <ReportCard report={report} state={state} productPrice={state.launchPlan.productPrice ?? 0} full /> : <p>Отчет не найден.</p>}
       </V3Screen>
@@ -400,6 +453,7 @@ function V3Screen({
   children,
   button,
   onClick,
+  buttonDisabled,
   busy,
 }: {
   image?: Parameters<typeof PixelArtScene>[0]['variant'];
@@ -408,6 +462,7 @@ function V3Screen({
   children: ReactNode;
   button?: string;
   onClick?: () => void;
+  buttonDisabled?: boolean;
   busy: boolean;
 }) {
   return (
@@ -417,7 +472,7 @@ function V3Screen({
         <h1>{title}</h1>
         <div className="v3-copy">{children}</div>
       </div>
-      {button && <div className="scene-btn-row"><button className="btn-primary" disabled={busy} onClick={onClick}>{button}</button></div>}
+      {button && <div className="scene-btn-row"><button className="btn-primary" disabled={busy || buttonDisabled} onClick={onClick}>{button}</button></div>}
     </section>
   );
 }
@@ -494,8 +549,11 @@ function ActiveChoiceModal({ state, kind, dispatch, onClose }: { state: GameStat
 }
 
 function ActiveStage({ state, dispatch, busy: _busy }: { state: GameState; dispatch: Dispatch; busy: boolean }) {
-  const plan = useMemo(() => buildV3ActiveStagePlan(state), [state]);
-  const [seconds, setSeconds] = useState<number>(plan.durationSeconds);
+  const plan = useMemo(() => state.v3.activeStage?.plan ?? buildV3ActiveStagePlan(state), [state]);
+  const startedAtMs = useMemo(() => {
+    const fromState = state.v3.activeStage?.startedAt ? Date.parse(state.v3.activeStage.startedAt) : NaN;
+    return Number.isFinite(fromState) ? fromState : Date.now();
+  }, [state.v3.activeStage?.id, state.v3.activeStage?.startedAt]);
   const [answeredIds, setAnsweredIds] = useState<string[]>([]);
   const [calls, setCalls] = useState({ held: 0, buy: 0, noBuy: 0 });
   const [chats, setChats] = useState({ held: 0, direct: 0, postCall: 0, buy: 0, noBuy: 0 });
@@ -506,6 +564,11 @@ function ActiveStage({ state, dispatch, busy: _busy }: { state: GameState; dispa
   const [now, setNow] = useState(Date.now());
   const completedRef = useRef(false);
   const timeoutRef = useRef<number | null>(null);
+  const actionLogRef = useRef<V3ActiveActionLogEntry[]>([]);
+  const actionSeqRef = useRef(0);
+  const elapsedMs = Math.min(plan.durationSeconds * 1000, Math.max(0, now - startedAtMs));
+  const seconds = Math.max(0, Math.ceil((plan.durationSeconds * 1000 - elapsedMs) / 1000));
+  const elapsed = Math.min(plan.durationSeconds, Math.floor(elapsedMs / 1000));
   useEffect(() => {
     if (seconds <= 0 && !completedRef.current) {
       completedRef.current = true;
@@ -515,12 +578,10 @@ function ActiveStage({ state, dispatch, busy: _busy }: { state: GameState; dispa
         directSalesChats: chats.direct,
         postCallChats: chats.postCall,
         calls: calls.held,
+        actionLog: actionLogRef.current,
       });
-      return;
     }
-    const id = window.setTimeout(() => setSeconds((prev) => prev - 1), 1000);
-    return () => window.clearTimeout(id);
-  }, [seconds, dispatch, answeredIds.length, chats.held, calls.held]);
+  }, [seconds, dispatch, answeredIds.length, chats.held, chats.direct, chats.postCall, calls.held]);
   useEffect(() => {
     const id = window.setInterval(() => setNow(Date.now()), 250);
     return () => window.clearInterval(id);
@@ -529,7 +590,6 @@ function ActiveStage({ state, dispatch, busy: _busy }: { state: GameState; dispa
     if (timeoutRef.current !== null) window.clearTimeout(timeoutRef.current);
   }, []);
 
-  const elapsed = plan.durationSeconds - seconds;
   const progress = Math.round((elapsed / plan.durationSeconds) * 100);
   const views = plan.adEvents.filter((event) => event.second <= elapsed).reduce((sum, event) => sum + event.viewsDelta, 0);
   const leadProgress = plan.totals.views > 0 ? views / plan.totals.views : elapsed / plan.durationSeconds;
@@ -579,7 +639,7 @@ function ActiveStage({ state, dispatch, busy: _busy }: { state: GameState; dispa
         : salesMode === 'site'
           ? currentChat?.text ?? 'Сайт продает автоматически'
           : currentChat?.text;
-  const hotAdVisible = plan.adEvents.some((event) => event.hot && event.second <= elapsed);
+  const hotAdVisible = plan.adEvents.some((event) => event.hot && event.second <= elapsed && event.second > elapsed - 5);
   const stageAlert = lastResult?.buy
     ? `ОПЛАТА! +${productPrice.toLocaleString('ru-RU')} ₽`
     : expiredMessages > 0
@@ -592,12 +652,23 @@ function ActiveStage({ state, dispatch, busy: _busy }: { state: GameState; dispa
             ? `К ПРОДАЖЕ ГОТОВО: ${readyForSalesNow}`
             : 'Идет трафик. Следите за узким местом.';
 
-  const runAction = (durationSeconds: number, label: string, update: () => void) => {
+  const runAction = (durationSeconds: number, label: string, action: { type: V3ActiveActionLogEntry['type']; targetId: string }, update: () => void) => {
     if (blocked || seconds <= 0) return;
+    const startedAt = Math.round(elapsedMs);
+    const completedAt = startedAt + durationSeconds * 1000;
+    if (completedAt > plan.durationSeconds * 1000) return;
     setBlockLabel(label);
     setBlockedUntil(Date.now() + durationSeconds * 1000);
     timeoutRef.current = window.setTimeout(() => {
       update();
+      actionSeqRef.current += 1;
+      actionLogRef.current.push({
+        id: `${action.type}-${actionSeqRef.current}`,
+        type: action.type,
+        targetId: action.targetId,
+        startedAtMs: startedAt,
+        completedAtMs: completedAt,
+      });
       setBlockLabel(null);
       timeoutRef.current = null;
     }, durationSeconds * 1000);
@@ -605,14 +676,14 @@ function ActiveStage({ state, dispatch, busy: _busy }: { state: GameState; dispa
   const answerMessage = () => {
     const message = visibleMessages[0];
     if (!message) return;
-    runAction(1, 'отвечаете на сообщение', () => {
+    runAction(1, 'отвечаете на сообщение', { type: 'answer', targetId: message.id }, () => {
       setAnsweredIds((value) => value.includes(message.id) ? value : [...value, message.id]);
       setLastResult(null);
     });
   };
   const runCall = () => {
     if (availableCallCount <= 0 || !currentCall) return;
-    runAction(plan.callDurationSeconds, 'идет созвон', () => {
+    runAction(plan.callDurationSeconds, 'идет созвон', { type: 'call', targetId: currentCall.id }, () => {
       setCalls((value) => ({
         held: value.held + 1,
         buy: value.buy + (currentCall.buy ? 1 : 0),
@@ -628,7 +699,7 @@ function ActiveStage({ state, dispatch, busy: _busy }: { state: GameState; dispa
     if (availableChatCount <= 0 || !currentChat) return;
     const isPostCall = Boolean(currentPostCallChat);
     const buy = isPostCall ? currentChat.followupBuy : currentChat.buy;
-    runAction(plan.chatDurationSeconds, 'продаете в переписке', () => {
+    runAction(plan.chatDurationSeconds, 'продаете в переписке', { type: isPostCall ? 'post_call_chat' : salesMode === 'site' || salesMode === 'webinar' ? 'site_chat' : 'direct_chat', targetId: currentChat.id }, () => {
       setChats((value) => ({
         held: value.held + 1,
         direct: value.direct + (isPostCall ? 0 : 1),
@@ -650,11 +721,13 @@ function ActiveStage({ state, dispatch, busy: _busy }: { state: GameState; dispa
           </div>
           <h2>Реклама</h2>
           <div className="v3-runner">
-            {plan.adEvents.map((event) => (
-              <span key={event.id} className={event.hot && event.second <= elapsed ? 'is-hot' : undefined}>
-                {displayAdEventLabel(event.label)}
-              </span>
-            ))}
+            <div className="v3-runner-track">
+              {[0, 1].flatMap((copy) => plan.adEvents.map((event) => (
+                <span key={`${copy}-${event.id}`} className={event.hot ? 'is-hot' : undefined}>
+                  {displayAdEventLabel(event.label)}
+                </span>
+              )))}
+            </div>
           </div>
           <b>Количество показов {views.toLocaleString('ru-RU')}</b>
           <h2>Прогрев</h2>
@@ -759,6 +832,10 @@ function ReportCard({
   showAttemptTitle?: boolean;
 }) {
   const applications = report.applications ?? report.interested;
+  const hasCalls = report.callsHeld > 0 || report.callsBuy > 0 || report.callsNoBuy > 0;
+  const viralEvents = report.viralEventsCount ?? 0;
+  const viralViews = report.viralViews ?? 0;
+  const overloadedByViral = viralEvents > 0 && (report.capacityLoss ?? report.lost) > 0;
   const insight = getV3AttemptInsight(report, productPrice, {
     productType: state.v3.productType,
     productName: state.launchPlan.productName,
@@ -777,29 +854,35 @@ function ReportCard({
       </div>
       <dl className="v3-report-list">
         <div>
-          <dt>Длительность</dt>
+          <dt>Запуск шел</dt>
           <dd>{formatCount(report.daysSpent, 'день', 'дня', 'дней')}</dd>
         </div>
         <div>
           <dt>Энергия</dt>
-          <dd>потрачено {report.energySpent}</dd>
+          <dd>потрачено {report.energySpent}%</dd>
         </div>
         <div>
-          <dt>Реклама</dt>
+          <dt>Инструмент рекламы</dt>
           <dd>{report.adTitle}</dd>
         </div>
         <div>
-          <dt>Прогрев</dt>
+          <dt>Инструмент прогрева</dt>
           <dd>{report.warmupTitle}</dd>
         </div>
         <div>
-          <dt>Продажи</dt>
+          <dt>Инструмент продажи</dt>
           <dd>{report.salesTitle}</dd>
         </div>
       </dl>
       <div className="v3-report-section">
         <strong>Поток заявок</strong>
         <p>{report.views.toLocaleString('ru-RU')} просмотров</p>
+        {viralEvents > 0 && (
+          <p>Залетевший контент: {formatCount(viralEvents, 'событие', 'события', 'событий')}, +{viralViews.toLocaleString('ru-RU')} просмотров</p>
+        )}
+        {overloadedByViral && (
+          <p>Вы получили резкий вход заявок, но система обработки не выдержала: потеряно {report.lost} заявок из-за очереди.</p>
+        )}
         <p>Новых лидов: {report.newLeads}</p>
         <p>Оставили заявку: {applications}</p>
         <p>Остыли и ушли: {report.lost}</p>
@@ -807,12 +890,14 @@ function ReportCard({
       </div>
       {full && (
         <>
-          <div className="v3-report-section">
-            <strong>Созвоны</strong>
-            <p>Проведено: {report.callsHeld}</p>
-            <p>Купили: {report.callsBuy}</p>
-            <p>Не купили: {report.callsNoBuy}</p>
-          </div>
+          {hasCalls && (
+            <div className="v3-report-section">
+              <strong>Созвоны</strong>
+              <p>Проведено: {report.callsHeld}</p>
+              <p>Купили: {report.callsBuy}</p>
+              <p>Не купили: {report.callsNoBuy}</p>
+            </div>
+          )}
           <div className="v3-report-section">
             <strong>Переписка</strong>
             <p>Проведено: {report.chatsHeld}</p>
@@ -828,7 +913,7 @@ function ReportCard({
           {report.siteVisits > 0 && (
             <div className="v3-report-section">
               <strong>{report.salesTitle.includes('Автовебинар') ? 'Автовебинар' : 'Сайт'}</strong>
-              <p>Посетителей: {report.siteVisits}</p>
+              <p>{report.salesTitle.includes('Автовебинар') ? 'Зрителей' : 'Посетителей'}: {report.siteVisits}</p>
               <p>Купили: {report.siteBuys}</p>
               <p>Написали: {report.siteMessages}</p>
             </div>
@@ -873,6 +958,37 @@ function approvedDreams(gender: GameState['player']['avatarGender']) {
   return gender === 'male' ? male : female;
 }
 
+function selectedDreamSummary(state: GameState, gender: GameState['player']['avatarGender']): { titles: string; total: number } {
+  const choices = (state.v3.dreamChoices ?? []).length > 0
+    ? state.v3.dreamChoices
+    : legacyDreamChoices(state, gender);
+  return {
+    titles: choices.length > 0 ? choices.map((choice) => choice.title).join(' + ') : 'мечту',
+    total: choices.reduce((sum, choice) => sum + choice.price, 0),
+  };
+}
+
+function legacyDreamChoices(state: GameState, gender: GameState['player']['avatarGender']): V3DreamChoice[] {
+  const approved = approvedDreams(gender);
+  return state.launchPlan.dreams.map((id) => {
+    const cleanId = id.replace(/^v3:/, '');
+    if (id.startsWith('custom:')) {
+      return {
+        id,
+        title: state.v3.customDreamTitle ?? id.replace('custom:', ''),
+        price: state.v3.customDreamPrice ?? 0,
+        custom: true,
+      };
+    }
+    const dream = approved.find((item) => item.id === cleanId);
+    return dream ? { ...dream } : { id: cleanId, title: cleanId, price: 0 };
+  });
+}
+
+function formatRubText(value: number): string {
+  return `${value.toLocaleString('ru-RU')} руб.`;
+}
+
 function adviceTitle(category: V3AdviceCategory): string {
   if (category === 'ads') return 'Совет по рекламе';
   if (category === 'warmup') return 'Совет по прогреву';
@@ -904,6 +1020,17 @@ function activeOptionDescription(
 
 function formatConversion(value: number): string {
   return `${(value * 100).toLocaleString('ru-RU', { maximumFractionDigits: 1 })}%`;
+}
+
+function toDativeName(name: string): string {
+  const trimmed = name.trim();
+  if (!trimmed) return 'персонажу';
+  const last = trimmed.slice(-1).toLocaleLowerCase('ru-RU');
+  if (last === 'а') return `${trimmed.slice(0, -1)}е`;
+  if (last === 'я') return `${trimmed.slice(0, -1)}е`;
+  if (last === 'й' || last === 'ь') return `${trimmed.slice(0, -1)}ю`;
+  if ('еёиоуюыэ'.includes(last)) return trimmed;
+  return `${trimmed}у`;
 }
 
 function formatCount(value: number, one: string, few: string, many: string): string {
