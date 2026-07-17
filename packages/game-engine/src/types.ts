@@ -100,6 +100,7 @@ export type FlowStep =
   | 'v3_rest'
   | 'v3_past_runs'
   | 'v3_pre_action_summary'
+  | 'v3_launch_time_blocked'
   | 'v3_action_select'
   | 'v3_active_intro'
   | 'v3_active_stage'
@@ -743,6 +744,8 @@ export type GameCommand =
   | { commandId: string; type: 'v3_request_advice'; payload: { category: V3AdviceCategory; option: V3AdviceOption } }
   | { commandId: string; type: 'v3_rest'; payload: { days: 1 | 2 | 3 } }
   | { commandId: string; type: 'v3_begin_action_plan'; payload?: Record<string, never> }
+  | { commandId: string; type: 'v3_change_launch_plan'; payload?: Record<string, never> }
+  | { commandId: string; type: 'v3_finish_launch'; payload?: Record<string, never> }
   | { commandId: string; type: 'v3_ack_pre_action_summary'; payload?: Record<string, never> }
   | { commandId: string; type: 'v3_select_active'; payload: { kind: V3SelectionKind; key: string } }
   | { commandId: string; type: 'v3_start_active_stage'; payload?: Record<string, never> }

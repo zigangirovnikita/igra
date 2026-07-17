@@ -358,7 +358,8 @@ export function restV3(state: GameState, days: 1 | 2 | 3): GameState {
 export function beginV3ActionPlan(state: GameState): GameState {
   const preparationDays = calculatePreparationDays(state.v3.plannedPreparations);
   if (state.resources.day + preparationDays > 30) {
-    throw new Error('Осталось меньше времени, чем требуется для этого действия');
+    state.flow.step = 'v3_launch_time_blocked';
+    return state;
   }
   state.resources.day += preparationDays;
   const unlockedTitles = unlockPlannedPreparations(state);
@@ -393,6 +394,10 @@ export function startV3ActiveStage(state: GameState): GameState {
   if (!state.v3.activeSelection.ad || !state.v3.activeSelection.warmup || !state.v3.activeSelection.sales) {
     throw new Error('Выберите рекламу, прогрев и продажи перед стартом');
   }
+  if (!hasTimeForActiveStage(state)) {
+    state.flow.step = 'v3_launch_time_blocked';
+    return state;
+  }
   if (!state.v3.explanationSeen.activeStage) {
     state.v3.explanationSeen.activeStage = true;
     state.flow.step = 'v3_active_intro';
@@ -404,8 +409,26 @@ export function startV3ActiveStage(state: GameState): GameState {
 }
 
 export function startV3ActiveStageAfterIntro(state: GameState): GameState {
+  if (!hasTimeForActiveStage(state)) {
+    state.flow.step = 'v3_launch_time_blocked';
+    return state;
+  }
   openV3ActiveStageRuntime(state);
   state.flow.step = 'v3_active_stage';
+  return state;
+}
+
+export function changeV3BlockedLaunchPlan(state: GameState): GameState {
+  if (state.flow.step !== 'v3_launch_time_blocked') throw new Error('Invalid step');
+  const refundCost = state.v3.plannedPreparations.reduce((sum, item) => sum + item.cost, 0);
+  const refundEnergy = state.v3.plannedPreparations.reduce((sum, item) => sum + item.energyCost, 0);
+  state.resources.bank += refundCost;
+  state.resources.energy = Math.min(maxEnergy(state.player.superpower), state.resources.energy + refundEnergy);
+  state.metrics.expenses = Math.max(0, state.metrics.expenses - refundCost);
+  state.v3.plannedPreparations = [];
+  state.v3.lastPreparationSummary = null;
+  state.v3.activeSelection = { ad: null, warmup: null, sales: null };
+  state.flow.step = 'v3_reflection';
   return state;
 }
 
@@ -1230,6 +1253,10 @@ function activeStageDays(state: GameState): number {
   const warmupDays = state.v3.activeSelection.warmup ? ACTIVE_STAGE_WARMUP_DAYS : 0;
   const salesDays = state.v3.activeSelection.sales ? ACTIVE_STAGE_SALES_DAYS : 0;
   return ACTIVE_STAGE_BASE_DAYS + Math.max(adsDays, warmupDays, salesDays);
+}
+
+function hasTimeForActiveStage(state: GameState): boolean {
+  return state.resources.day + activeStageDays(state) <= 30;
 }
 
 function resolveStageContext(state: GameState): {

@@ -123,6 +123,54 @@ describe('commands and invariants', () => {
     expect(state.resources.energy).toBe(energy);
   });
 
+  it('shows a recoverable v3 screen when launch preparation no longer fits the remaining days', () => {
+    let state = createInitialState(scenarios[0].setup, config, 'v3_launch_time_blocked_seed');
+    state.resources.day = 29;
+    state = applyCommand(state, config, {
+      commandId: 'prepare_reels_self_late',
+      type: 'v3_confirm_preparation',
+      payload: { area: 'ads', instrumentId: 'reels', mode: 'self' },
+    });
+    const bankAfterPreparation = state.resources.bank;
+    const energyAfterPreparation = state.resources.energy;
+
+    state = applyCommand(state, config, {
+      commandId: 'begin_late_launch',
+      type: 'v3_begin_action_plan',
+      payload: {},
+    });
+
+    expect(state.flow.step).toBe('v3_launch_time_blocked');
+    expect(state.resources.day).toBe(29);
+
+    state = applyCommand(state, config, {
+      commandId: 'change_late_launch',
+      type: 'v3_change_launch_plan',
+      payload: {},
+    });
+
+    expect(state.flow.step).toBe('v3_reflection');
+    expect(state.v3.plannedPreparations).toHaveLength(0);
+    expect(state.resources.bank).toBe(bankAfterPreparation);
+    expect(state.resources.energy).toBeGreaterThan(energyAfterPreparation);
+  });
+
+  it('can finish the v3 game from the not-enough-time launch screen', () => {
+    let state = createInitialState(scenarios[0].setup, config, 'v3_finish_from_time_block_seed');
+    state.flow.step = 'v3_launch_time_blocked';
+
+    state = applyCommand(state, config, {
+      commandId: 'finish_time_blocked_launch',
+      type: 'v3_finish_launch',
+      payload: {},
+    });
+
+    expect(state.status).toBe('finished');
+    expect(state.flow.stage).toBe('final');
+    expect(state.flow.step).toBe('final_diagnosis');
+    expect(state.endingReason).toBe('time_finished');
+  });
+
   it('unlocks a confirmed v3 preparation for active stage selection', () => {
     let state = createInitialState(scenarios[0].setup, config, 'v3_unlock_preparation_seed');
     state = applyCommand(state, config, {

@@ -383,6 +383,18 @@ export function V3Flow({ state, config: _config, dispatch, busy }: Props) {
     );
   }
 
+  if (step === 'v3_launch_time_blocked') {
+    return (
+      <V3Screen gender={gender} image="prepare" title="Не хватает времени" busy={busy}>
+        <div className="v3-stack">
+          <p>Не хватает времени, чтобы выполнить этот запуск.</p>
+          <button className="v3-red-button" onClick={() => dispatch('v3_finish_launch')}>Завершить запуск</button>
+          <button className="btn-secondary" onClick={() => dispatch('v3_change_launch_plan')}>Изменить способ запуска</button>
+        </div>
+      </V3Screen>
+    );
+  }
+
   if (step === 'v3_action_select') {
     return (
       <V3Screen gender={gender} image="action" title={`Решите, что ${name} будет делать в этот раз`} busy={busy}>

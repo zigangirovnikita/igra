@@ -183,6 +183,13 @@ export function applyCommand(input: GameState, config: GameConfig, command: Game
     case 'v3_begin_action_plan':
       state = V3.beginV3ActionPlan(state);
       break;
+    case 'v3_change_launch_plan':
+      state = V3.changeV3BlockedLaunchPlan(state);
+      break;
+    case 'v3_finish_launch':
+      state.endingReason = 'time_finished';
+      state = finishGame(state, config);
+      break;
     case 'v3_ack_pre_action_summary':
       state = V3.ackV3PreActionSummary(state);
       break;

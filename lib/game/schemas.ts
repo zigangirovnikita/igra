@@ -158,6 +158,8 @@ export const commandRequestSchema = z.discriminatedUnion('type', [
   }) }),
   z.object({ ...base, type: z.literal('v3_rest'), payload: z.object({ days: z.union([z.literal(1), z.literal(2), z.literal(3)]) }) }),
   z.object({ ...base, type: z.literal('v3_begin_action_plan'), payload: z.object({}).optional() }),
+  z.object({ ...base, type: z.literal('v3_change_launch_plan'), payload: z.object({}).optional() }),
+  z.object({ ...base, type: z.literal('v3_finish_launch'), payload: z.object({}).optional() }),
   z.object({ ...base, type: z.literal('v3_ack_pre_action_summary'), payload: z.object({}).optional() }),
   z.object({ ...base, type: z.literal('v3_select_active'), payload: z.object({
     kind: v3SelectionKindSchema,
