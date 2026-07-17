@@ -6,6 +6,9 @@ export function compact(value: number): string {
   return new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(Math.round(value));
 }
 
+let commandSequence = 0;
+
 export function commandId(prefix: string): string {
-  return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+  commandSequence += 1;
+  return `${prefix}_${Date.now()}_${commandSequence}`;
 }

@@ -23,7 +23,7 @@ import {
 } from '@/packages/game-engine/src';
 import { PixelArtScene } from '@/components/game/PixelArtScene';
 
-type Dispatch = (actionType: string, payload?: Record<string, unknown>) => Promise<void>;
+type Dispatch = (actionType: string, payload?: Record<string, unknown>) => Promise<boolean>;
 
 type Props = {
   state: GameState;
@@ -58,6 +58,12 @@ export function V3Flow({ state, config: _config, dispatch, busy }: Props) {
   const partner = gender === 'male'
     ? { noun: 'жена', approached: 'подошла', said: 'сказала', went: 'Жена пока поехала' }
     : { noun: 'муж', approached: 'подошел', said: 'сказал', went: 'Муж пока поехал' };
+
+  useEffect(() => {
+    if (step !== 'v3_prepare_category') setPrepareArea(null);
+    if (step !== 'v3_advice_category') setAdviceCategory(null);
+    if (step !== 'v3_action_select') setChoosing(null);
+  }, [step]);
 
   useEffect(() => {
     if (step !== 'v3_dream') return;
@@ -107,7 +113,7 @@ export function V3Flow({ state, config: _config, dispatch, busy }: Props) {
       <V3Screen gender={gender} image="product" title={`Выберите, что будет продавать ${name}`} busy={busy}>
         <div className="v3-grid">
           {PRODUCT_ORDER.map((id) => (
-            <button key={id} className="v3-red-button" onClick={() => dispatch('v3_set_product', { productType: id })}>
+            <button key={id} className="v3-red-button" disabled={busy} onClick={() => dispatch('v3_set_product', { productType: id })}>
               {V3_PRODUCT_TITLES[id]}
             </button>
           ))}
@@ -121,7 +127,7 @@ export function V3Flow({ state, config: _config, dispatch, busy }: Props) {
     return (
       <V3Screen gender={gender} image="price" title={`В какую стоимость ${name} будет продавать ${state.launchPlan.productName}?`} busy={busy}
         button="Готово, дальше" onClick={() => dispatch('v3_set_price', { productPrice: Number(price || placeholder) })}>
-        <input className="setup-input" inputMode="numeric" value={price} onChange={(event) => setPrice(event.target.value)}
+        <input className="setup-input" inputMode="numeric" value={price} disabled={busy} onChange={(event) => setPrice(event.target.value)}
           placeholder={`Например: ${placeholder}`} />
         <p className="v3-muted">Минимально допустимый чек - 1000 ₽.</p>
       </V3Screen>
@@ -156,6 +162,7 @@ export function V3Flow({ state, config: _config, dispatch, busy }: Props) {
               key={dream.id}
               type="button"
               className={`v3-dream-row${selectedDreamIds.includes(dream.id) ? ' v3-dream-row--selected' : ''}`}
+              disabled={busy}
               onClick={() => setSelectedDreamIds((current) => (
                 current.includes(dream.id)
                   ? current.filter((id) => id !== dream.id)
@@ -168,8 +175,8 @@ export function V3Flow({ state, config: _config, dispatch, busy }: Props) {
           ))}
           <div className="v3-text-card">
             <strong>Свой вариант</strong>
-            <input className="setup-input" value={customDream.title} onChange={(e) => setCustomDream((prev) => ({ ...prev, title: e.target.value }))} placeholder="Что хотите купить?" />
-            <input className="setup-input" inputMode="numeric" value={customDream.price} onChange={(e) => setCustomDream((prev) => ({ ...prev, price: e.target.value }))} placeholder="Стоимость" />
+            <input className="setup-input" value={customDream.title} disabled={busy} onChange={(e) => setCustomDream((prev) => ({ ...prev, title: e.target.value }))} placeholder="Что хотите купить?" />
+            <input className="setup-input" inputMode="numeric" value={customDream.price} disabled={busy} onChange={(e) => setCustomDream((prev) => ({ ...prev, price: e.target.value }))} placeholder="Стоимость" />
           </div>
         </div>
       </V3Screen>
@@ -216,10 +223,10 @@ export function V3Flow({ state, config: _config, dispatch, busy }: Props) {
         onClick={() => dispatch('v3_open_reflection', { target: 'act' })}
       >
         <div className="v3-stack">
-          <button className="v3-red-button" onClick={() => dispatch('v3_open_reflection', { target: 'prepare' })}>Подготовиться</button>
-          <button className="v3-red-button" onClick={() => dispatch('v3_open_reflection', { target: 'advice' })}>Посоветоваться</button>
-          <button className="v3-red-button" onClick={() => dispatch('v3_open_reflection', { target: 'rest' })}>Восстановить энергию</button>
-          <button className="v3-red-button" onClick={() => dispatch('v3_open_reflection', { target: 'history' })}>Прошлые попытки</button>
+          <button className="v3-red-button" disabled={busy} onClick={() => dispatch('v3_open_reflection', { target: 'prepare' })}>Подготовиться</button>
+          <button className="v3-red-button" disabled={busy} onClick={() => dispatch('v3_open_reflection', { target: 'advice' })}>Посоветоваться</button>
+          <button className="v3-red-button" disabled={busy} onClick={() => dispatch('v3_open_reflection', { target: 'rest' })}>Восстановить энергию</button>
+          <button className="v3-red-button" disabled={busy} onClick={() => dispatch('v3_open_reflection', { target: 'history' })}>Прошлые попытки</button>
         </div>
       </V3Screen>
     );
@@ -232,9 +239,9 @@ export function V3Flow({ state, config: _config, dispatch, busy }: Props) {
         {!prepareArea ? (
           <div className="v3-stack">
             {(['warmup', 'sales', 'ads'] as V3PreparationArea[]).map((area) => (
-              <button key={area} className="v3-red-button" onClick={() => setPrepareArea(area)}>{AREA_TITLES[area]}</button>
+              <button key={area} className="v3-red-button" disabled={busy} onClick={() => setPrepareArea(area)}>{AREA_TITLES[area]}</button>
             ))}
-            <button className="btn-secondary" onClick={() => dispatch('v3_return_reflection')}>Назад</button>
+            <button className="btn-secondary" disabled={busy} onClick={() => dispatch('v3_return_reflection')}>Назад</button>
           </div>
         ) : (
           <div className="v3-stack">
@@ -242,16 +249,16 @@ export function V3Flow({ state, config: _config, dispatch, busy }: Props) {
               <div key={definition.id} className="v3-text-card">
                 <strong>{definition.title}</strong>
                 <div className="v3-grid">
-                  <PrepareButton state={state} definition={definition} area={prepareArea} mode="self" dispatch={dispatch} />
-                  <PrepareButton state={state} definition={definition} area={prepareArea} mode="expert" dispatch={dispatch} />
+                  <PrepareButton state={state} definition={definition} area={prepareArea} mode="self" dispatch={dispatch} busy={busy} />
+                  <PrepareButton state={state} definition={definition} area={prepareArea} mode="expert" dispatch={dispatch} busy={busy} />
                 </div>
               </div>
             ))}
             <div className="v3-secondary-actions">
-              <button className="btn-secondary" onClick={() => setPrepareArea(null)}>К категориям</button>
-              <button className="btn-secondary" onClick={() => {
-                setPrepareArea(null);
-                void dispatch('v3_return_reflection');
+              <button className="btn-secondary" disabled={busy} onClick={() => setPrepareArea(null)}>К категориям</button>
+              <button className="btn-secondary" disabled={busy} onClick={async () => {
+                const ok = await dispatch('v3_return_reflection');
+                if (ok) setPrepareArea(null);
               }}>В меню рефлексии</button>
             </div>
           </div>
@@ -266,9 +273,9 @@ export function V3Flow({ state, config: _config, dispatch, busy }: Props) {
         {!adviceCategory ? (
           <div className="v3-stack">
             {(['ads', 'warmup', 'sales'] as V3AdviceCategory[]).map((category) => (
-              <button key={category} className="v3-red-button" onClick={() => setAdviceCategory(category)}>{adviceTitle(category)}</button>
+              <button key={category} className="v3-red-button" disabled={busy} onClick={() => setAdviceCategory(category)}>{adviceTitle(category)}</button>
             ))}
-            <button className="btn-secondary" onClick={() => dispatch('v3_return_reflection')}>Назад</button>
+            <button className="btn-secondary" disabled={busy} onClick={() => dispatch('v3_return_reflection')}>Назад</button>
           </div>
         ) : (
           <div className="v3-stack">
@@ -276,7 +283,7 @@ export function V3Flow({ state, config: _config, dispatch, busy }: Props) {
               <button
                 key={option}
                 className="v3-red-button"
-                disabled={Boolean(state.v3.loopAdviceUsed[`${adviceCategory}:${option}`])}
+                disabled={busy || Boolean(state.v3.loopAdviceUsed[`${adviceCategory}:${option}`])}
                 onClick={() => dispatch('v3_request_advice', { category: adviceCategory, option })}
               >
                 {adviceOptionTitle(option)}
@@ -284,10 +291,10 @@ export function V3Flow({ state, config: _config, dispatch, busy }: Props) {
               </button>
             ))}
             <div className="v3-secondary-actions">
-              <button className="btn-secondary" onClick={() => setAdviceCategory(null)}>К советам</button>
-              <button className="btn-secondary" onClick={() => {
-                setAdviceCategory(null);
-                void dispatch('v3_return_reflection');
+              <button className="btn-secondary" disabled={busy} onClick={() => setAdviceCategory(null)}>К советам</button>
+              <button className="btn-secondary" disabled={busy} onClick={async () => {
+                const ok = await dispatch('v3_return_reflection');
+                if (ok) setAdviceCategory(null);
               }}>В меню рефлексии</button>
             </div>
           </div>
@@ -333,10 +340,10 @@ export function V3Flow({ state, config: _config, dispatch, busy }: Props) {
     return (
       <V3Screen gender={gender} image="rest" title="Восстановить энергию" busy={busy}>
         <div className="v3-stack">
-          <button className="v3-red-button" onClick={() => dispatch('v3_rest', { days: 1 })}>Отдохнуть 1 день (+20 энергии)</button>
-          <button className="v3-red-button" onClick={() => dispatch('v3_rest', { days: 2 })}>Отдохнуть 2 дня (+45 энергии)</button>
-          <button className="v3-red-button" onClick={() => dispatch('v3_rest', { days: 3 })}>Отдохнуть 3 дня (полное восстановление)</button>
-          <button className="btn-secondary" onClick={() => dispatch('v3_return_reflection')}>Назад</button>
+          <button className="v3-red-button" disabled={busy} onClick={() => dispatch('v3_rest', { days: 1 })}>Отдохнуть 1 день (+20 энергии)</button>
+          <button className="v3-red-button" disabled={busy} onClick={() => dispatch('v3_rest', { days: 2 })}>Отдохнуть 2 дня (+45 энергии)</button>
+          <button className="v3-red-button" disabled={busy} onClick={() => dispatch('v3_rest', { days: 3 })}>Отдохнуть 3 дня (полное восстановление)</button>
+          <button className="btn-secondary" disabled={busy} onClick={() => dispatch('v3_return_reflection')}>Назад</button>
         </div>
       </V3Screen>
     );
@@ -388,8 +395,8 @@ export function V3Flow({ state, config: _config, dispatch, busy }: Props) {
       <V3Screen gender={gender} image="prepare" title="Не хватает времени" busy={busy}>
         <div className="v3-stack">
           <p>Не хватает времени, чтобы выполнить этот запуск.</p>
-          <button className="v3-red-button" onClick={() => dispatch('v3_finish_launch')}>Завершить запуск</button>
-          <button className="btn-secondary" onClick={() => dispatch('v3_change_launch_plan')}>Изменить способ запуска</button>
+          <button className="v3-red-button" disabled={busy} onClick={() => dispatch('v3_finish_launch')}>Завершить запуск</button>
+          <button className="btn-secondary" disabled={busy} onClick={() => dispatch('v3_change_launch_plan')}>Изменить способ запуска</button>
         </div>
       </V3Screen>
     );
@@ -405,6 +412,7 @@ export function V3Flow({ state, config: _config, dispatch, busy }: Props) {
               <button
                 key={kind}
                 className={`v3-red-button v3-select-button${isSelected ? ' v3-select-button--selected' : ''}`}
+                disabled={busy}
                 onClick={() => setChoosing(kind)}
               >
                 <span>{isSelected ? '✓ ' : ''}Выбрать {KIND_TITLES[kind]}</span>
@@ -418,7 +426,7 @@ export function V3Flow({ state, config: _config, dispatch, busy }: Props) {
           </button>
           <button className="btn-secondary" disabled={busy} onClick={() => dispatch('v3_return_reflection')}>Вернуться к рефлексии</button>
         </div>
-        {choosing && <ActiveChoiceModal state={state} kind={choosing} dispatch={dispatch} onClose={() => setChoosing(null)} />}
+        {choosing && <ActiveChoiceModal state={state} kind={choosing} dispatch={dispatch} busy={busy} onClose={() => setChoosing(null)} />}
       </V3Screen>
     );
   }
@@ -495,18 +503,20 @@ function PrepareButton({
   area,
   mode,
   dispatch,
+  busy,
 }: {
   state: GameState;
   definition: ReturnType<typeof getV3PreparationDisplayOptions>[number];
   area: V3PreparationArea;
   mode: V3PreparationMode;
   dispatch: Dispatch;
+  busy: boolean;
 }) {
   const price = definition[mode === 'self' ? 'self' : 'expert'];
   const purchased = isPreparationPurchased(state, area, definition.id, mode);
   const conversionLine = price.known ? ` · конверсия ${formatConversion(price.effectiveConversion)}` : '';
   return (
-    <button className={`v3-red-button${purchased ? ' v3-red-button--owned' : ''}`} disabled={purchased} onClick={() => {
+    <button className={`v3-red-button${purchased ? ' v3-red-button--owned' : ''}`} disabled={busy || purchased} onClick={() => {
       if (confirm(`${definition.title}: подтвердить вариант "${mode === 'self' ? 'самостоятельно' : 'со специалистом'}"?`)) {
         void dispatch('v3_confirm_preparation', { area, instrumentId: definition.id, mode });
       }
@@ -525,7 +535,7 @@ function isPreparationPurchased(state: GameState, area: V3PreparationArea, instr
       : state.v3.preparedTools.some((item) => item.area === area && item.instrumentId === instrumentId && item.mode === mode));
 }
 
-function ActiveChoiceModal({ state, kind, dispatch, onClose }: { state: GameState; kind: V3SelectionKind; dispatch: Dispatch; onClose: () => void }) {
+function ActiveChoiceModal({ state, kind, dispatch, busy, onClose }: { state: GameState; kind: V3SelectionKind; dispatch: Dispatch; busy: boolean; onClose: () => void }) {
   const options = getV3ActiveOptions(state, kind);
   const selectedKey = state.v3.activeSelection[kind];
   return (
@@ -539,10 +549,10 @@ function ActiveChoiceModal({ state, kind, dispatch, onClose }: { state: GameStat
               <button
                 key={option.key}
                 className={`choice-card${option.locked ? ' choice-card--disabled' : ''}${isSelected ? ' choice-card--selected' : ''}`}
-                disabled={option.locked}
-                onClick={() => {
-                  void dispatch('v3_select_active', { kind, key: option.key });
-                  onClose();
+                disabled={busy || option.locked}
+                onClick={async () => {
+                  const ok = await dispatch('v3_select_active', { kind, key: option.key });
+                  if (ok) onClose();
                 }}
               >
                 <span className="choice-content">
@@ -552,7 +562,7 @@ function ActiveChoiceModal({ state, kind, dispatch, onClose }: { state: GameStat
               </button>
             );
           })}
-          <button className="btn-secondary" onClick={onClose}>Закрыть</button>
+          <button className="btn-secondary" disabled={busy} onClick={onClose}>Закрыть</button>
         </div>
       </div>
     </div>

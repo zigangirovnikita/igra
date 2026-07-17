@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { GameConfig, GameState } from '@/packages/game-engine/src';
 import { SetupScene } from './SetupScene';
 import { ResumePrompt } from './ResumePrompt';
@@ -33,6 +33,7 @@ export function SceneEngine({ config }: Props) {
   const [gameState, setGameState] = useState<GameState | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const commandInFlightRef = useRef(false);
 
   useEffect(() => {
     const cached = readCachedGame();
@@ -59,6 +60,10 @@ export function SceneEngine({ config }: Props) {
     return () => window.clearTimeout(timeoutId);
   }, [error]);
 
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+  }, [phase, gameState?.sessionId, gameState?.flow.step]);
+
   async function handleSetupComplete(draft: SetupDraft) {
     setBusy(true);
     setError(null);
@@ -82,7 +87,12 @@ export function SceneEngine({ config }: Props) {
   }
 
   const dispatch = async (actionType: string, payload: Record<string, unknown> = {}) => {
-    if (!gameState || busy) return;
+    if (!gameState) return false;
+    if (commandInFlightRef.current) {
+      setError('Действие уже выполняется. Подождите секунду.');
+      return false;
+    }
+    commandInFlightRef.current = true;
     setBusy(true);
     setError(null);
     try {
@@ -104,14 +114,17 @@ export function SceneEngine({ config }: Props) {
         setError(data.error === 'version_conflict'
           ? 'Состояние игры обновлено. Повторите действие.'
           : 'Действие уже обработано. Показано актуальное состояние игры.');
-        return;
+        return false;
       }
       if (!response.ok) throw new Error(data.message ?? data.error ?? 'Ошибка команды');
       setGameState(data.state);
       cacheSessionPointer(data.state.sessionId);
+      return true;
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Ошибка связи');
+      return false;
     } finally {
+      commandInFlightRef.current = false;
       setBusy(false);
     }
   };
@@ -143,14 +156,18 @@ export function SceneEngine({ config }: Props) {
   }
 
   const { scene } = resolveCurrentScene(gameState);
-  const commonProps = { state: gameState, config, dispatch, busy };
+  const legacyDispatch = async (actionType: string, payload: Record<string, unknown> = {}) => {
+    await dispatch(actionType, payload);
+  };
+  const commonProps = { state: gameState, config, dispatch: legacyDispatch, busy };
+  const v3Props = { state: gameState, config, dispatch, busy };
 
   return (
     <main className="scene-shell">
       {error && <div className="scene-error" role="alert">{error}</div>}
       {scene !== 'finished' && <GameHud state={gameState} />}
       {scene === 'event' && <EventFlow {...commonProps} />}
-      {scene === 'v3' && <V3Flow {...commonProps} />}
+      {scene === 'v3' && <V3Flow {...v3Props} />}
       {scene === 'intro' && <IntroFlow {...commonProps} />}
       {scene === 'day_1' && <Day1Flow {...commonProps} />}
       {scene === 'day_2' && <Day2Flow {...commonProps} />}

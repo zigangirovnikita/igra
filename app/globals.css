@@ -1853,6 +1853,13 @@ body {
   mix-blend-mode: multiply;
 }
 
+.v3-pixel-scene--asset-missing {
+  min-height: 160px;
+  background:
+    repeating-linear-gradient(0deg, rgba(255,255,255,.18) 0 2px, transparent 2px 6px),
+    linear-gradient(180deg, #9de8f2 0%, #cdeec8 100%);
+}
+
 .v3-pixel-scene--notebook .v3-pixel-scene__asset { filter: saturate(1.08) contrast(1.04); }
 .v3-pixel-scene--laptop .v3-pixel-scene__asset { filter: brightness(0.76) saturate(1.08) hue-rotate(8deg); }
 .v3-pixel-scene--summary .v3-pixel-scene__asset { filter: saturate(1.14) contrast(1.05); }
@@ -2185,6 +2192,15 @@ body {
   display: block;
   width: 100%;
   height: auto;
+}
+
+.live-audit-image--missing {
+  min-height: 120px;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  color: var(--color-ink);
+  cursor: default;
 }
 
 .live-audit-hero {

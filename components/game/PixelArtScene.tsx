@@ -1,3 +1,6 @@
+'use client';
+
+import { useEffect, useState } from 'react';
 import type { Gender } from '@/packages/game-engine/src';
 
 type Variant =
@@ -27,6 +30,7 @@ export function PixelArtScene({
   variant: Variant;
   gender?: Gender;
 }) {
+  const [failed, setFailed] = useState(false);
   const sceneByVariant: Record<Variant, string> = {
     'sunset-duo': 'start',
     'beach-talk': 'beach-talk',
@@ -49,9 +53,13 @@ export function PixelArtScene({
   };
   const asset = `/assets/pixel-scenes/${sceneByVariant[variant]}-${gender}.gif`;
 
+  useEffect(() => {
+    setFailed(false);
+  }, [asset]);
+
   return (
-    <div className={`v3-pixel-scene v3-pixel-scene--${variant}`} aria-hidden="true">
-      <img className="v3-pixel-scene__asset" src={asset} alt="" draggable={false} />
+    <div className={`v3-pixel-scene v3-pixel-scene--${variant}${failed ? ' v3-pixel-scene--asset-missing' : ''}`} aria-hidden="true">
+      {!failed && <img className="v3-pixel-scene__asset" src={asset} alt="" draggable={false} onError={() => setFailed(true)} />}
       <div className="v3-scene-overlay v3-scene-overlay--scan" />
     </div>
   );

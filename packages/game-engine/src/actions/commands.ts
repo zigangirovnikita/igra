@@ -187,6 +187,7 @@ export function applyCommand(input: GameState, config: GameConfig, command: Game
       state = V3.changeV3BlockedLaunchPlan(state);
       break;
     case 'v3_finish_launch':
+      if (state.flow.step !== 'v3_launch_time_blocked') throw new Error('Invalid step');
       state.endingReason = 'time_finished';
       state = finishGame(state, config);
       break;

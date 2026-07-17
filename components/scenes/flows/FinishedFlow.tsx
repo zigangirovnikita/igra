@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { GameConfig, GameState } from '@/packages/game-engine/src';
 import type { AiReport } from '@/lib/ai/report';
 import { MultiChoiceScreen, NarrativeScreen } from '../ui';
@@ -25,6 +25,7 @@ export function FinishedFlow({ state, dispatch, busy }: FlowProps) {
   const [showLead, setShowLead] = useState(false);
   const [leadBusy, setLeadBusy] = useState(false);
   const [leadStatus, setLeadStatus] = useState<string | null>(null);
+  const finishRequestInFlightRef = useRef(false);
 
   // Команда завершения меняет каноническое состояние в SceneEngine. Не держим
   // устаревший экран подтверждения, пока родитель уже перешёл к финалу.
@@ -33,7 +34,8 @@ export function FinishedFlow({ state, dispatch, busy }: FlowProps) {
   }, [state]);
 
   const loadFinalReport = useCallback(async () => {
-    if (finishBusy || report) return;
+    if (finishRequestInFlightRef.current || finishBusy || report) return;
+    finishRequestInFlightRef.current = true;
     setFinishBusy(true);
     setFinishError(null);
     try {
@@ -53,6 +55,7 @@ export function FinishedFlow({ state, dispatch, busy }: FlowProps) {
     } catch (error) {
       setFinishError(error instanceof Error ? error.message : 'Не удалось получить диагностику');
     } finally {
+      finishRequestInFlightRef.current = false;
       setFinishBusy(false);
     }
   }, [finalState.sessionId, finalState.stateVersion, finishBusy, report]);

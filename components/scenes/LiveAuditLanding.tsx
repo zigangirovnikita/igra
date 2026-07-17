@@ -95,9 +95,11 @@ function ImageButton({
   className?: string;
   onOpen: (image: AuditImage) => void;
 }) {
+  const [failed, setFailed] = useState(false);
+
   return (
-    <button className={`live-audit-image${className ? ` ${className}` : ''}`} type="button" onClick={() => onOpen(image)}>
-      <img src={image.src} alt={image.alt} loading="lazy" />
+    <button className={`live-audit-image${className ? ` ${className}` : ''}${failed ? ' live-audit-image--missing' : ''}`} type="button" onClick={() => !failed && onOpen(image)} disabled={failed}>
+      {failed ? <span>Изображение временно недоступно</span> : <img src={image.src} alt={image.alt} loading="lazy" onError={() => setFailed(true)} />}
     </button>
   );
 }

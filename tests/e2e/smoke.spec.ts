@@ -102,12 +102,13 @@ test('terminal v3 run reaches final diagnosis and lead form', async ({ page }) =
 
   await expect(page.getByRole('heading', { name: /Активный этап №1 завершен/ })).toBeVisible();
   await page.getByRole('button', { name: 'Смотреть итог запуска' }).click();
-  await expect(page.getByRole('heading', { name: 'Вы выгорели' })).toBeVisible();
-
-  await page.getByRole('button', { name: 'Посмотреть итоги' }).click();
-  await expect(page.getByText('Источник объяснения')).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole('heading', { name: 'Игра была завершена.' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Главный вывод' })).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText('Источник объяснения')).toHaveCount(0);
   await page.getByRole('button', { name: 'Подробнее про реальный разбор' }).click();
-  await expect(page.getByRole('heading', { name: 'Получить бесплатную консультацию' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Живой разбор вашей воронки' })).toBeVisible();
+  await page.getByRole('button', { name: 'Оставить заявку' }).click();
+  await expect(page.getByRole('heading', { name: 'Оставить заявку на бесплатный разбор' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Отправить заявку' })).toBeVisible();
 });
 

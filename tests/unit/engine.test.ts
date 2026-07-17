@@ -171,6 +171,17 @@ describe('commands and invariants', () => {
     expect(state.endingReason).toBe('time_finished');
   });
 
+  it('rejects finishing a v3 launch outside the not-enough-time screen', () => {
+    const state = createInitialState(scenarios[0].setup, config, 'v3_reject_early_finish_seed');
+    state.flow.step = 'v3_reflection';
+
+    expect(() => applyCommand(state, config, {
+      commandId: 'finish_from_reflection',
+      type: 'v3_finish_launch',
+      payload: {},
+    })).toThrow('Invalid step');
+  });
+
   it('unlocks a confirmed v3 preparation for active stage selection', () => {
     let state = createInitialState(scenarios[0].setup, config, 'v3_unlock_preparation_seed');
     state = applyCommand(state, config, {
