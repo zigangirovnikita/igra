@@ -13,14 +13,16 @@
     "test:e2e": "playwright test",
     "validate:config": "tsx scripts/validate-config.ts",
     "simulate:balance": "tsx scripts/balance-sim.ts",
+    "simulate:balance:release": "tsx scripts/balance-sim.ts --runs 50000",
     "export:sessions": "tsx scripts/export-sessions.ts",
     "db:validate": "DATABASE_URL=postgresql://launch_game:launch_game@localhost:5432/launch_game prisma validate",
     "db:migrate:test": "DATABASE_URL=postgresql://launch_game:launch_game@localhost:5432/launch_game prisma migrate diff --from-empty --to-schema-datamodel prisma/schema.prisma --script",
-    "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm validate:config && pnpm build",
     "db:migrate:deploy": "prisma migrate deploy",
+    "db:backup": "bash scripts/db-backup.sh",
+    "db:restore": "bash scripts/db-restore.sh",
+    "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm validate:config && pnpm build",
     "test:flow": "vitest run tests/unit/flow tests/unit/engine",
-    "test:release": "pnpm check && pnpm db:validate && pnpm db:migrate:test && pnpm test:e2e",
-    "simulate:balance:release": "tsx scripts/balance-sim.ts --runs 50000"
+    "test:release": "pnpm check && pnpm db:validate && pnpm db:migrate:test && pnpm test:e2e"
   },
   "dependencies": {
     "@prisma/client": "^6.0.0",

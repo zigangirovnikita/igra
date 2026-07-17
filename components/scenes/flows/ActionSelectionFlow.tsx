@@ -16,7 +16,7 @@ const GROUP_LABELS: Record<string, string> = {
   route: 'Изменить путь клиента',
   processing: 'Улучшить обработку входящих',
   followup: 'Добавить дожим',
-  sale_method: 'Изменить способ продажи'
+  sale_method: 'Изменить способ продажи',
 };
 
 export function ActionSelectionFlow({ state, config, dispatch, busy }: FlowProps) {
@@ -28,30 +28,25 @@ export function ActionSelectionFlow({ state, config, dispatch, busy }: FlowProps
     return (
       <MultiChoiceScreen
         title="Что именно будем исправлять?"
-        choices={[
-          ...groups.map(g => ({
-            id: g,
-            label: GROUP_LABELS[g] || g
-          })),
-          { id: 'back', label: '← Назад' }
-        ]}
-        onConfirm={(id) => {
-          if (id === 'back') {
-            dispatch('choose_intent', { intent: null });
-          } else {
-            dispatch('choose_action_group', { group: id });
-          }
-        }}
+        description="Выберите часть системы, которую хотите изменить сегодня."
+        choices={groups.map((group) => ({
+          id: group,
+          label: GROUP_LABELS[group] || group,
+          icon: groupIcon(group),
+        }))}
+        onConfirm={(id) => dispatch('choose_action_group', { group: id })}
+        secondaryText="← Назад"
+        onSecondary={() => dispatch('choose_intent', { intent: null })}
         busy={busy}
         layout="list"
       />
     );
   }
 
-  const actions = config.actions.filter(a => {
-    if (a.intent !== intent) return false;
-    if (intent === 'fix_system' && !belongsToFixGroup(a.group, state.flow.selectedGroup)) return false;
-    if (a.uiVisible === false) return false;
+  const actions = config.actions.filter((action) => {
+    if (action.intent !== intent) return false;
+    if (intent === 'fix_system' && !belongsToFixGroup(action.group, state.flow.selectedGroup)) return false;
+    if (action.uiVisible === false) return false;
     return true;
   });
   const actionPool = intent === 'get_sales' ? availableSalesActionsOrFallback(state, config, actions) : actions;
@@ -59,44 +54,43 @@ export function ActionSelectionFlow({ state, config, dispatch, busy }: FlowProps
   return (
     <MultiChoiceScreen
       title={titleForIntent(intent, state.flow.selectedGroup)}
-      choices={[
-        ...actionPool.map(a => {
-          const availability = getActionAvailability(state, a as ActionConfig, config);
+      description="Варианты отличаются ценой, сроком и расходом энергии. Более дорогой вариант не требует сначала выполнять дешёвый."
+      choices={actionPool.map((action) => {
+        const availability = getActionAvailability(state, action as ActionConfig, config);
+        const finalCost = getDisplayedCost(state, config, action);
 
-          let finalCost = a.cost;
-          if (a.repeatPolicy === 'upgrade' && a.upgradeCost !== undefined && a.upgradeGroup) {
-            const hasPrevious = state.history.some(h => {
-              if (h.type !== 'action_completed' || !h.payload?.actionId) return false;
-              const prevA = config.actions.find(act => act.id === h.payload!.actionId);
-              return prevA?.upgradeGroup === a.upgradeGroup;
-            });
-            if (hasPrevious) finalCost = a.upgradeCost;
-          }
-
-          return {
-            id: a.id,
-            label: a.title,
-            description: `Время: ${a.days} дн. | Энергия: ${a.energyCost} | Цена: ${finalCost} ₽${availability.available ? '' : ` (${availability.reason})`}`,
-            disabled: !availability.available
-          };
-        }),
-        { id: 'back', label: '← Назад' }
-      ]}
-      onConfirm={(id) => {
-        if (id === 'back') {
-          if (intent === 'fix_system') {
-            dispatch('choose_action_group', { group: null });
-          } else {
-            dispatch('choose_intent', { intent: null });
-          }
+        return {
+          id: action.id,
+          label: action.title,
+          icon: actionIcon(action.id),
+          description: `Время: ${action.days} дн. · Энергия: ${action.energyCost} · Цена: ${finalCost.toLocaleString('ru-RU')} ₽`,
+          disabled: !availability.available,
+          disabledReason: availability.available ? undefined : availability.reason,
+        };
+      })}
+      onConfirm={(id) => dispatch('select_action', { actionId: id })}
+      secondaryText="← Назад"
+      onSecondary={() => {
+        if (intent === 'fix_system') {
+          void dispatch('choose_action_group', { group: null });
         } else {
-          dispatch('select_action', { actionId: id });
+          void dispatch('choose_intent', { intent: null });
         }
       }}
       busy={busy}
       layout="list"
     />
   );
+}
+
+function getDisplayedCost(state: GameState, config: GameConfig, action: ActionConfig): number {
+  if (action.upgradeCost === undefined || !action.upgradeGroup) return action.cost;
+  const hasPrevious = state.history.some((historyEntry) => {
+    if (historyEntry.type !== 'action_completed' || !historyEntry.payload?.actionId) return false;
+    const previousAction = config.actions.find((candidate) => candidate.id === historyEntry.payload?.actionId);
+    return previousAction?.upgradeGroup === action.upgradeGroup;
+  });
+  return hasPrevious ? action.upgradeCost : action.cost;
 }
 
 function belongsToFixGroup(actionGroup: string, selectedGroup: string | null): boolean {
@@ -120,4 +114,28 @@ function titleForIntent(intent: string | null, selectedGroup: string | null): st
   if (intent === 'restore_energy') return 'Как отдохнуть?';
   if (intent === 'fix_system' && selectedGroup) return GROUP_LABELS[selectedGroup] ?? 'Что изменить?';
   return 'Выберите действие';
+}
+
+function groupIcon(group: string): string {
+  if (group === 'demand') return '🔎';
+  if (group === 'product') return '📦';
+  if (group === 'nurture') return '🔥';
+  if (group === 'route') return '🧭';
+  if (group === 'processing') return '⚙️';
+  if (group === 'followup') return '🔁';
+  return '💳';
+}
+
+function actionIcon(actionId: string): string {
+  if (actionId.includes('guide')) return '📘';
+  if (actionId.includes('video')) return '🎬';
+  if (actionId.includes('bot')) return '🤖';
+  if (actionId.includes('website')) return '🌐';
+  if (actionId.includes('consultation') || actionId.includes('advice')) return '💬';
+  if (actionId.includes('demand') || actionId.includes('poll') || actionId.includes('interviews')) return '🔎';
+  if (actionId.includes('product')) return '📦';
+  if (actionId.includes('reels') || actionId.includes('stories')) return '📱';
+  if (actionId.includes('webinar') || actionId.includes('live')) return '🎙️';
+  if (actionId.includes('manager')) return '👤';
+  return '⚡';
 }

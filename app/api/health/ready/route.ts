@@ -5,8 +5,13 @@ export function GET() {
   try {
     const config = loadGameConfig();
     const production = process.env.NODE_ENV === 'production';
+    const hasLeadWebhook = Boolean(process.env.LEAD_WEBHOOK_URL && process.env.LEAD_WEBHOOK_SECRET);
+    const hasTelegramLeadDelivery = Boolean(process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_CHAT_ID);
     const missingProductionEnv = production
-      ? ['DATABASE_URL', 'SESSION_SECRET', 'LEAD_WEBHOOK_URL', 'LEAD_WEBHOOK_SECRET'].filter((key) => !process.env[key])
+      ? [
+        ...['DATABASE_URL', 'LEAD_ENCRYPTION_KEY'].filter((key) => !process.env[key]),
+        ...(!hasLeadWebhook && !hasTelegramLeadDelivery ? ['LEAD_DELIVERY'] : []),
+      ]
       : [];
 
     if (missingProductionEnv.length > 0) {

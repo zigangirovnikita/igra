@@ -1,55 +1,75 @@
 import { expect, test, type Page } from '@playwright/test';
 
 async function completeOnboarding(page: Page) {
-  // 1. Setup Phase
   await page.goto('/');
-  await page.getByRole('button', { name: 'Начать →' }).click();
-  await page.getByRole('button', { name: '👩 Женщина' }).click();
-  await page.getByPlaceholder('Например: Марина').fill('Марина');
-  await page.getByRole('button', { name: 'Дальше →' }).click();
-  await page.getByPlaceholder(/Психолог/).fill('Обучение вышивке');
-  await page.getByRole('button', { name: 'Начать историю →' }).click();
+  await page.getByRole('button', { name: 'Начать игру' }).click();
+  await page.getByRole('button', { name: 'Далее' }).click();
+  await page.getByRole('button', { name: 'Женщина' }).click();
+  await page.locator('input').fill('Марина');
+  await page.getByRole('button', { name: 'Готово, дальше' }).click();
+  await page.locator('input').fill('Эксперт по запускам');
+  await page.getByRole('button', { name: 'Готово, дальше' }).click();
+  await page.getByRole('button').filter({ hasText: 'Продажи' }).click();
+  await page.getByRole('button', { name: 'Готово, дальше' }).click();
+  await page.getByRole('button', { name: 'Начать сюжет!' }).click();
 
-  // 2. Intro Phase
-  await page.getByRole('button', { name: 'Дальше →' }).click();
-  await page.getByRole('button', { name: 'Начать первый день' }).click();
+  await page.getByRole('button', { name: 'Далее' }).click();
+  await page.getByRole('button', { name: 'Правила ясны!' }).click();
+  await page.getByRole('button', { name: 'Хорошо' }).click();
+  await page.getByRole('button', { name: 'Услуги' }).click();
+  await page.locator('input').fill('15000');
+  await page.getByRole('button', { name: 'Готово, дальше' }).click();
+  await page.getByRole('button').filter({ hasText: 'Новый айфон' }).click();
+  await page.getByRole('button', { name: 'Готово' }).click();
+  await page.getByRole('button', { name: 'Цель ясна' }).click();
+  await page.getByRole('button', { name: 'Понятно!' }).click();
+  await expect(page.getByRole('heading', { name: 'Меню рефлексии' })).toBeVisible();
+}
 
-  // 3. Day 1 Phase
-  // day1_product_type
-  await page.getByRole('button', { name: 'Консультации' }).click();
-  await page.getByRole('button', { name: 'Дальше →' }).click();
-  // day1_product_name
-  await page.locator('input').fill('Мой продукт'); // InputScreen default placeholder is "..."
-  await page.getByRole('button', { name: 'Дальше' }).click();
-  // day1_product_price
-  await page.locator('input').fill('5000');
-  await page.getByRole('button', { name: 'Дальше' }).click();
-  // day1_sale_method
-  await page.getByRole('button', { name: 'В переписке' }).click();
-  await page.getByRole('button', { name: 'Дальше →' }).click();
-  // day1_nurture
-  await page.getByRole('button', { name: 'Нет, сразу приглашать' }).click();
-  await page.getByRole('button', { name: 'Дальше →' }).click();
-  // day1_entry_point
-  await page.getByRole('button', { name: 'Напишет в директ' }).click();
-  await page.getByRole('button', { name: 'Дальше →' }).click();
-  // day1_business_goal
-  await page.getByRole('button', { name: 'Цель понятна' }).click();
-  // day1_dreams
-  await page.locator('.scene-choice-btn').first().click(); // changed from setup-dream-btn to scene-choice-btn
-  await page.getByRole('button', { name: 'Дальше →' }).click();
+async function forceTerminalActiveStage(page: Page) {
+  await page.evaluate(async () => {
+    const cachedRaw = localStorage.getItem('launch-game-cache');
+    if (!cachedRaw) throw new Error('Missing cached session');
+    const cached = JSON.parse(cachedRaw) as { sessionId: string };
+    let state = await fetchState(cached.sessionId);
 
-  // day1 finish
-  await page.getByRole('button', { name: 'Завершить первый день' }).click();
+    async function command(type: string, payload: Record<string, unknown> = {}) {
+      const response = await fetch(`/api/game/sessions/${cached.sessionId}/commands`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          commandId: `e2e_${type}_${crypto.randomUUID()}`,
+          expectedVersion: state.stateVersion,
+          type,
+          payload,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message ?? data.error ?? `Command failed: ${type}`);
+      state = data.state;
+    }
 
-  // Day 2
-  await page.getByRole('button', { name: 'Посмотреть свои ресурсы' }).click(); // day2_audience_intro
-  await page.getByRole('button', { name: 'Telegram' }).click(); // day2_audience_channels
-  await page.getByRole('button', { name: 'Дальше →' }).click();
-  await page.locator('input').fill('100'); // day2_telegram_views
-  await page.getByRole('button', { name: 'Дальше' }).click();
-  await page.getByRole('button', { name: 'Начать запуск' }).click();
-  await expect(page.getByRole('heading', { name: 'День 3' })).toBeVisible();
+    await command('v3_begin_action_plan');
+    await command('v3_select_active', { kind: 'ad', key: 'ad:unprepared' });
+    await command('v3_select_active', { kind: 'warmup', key: 'warmup:manual' });
+    await command('v3_select_active', { kind: 'sales', key: 'sales:intuition' });
+    await command('v3_start_active_stage');
+    await command('v3_next');
+    await command('v3_complete_active_stage', {
+      manualAnswers: 200,
+      directSalesChats: 200,
+      postCallChats: 200,
+      salesChats: 200,
+      calls: 60,
+    });
+
+    async function fetchState(sessionId: string) {
+      const response = await fetch(`/api/game/sessions/${sessionId}`);
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error ?? 'Failed to fetch state');
+      return data.state;
+    }
+  });
 }
 
 test('home and health endpoints respond', async ({ page, request }) => {
@@ -61,9 +81,9 @@ test('home and health endpoints respond', async ({ page, request }) => {
 
 test('mobile onboarding reaches initial plan with persistent HUD', async ({ page }) => {
   await completeOnboarding(page);
-  await expect(page.locator('.game-hud')).toContainText('День');
-  await expect(page.locator('.game-hud')).toContainText('Банк');
-  await expect(page.locator('.game-hud')).toContainText('Энергия');
+  await expect(page.getByText('День')).toBeVisible();
+  await expect(page.getByText('Банк')).toBeVisible();
+  await expect(page.getByText('Энергия')).toBeVisible();
 });
 
 test('reload offers canonical session resume', async ({ page }) => {
@@ -71,12 +91,30 @@ test('reload offers canonical session resume', async ({ page }) => {
   await page.reload();
   await expect(page.getByRole('heading', { name: 'Продолжить запуск?' })).toBeVisible();
   await page.getByRole('button', { name: 'Продолжить' }).click();
-  await expect(page.getByRole('heading', { name: 'День 3' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Меню рефлексии' })).toBeVisible();
+});
+
+test('terminal v3 run reaches final diagnosis and lead form', async ({ page }) => {
+  await completeOnboarding(page);
+  await forceTerminalActiveStage(page);
+  await page.reload();
+  await page.getByRole('button', { name: 'Продолжить' }).click();
+
+  await expect(page.getByRole('heading', { name: /Активный этап №1 завершен/ })).toBeVisible();
+  await page.getByRole('button', { name: 'Смотреть итог запуска' }).click();
+  await expect(page.getByRole('heading', { name: 'Игра была завершена.' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Главный вывод' })).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText('Источник объяснения')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Подробнее про реальный разбор' }).click();
+  await expect(page.getByRole('heading', { name: 'Живой разбор вашей воронки' })).toBeVisible();
+  await page.getByRole('button', { name: 'Оставить заявку' }).click();
+  await expect(page.getByRole('heading', { name: 'Оставить заявку на бесплатный разбор' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Отправить заявку' })).toBeVisible();
 });
 
 test('layout remains usable at 320px', async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 700 });
   await page.goto('/');
-  await expect(page.getByRole('button', { name: 'Начать →' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Начать игру' })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(320);
 });

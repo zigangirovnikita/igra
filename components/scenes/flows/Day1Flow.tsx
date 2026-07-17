@@ -120,7 +120,7 @@ export function Day1Flow({ state, config, dispatch, busy }: FlowProps) {
           { id: 'guide', label: 'Дать полезный материал' },
           { id: 'video_lesson', label: 'Через видеоурок' },
           { id: 'telegram', label: 'Рассказать историю и показать кейсы' },
-          { id: 'webinar', label: 'Провести отдельный прогрев' },
+          { id: 'webinar', label: 'Провести вебинар' },
           { id: 'uncertain', label: 'Пока не знаю' }
         ]}
         onConfirm={(id) => dispatch('set_nurture', { nurture: [id === 'uncertain' ? 'none' : id], uncertain: id === 'uncertain' })}
@@ -197,6 +197,7 @@ export function Day1Flow({ state, config, dispatch, busy }: FlowProps) {
     .map((id) => config.dreams.find((dream) => dream.id === id)?.title ?? id)
     .join(', ');
   const summaryDreamsTotal = state.launchPlan.dreams.reduce((sum, id) => sum + (config.dreams.find((dream) => dream.id === id)?.price ?? 0), 0);
+  const planRequirements = getPlanRequirements(state);
 
   return (
     <div className="scene-step scene-step--center">
@@ -207,8 +208,13 @@ export function Day1Flow({ state, config, dispatch, busy }: FlowProps) {
           {player} {sellVerb} {productTitle.toLowerCase()} «{state.launchPlan.productName}» по {(state.launchPlan.productPrice ?? 0).toLocaleString('ru-RU')} ₽.
         </p>
         <p className="scene-paragraph">
-          Продажа будет происходить {saleMethodLabels[state.launchPlan.plannedSaleMethod ?? ''] ?? 'по выбранному маршруту'}. Люди {entryLabels[state.launchPlan.plannedEntry ?? ''] ?? 'сделают следующий шаг'}, прогрев: {plannedNurture}.
+          План маршрута: продажа {saleMethodLabels[state.launchPlan.plannedSaleMethod ?? ''] ?? 'по выбранному маршруту'}. Люди {entryLabels[state.launchPlan.plannedEntry ?? ''] ?? 'сделают следующий шаг'}, прогрев: {plannedNurture}.
         </p>
+        {planRequirements.length > 0 && (
+          <p className="scene-paragraph">
+            Пока это только план. До первого привлечения нужно: {planRequirements.join(', ')}.
+          </p>
+        )}
         <p className="scene-paragraph">
           Бизнес-цель: {state.targets.targetSales} продаж и {state.targets.targetRevenue.toLocaleString('ru-RU')} ₽ выручки.
         </p>
@@ -228,4 +234,14 @@ export function Day1Flow({ state, config, dispatch, busy }: FlowProps) {
       </div>
     </div>
   );
+}
+
+function getPlanRequirements(state: GameState): string[] {
+  const requirements = new Set<string>();
+  if (state.launchPlan.plannedEntry === 'guide' || state.launchPlan.plannedNurture.includes('guide')) requirements.add('создать гайд');
+  if (state.launchPlan.plannedEntry === 'video_lesson' || state.launchPlan.plannedNurture.includes('video_lesson')) requirements.add('создать видеоурок');
+  if (state.launchPlan.plannedEntry === 'website') requirements.add('создать сайт');
+  if (state.launchPlan.plannedNurture.includes('telegram')) requirements.add('подготовить Telegram-прогрев');
+  if (state.launchPlan.plannedNurture.includes('webinar')) requirements.add('провести вебинар');
+  return [...requirements];
 }

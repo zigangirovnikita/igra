@@ -12,12 +12,81 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 jobs:
-  validate:
+  quality:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      DATABASE_URL: postgresql://launch_game:launch_game@localhost:5432/launch_game
+      SESSION_SECRET: ci-session-secret-at-least-32-bytes
+      LEAD_ENCRYPTION_KEY: MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
+      LEAD_WEBHOOK_URL: https://example.invalid/lead
+      LEAD_WEBHOOK_SECRET: ci-webhook-secret
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.7.0
+          run_install: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --reporter=silent
+      - run: pnpm exec prisma generate
+      - run: pnpm lint
+      - name: Typecheck
+        id: typecheck
+        continue-on-error: true
+        run: pnpm typecheck --pretty false 2>&1 | tee typecheck.log
+      - name: Upload typecheck log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: typecheck-log
+          path: typecheck.log
+          if-no-files-found: error
+          retention-days: 1
+      - name: Unit and integration tests
+        id: tests
+        continue-on-error: true
+        run: pnpm test --reporter=verbose 2>&1 | tee test.log
+      - name: Upload test log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-log
+          path: test.log
+          if-no-files-found: error
+          retention-days: 1
+      - run: pnpm validate:config
+      - name: Production build
+        id: build
+        continue-on-error: true
+        run: pnpm build 2>&1 | tee build.log
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: build.log
+          if-no-files-found: error
+          retention-days: 1
+      - name: Fail failed quality checks
+        if: steps.typecheck.outcome == 'failure' || steps.tests.outcome == 'failure' || steps.build.outcome == 'failure'
+        run: exit 1
+
+  database:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      DATABASE_URL: postgresql://launch_game:launch_game@localhost:5432/launch_game
     services:
       postgres:
-        image: postgres:15
+        image: postgres:15-alpine
         env:
           POSTGRES_USER: launch_game
           POSTGRES_PASSWORD: launch_game
@@ -26,52 +95,96 @@ jobs:
           - 5432:5432
         options: >-
           --health-cmd pg_isready
-          --health-interval 10s
+          --health-interval 5s
           --health-timeout 5s
-          --health-retries 5
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.7.0
+          run_install: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --reporter=silent
+      - run: pnpm exec prisma generate
+      - run: pnpm db:validate
+      - run: pnpm db:migrate:test
+      - run: pnpm exec prisma migrate deploy
 
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
     env:
       DATABASE_URL: postgresql://launch_game:launch_game@localhost:5432/launch_game
       SESSION_SECRET: ci-session-secret-at-least-32-bytes
-
+      LEAD_ENCRYPTION_KEY: MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
+      LEAD_WEBHOOK_URL: https://example.invalid/lead
+      LEAD_WEBHOOK_SECRET: ci-webhook-secret
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: launch_game
+          POSTGRES_PASSWORD: launch_game
+          POSTGRES_DB: launch_game
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - uses: actions/checkout@v4
-
-      - name: Install pnpm
-        run: corepack enable && pnpm install --frozen-lockfile
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.7.0
+          run_install: false
+      - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: 'pnpm'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --reporter=silent
+      - run: pnpm exec prisma generate
+      - run: pnpm exec prisma migrate deploy
+      - run: pnpm exec playwright install --with-deps chromium
+      - name: Playwright E2E
+        id: e2e
+        continue-on-error: true
+        run: pnpm test:e2e 2>&1 | tee e2e.log
+      - name: Upload E2E diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-diagnostics
+          path: |
+            e2e.log
+            test-results
+            playwright-report
+          if-no-files-found: warn
+          retention-days: 1
+      - name: Fail failed E2E
+        if: steps.e2e.outcome == 'failure'
+        run: exit 1
 
-      - name: Generate Prisma client
-        run: pnpm exec prisma generate
-
-      - name: Run lint
-        run: pnpm lint
-
-      - name: Run typecheck
-        run: pnpm typecheck
-
-      - name: Run tests
-        run: pnpm test
-
-      - name: Validate config
-        run: pnpm validate:config
-
-      - name: Validate DB schema
-        run: pnpm db:validate
-
-      - name: Test DB migrations
-        run: pnpm db:migrate:test
-
-      - name: Build Next.js
-        run: pnpm build
-
-      - name: Deploy DB migrations
-        run: pnpm exec prisma migrate deploy
-
-      - name: Run E2E tests
-        run: pnpm test:e2e
+  balance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      DATABASE_URL: postgresql://launch_game:launch_game@localhost:5432/launch_game
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.7.0
+          run_install: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --reporter=silent
+      - run: pnpm exec prisma generate
+      - run: pnpm simulate:balance:release

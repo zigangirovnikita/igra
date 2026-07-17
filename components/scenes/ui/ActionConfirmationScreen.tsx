@@ -44,7 +44,7 @@ export function ActionConfirmationScreen({
       <div className="scene-costs">
         <div className="cost-row">
           <span>Время:</span>
-          <strong>{days} {days === 1 ? 'день' : 'дней'}</strong>
+          <strong>{days} {formatDays(days)}</strong>
         </div>
         <div className={`cost-row ${!canAffordMoney ? 'cost-row--error' : ''}`}>
           <span>Деньги:</span>
@@ -84,4 +84,13 @@ export function ActionConfirmationScreen({
       </div>
     </div>
   );
+}
+
+function formatDays(days: number): string {
+  const lastTwo = days % 100;
+  if (lastTwo >= 11 && lastTwo <= 14) return 'дней';
+  const last = days % 10;
+  if (last === 1) return 'день';
+  if (last >= 2 && last <= 4) return 'дня';
+  return 'дней';
 }

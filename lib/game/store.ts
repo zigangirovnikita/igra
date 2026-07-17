@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import type { Diagnostics, GameState, SetupInput } from '@/packages/game-engine/src';
-
 import { prisma } from '../db/client';
+import { encryptField } from '../security/encryption';
 
 export type StoredSession = {
   id: string;
@@ -24,7 +24,7 @@ export type StoredLead = {
 
 export async function saveSession(session: StoredSession): Promise<StoredSession> {
   const updatedDate = new Date();
-  
+
   if (session.state.stateVersion === 0) {
     await prisma.gameSession.create({
       data: {
@@ -38,42 +38,34 @@ export async function saveSession(session: StoredSession): Promise<StoredSession
         currentState: session.state as any,
         createdAt: new Date(session.createdAt),
         updatedAt: updatedDate,
-      }
+      },
     });
   } else {
     const result = await prisma.gameSession.updateMany({
-      where: { 
-        id: session.id, 
-        stateVersion: session.state.stateVersion - 1 
+      where: {
+        id: session.id,
+        stateVersion: session.state.stateVersion - 1,
       },
       data: {
         stateVersion: session.state.stateVersion,
         currentState: session.state as any,
         updatedAt: updatedDate,
         status: session.state.status,
-      }
+      },
     });
-    
-    if (result.count === 0) {
-      throw new Error('Optimistic concurrency error: session version mismatch');
-    }
+    if (result.count === 0) throw new Error('Optimistic concurrency error: session version mismatch');
   }
-  
+
   session.updatedAt = updatedDate.toISOString();
   return session;
 }
 
 export async function getSession(id: string): Promise<StoredSession | null> {
-  const record = await prisma.gameSession.findUnique({
-    where: { id }
-  });
+  const record = await prisma.gameSession.findUnique({ where: { id } });
   if (!record) return null;
 
   let result: Diagnostics | null = null;
-  const resultRecord = await prisma.gameResult.findUnique({
-    where: { sessionId: id }
-  });
-
+  const resultRecord = await prisma.gameResult.findUnique({ where: { sessionId: id } });
   if (resultRecord) {
     result = resultRecord.diagnostics ? resultRecord.diagnostics as unknown as Diagnostics : {
       finalStatus: resultRecord.finalStatus,
@@ -97,26 +89,32 @@ export async function getSession(id: string): Promise<StoredSession | null> {
 }
 
 export async function saveLead(lead: StoredLead): Promise<StoredLead> {
+  const deliveredAt = lead.status === 'delivered' ? new Date() : null;
   await prisma.lead.upsert({
     where: { id: lead.id },
     update: {
       deliveryStatus: lead.status,
       deliveryAttempts: lead.attempts,
       webhookLastError: lead.lastError,
+      deliveredAt,
     },
     create: {
       id: lead.id,
       sessionId: lead.sessionId,
-      name: (lead.payload.name as string) || 'Lead',
-      contactEncrypted: (lead.payload.contact as string) || '',
-      product: (lead.payload.product as string) || '',
-      productPrice: (lead.payload.productPrice as number) || 0,
+      name: String(lead.payload.name || 'Lead'),
+      contactEncrypted: encryptField(String(lead.payload.contact || '')),
+      product: String(lead.payload.product || ''),
+      productPrice: Number(lead.payload.productPrice || 0),
+      socialLink: lead.payload.socialLink ? encryptField(String(lead.payload.socialLink)) : null,
+      comment: lead.payload.comment ? encryptField(String(lead.payload.comment)) : null,
       deliveryStatus: lead.status,
       deliveryAttempts: lead.attempts,
       webhookLastError: lead.lastError,
       privacyConsentAt: new Date(lead.createdAt),
+      marketingConsentAt: lead.payload.marketingConsent ? new Date(lead.createdAt) : null,
+      deliveredAt,
       createdAt: new Date(lead.createdAt),
-    }
+    },
   });
   return lead;
 }

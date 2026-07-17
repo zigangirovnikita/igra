@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { GameConfig, GameState } from '@/packages/game-engine/src';
 import { SetupScene } from './SetupScene';
 import { ResumePrompt } from './ResumePrompt';
@@ -8,8 +8,6 @@ import { GameHud } from './GameHud';
 import { resolveCurrentScene } from '@/lib/game/resolve-current-scene';
 import type { SetupDraft } from '@/lib/scenes/setupCopy';
 import { cacheSessionPointer, draftToSetupInput, readCachedGame } from '@/lib/scenes/setupMapping';
-
-// These components will be implemented next
 import { IntroFlow } from './flows/IntroFlow';
 import { Day1Flow } from './flows/Day1Flow';
 import { Day2Flow } from './flows/Day2Flow';
@@ -25,6 +23,8 @@ import { DayCompletionFlow } from './flows/DayCompletionFlow';
 import { EnergyCrisisFlow } from './flows/EnergyCrisisFlow';
 import { BudgetCrisisFlow } from './flows/BudgetCrisisFlow';
 import { FinishedFlow } from './flows/FinishedFlow';
+import { EventFlow } from './flows/EventFlow';
+import { V3Flow } from './flows/V3Flow';
 
 type Props = { config: GameConfig };
 
@@ -33,6 +33,7 @@ export function SceneEngine({ config }: Props) {
   const [gameState, setGameState] = useState<GameState | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const commandInFlightRef = useRef(false);
 
   useEffect(() => {
     const cached = readCachedGame();
@@ -53,58 +54,77 @@ export function SceneEngine({ config }: Props) {
       .finally(() => setBusy(false));
   }, []);
 
+  useEffect(() => {
+    if (!error) return;
+    const timeoutId = window.setTimeout(() => setError(null), 3000);
+    return () => window.clearTimeout(timeoutId);
+  }, [error]);
+
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+  }, [phase, gameState?.sessionId, gameState?.flow.step]);
+
   async function handleSetupComplete(draft: SetupDraft) {
     setBusy(true);
     setError(null);
     try {
-      const res = await fetch('/api/game/sessions', {
+      const response = await fetch('/api/game/sessions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(draftToSetupInput(draft)),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? 'Не удалось начать игру');
-
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error ?? 'Не удалось начать игру');
       const newState: GameState = data.state;
       setGameState(newState);
       setPhase('game');
       cacheSessionPointer(newState.sessionId);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Ошибка старта');
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Ошибка старта');
     } finally {
       setBusy(false);
     }
   }
 
-  // To be passed to flows to dispatch commands
   const dispatch = async (actionType: string, payload: Record<string, unknown> = {}) => {
-    if (!gameState || busy) return;
+    if (!gameState) return false;
+    if (commandInFlightRef.current) {
+      setError('Действие уже выполняется. Подождите секунду.');
+      return false;
+    }
+    commandInFlightRef.current = true;
     setBusy(true);
     setError(null);
     try {
-      const res = await fetch(`/api/game/sessions/${gameState.sessionId}/commands`, {
+      const response = await fetch(`/api/game/sessions/${gameState.sessionId}/commands`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           sessionId: gameState.sessionId,
-          commandId: `${actionType}_${Date.now()}`,
+          commandId: `${actionType}_${crypto.randomUUID()}`,
           expectedVersion: gameState.stateVersion,
           type: actionType,
-          payload
+          payload,
         }),
       });
-      const data = await res.json();
-      if (res.status === 409 && data.error === 'version_conflict' && data.state) {
+      const data = await response.json();
+      if (response.status === 409 && data.state) {
         setGameState(data.state);
-        setError('Состояние игры обновлено');
-        return;
+        cacheSessionPointer(data.state.sessionId);
+        setError(data.error === 'version_conflict'
+          ? 'Состояние игры обновлено. Повторите действие.'
+          : 'Действие уже обработано. Показано актуальное состояние игры.');
+        return false;
       }
-      if (!res.ok) throw new Error(data.error ?? 'Ошибка команды');
+      if (!response.ok) throw new Error(data.message ?? data.error ?? 'Ошибка команды');
       setGameState(data.state);
       cacheSessionPointer(data.state.sessionId);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Ошибка связи');
+      return true;
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Ошибка связи');
+      return false;
     } finally {
+      commandInFlightRef.current = false;
       setBusy(false);
     }
   };
@@ -118,7 +138,7 @@ export function SceneEngine({ config }: Props) {
     );
   }
 
-  if (phase === 'resume' && gameState) {
+  if (phase === 'resume') {
     return (
       <main className="scene-shell">
         {error && <div className="scene-error" role="alert">{error}</div>}
@@ -136,19 +156,21 @@ export function SceneEngine({ config }: Props) {
   }
 
   const { scene } = resolveCurrentScene(gameState);
-
-  const commonProps = { state: gameState, config, dispatch, busy };
+  const legacyDispatch = async (actionType: string, payload: Record<string, unknown> = {}) => {
+    await dispatch(actionType, payload);
+  };
+  const commonProps = { state: gameState, config, dispatch: legacyDispatch, busy };
+  const v3Props = { state: gameState, config, dispatch, busy };
 
   return (
     <main className="scene-shell">
       {error && <div className="scene-error" role="alert">{error}</div>}
-
       {scene !== 'finished' && <GameHud state={gameState} />}
-
+      {scene === 'event' && <EventFlow {...commonProps} />}
+      {scene === 'v3' && <V3Flow {...v3Props} />}
       {scene === 'intro' && <IntroFlow {...commonProps} />}
       {scene === 'day_1' && <Day1Flow {...commonProps} />}
       {scene === 'day_2' && <Day2Flow {...commonProps} />}
-
       {scene === 'daily_intro' && <DailyIntroFlow {...commonProps} />}
       {scene === 'daily_intent' && <DailyIntentFlow {...commonProps} />}
       {scene === 'action_selection' && <ActionSelectionFlow {...commonProps} />}
@@ -156,18 +178,15 @@ export function SceneEngine({ config }: Props) {
       {scene === 'action_confirmation' && <ActionConfirmationFlow {...commonProps} />}
       {scene === 'action_process' && <ActionProcessFlow {...commonProps} />}
       {scene === 'action_result' && <ActionResultFlow {...commonProps} />}
-
       {scene === 'pending_decision' && <PendingDecisionFlow {...commonProps} />}
       {scene === 'day_completion' && <DayCompletionFlow {...commonProps} />}
-
       {scene === 'energy_crisis' && <EnergyCrisisFlow {...commonProps} />}
       {scene === 'budget_notice' && <BudgetCrisisFlow {...commonProps} />}
       {scene === 'finished' && <FinishedFlow {...commonProps} />}
-
       {scene === 'unknown' && (
         <div style={{ padding: '20px', color: 'white' }}>
           <h2>Неизвестный экран</h2>
-          <pre>{JSON.stringify(gameState.status, null, 2)}</pre>
+          <pre>{JSON.stringify({ status: gameState.status, flow: gameState.flow }, null, 2)}</pre>
           <button className="btn-primary" onClick={() => {
             setGameState(null);
             setPhase('setup');

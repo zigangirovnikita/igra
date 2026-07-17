@@ -2,13 +2,30 @@ import type { GameConfig, GameState } from '../types';
 
 export function appendTriggeredEvents(previous: GameState, state: GameState, config: GameConfig, actionId?: string): GameState {
   const output = structuredClone(state);
-  const already = new Set(output.history.filter((entry) => entry.type === 'game_event').map((entry) => String(entry.payload?.eventId)));
-  const candidates = config.events.filter((template) => template.enabled && (!template.once || !already.has(template.id)))
+  const alreadyTriggered = new Set(
+    output.history
+      .filter((entry) => entry.type === 'game_event')
+      .map((entry) => String(entry.payload?.eventId)),
+  );
+  const candidates = config.events
+    .filter((template) => template.enabled && (!template.once || !alreadyTriggered.has(template.id)))
     .filter((template) => matches(template.id, previous, output, actionId))
     .sort((a, b) => b.priority - a.priority)
     .slice(0, 2);
+
   for (const template of candidates) {
-    output.history.push({ day: output.resources.day, type: 'game_event', message: template.messages[0] ?? template.id, payload: { eventId: template.id, sceneType: template.sceneType } });
+    const eventInstanceId = `${template.id}:${output.resources.day}:${output.stateVersion}:${output.history.length}`;
+    output.history.push({
+      day: output.resources.day,
+      type: 'game_event',
+      message: template.messages[0] ?? template.id,
+      payload: {
+        eventId: template.id,
+        eventInstanceId,
+        sceneType: template.sceneType,
+        lostLeadsDelta: Math.max(0, output.metrics.lostLeads - previous.metrics.lostLeads),
+      },
+    });
   }
   return output;
 }

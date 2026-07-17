@@ -1,4 +1,4 @@
-import type { GameState, GameConfig } from '@/packages/game-engine/src';
+import type { GameConfig, GameState } from '@/packages/game-engine/src';
 import { NarrativeScreen } from '../ui';
 
 type FlowProps = {
@@ -9,13 +9,16 @@ type FlowProps = {
 };
 
 export function DailyIntroFlow({ state, dispatch, busy }: FlowProps) {
-  let introText = `Начинается новый день запуска.`;
-  
-  if (state.lastOutcome) {
-    if (state.lastOutcome.salesDelta > 0) {
-      introText = 'Вчера пришли оплаты. Что будем делать сегодня?';
+  const previousReport = state.dayReports.at(-1);
+  let introText = 'Начинается новый день запуска.';
+
+  if (previousReport) {
+    if (previousReport.outcome.salesDelta > 0) {
+      introText = `Вчера пришло продаж: ${previousReport.outcome.salesDelta}. Выручка выросла на ${previousReport.outcome.revenueDelta.toLocaleString('ru-RU')} ₽.`;
+    } else if (previousReport.outcome.inboundDelta > 0) {
+      introText = `Вчера пришло ${previousReport.outcome.inboundDelta} входящих, но продаж пока не было.`;
     } else {
-      introText = 'Вчера продаж не было. Нужно что-то менять.';
+      introText = 'Вчера продаж не было. Стоит проверить спрос, маршрут или обработку заявок.';
     }
   }
 

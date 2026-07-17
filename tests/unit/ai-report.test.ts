@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { explainWithAi } from '../../lib/ai/report';
+import { buildFallbackReport, explainWithAi } from '../../lib/ai/report';
 import { applyCommand, createInitialState, finishGame } from '../../packages/game-engine/src';
 import { loadGameConfig } from '../../lib/config/game-config';
 import { scenarios } from '../fixtures/scenarios';
@@ -23,8 +23,7 @@ function buildFinishedState() {
       });
     }
   }
-  if (state.flow.step === 'final_reason') state = finishGame(state, config);
-  return state;
+  return finishGame(state, config);
 }
 
 const finished = buildFinishedState();
@@ -36,6 +35,11 @@ describe('AI report reliability', () => {
     const result = await explainWithAi(finished, finished.diagnostics!);
     expect(result.source).toBe('fallback');
     expect(result.report.resultSummary).toContain('продаж');
+  });
+
+  it('always gives at least one concrete next step in the fallback report', () => {
+    const report = buildFallbackReport(finished, finished.diagnostics!);
+    expect(report.alternativeActions.length).toBeGreaterThan(0);
   });
 
   it('retries one transient server failure and then falls back', async () => {

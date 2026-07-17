@@ -2,10 +2,15 @@ import type { SetupDraft } from './setupCopy';
 import type { PlayerProfile } from '@/packages/game-engine/src';
 
 export function draftToSetupInput(draft: SetupDraft): PlayerProfile {
+  if (!draft.superpower) {
+    throw new Error('Суперсила персонажа не выбрана');
+  }
+
   return {
     avatarGender: draft.gender,
     name: draft.name,
     niche: draft.niche,
+    superpower: draft.superpower,
   };
 }
 

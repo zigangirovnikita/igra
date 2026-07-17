@@ -1,5 +1,5 @@
-import type { GameState, GameConfig, DailyIntent, RouteSelection, ContentType } from '../types';
-import { getActionAvailability, findAction } from '../actions/availability';
+import type { ContentType, DailyIntent, GameConfig, GameState, RouteSelection } from '../types';
+import { findAction, getActionAvailability } from '../actions/availability';
 import { deriveNextPendingDecision } from './pending-decisions';
 import { generateMiniGameSession } from '../calculations/minigame';
 
@@ -37,7 +37,6 @@ export function chooseIntent(state: GameState, config: GameConfig, intent: Daily
 export function chooseActionGroup(state: GameState, group: string | null): GameState {
   if (!group) {
     state.flow.selectedGroup = null;
-    // Keep on action_list to re-select group
     return state;
   }
   if (state.flow.step !== 'action_list') throw new Error('Invalid step for action group selection');
@@ -52,38 +51,28 @@ export function selectAction(state: GameState, config: GameConfig, actionId: str
   const availability = getActionAvailability(state, action, config);
   if (!availability.available) throw new Error(availability.reason);
 
-  if (action.configurationSteps && action.configurationSteps.length > 0) {
-    state.pendingAction = {
-      actionId,
-      selectedAtDay: state.resources.day,
-      confirmed: false
-    };
-    state.flow.step = 'action_configuration';
-  } else {
-    state.pendingAction = {
-      actionId,
-      selectedAtDay: state.resources.day,
-      confirmed: true
-    };
-    state.flow.step = 'action_confirmation';
-  }
+  state.pendingAction = {
+    actionId,
+    selectedAtDay: state.resources.day,
+    confirmed: !(action.configurationSteps && action.configurationSteps.length > 0),
+  };
+  state.flow.step = state.pendingAction.confirmed ? 'action_confirmation' : 'action_configuration';
   return state;
 }
 
 export function configureAction(
   state: GameState,
-  payload: { contentType?: ContentType; route?: RouteSelection; targetCohortId?: string }
+  payload: { contentType?: ContentType; route?: RouteSelection; targetCohortId?: string },
 ): GameState {
   if (state.flow.step !== 'action_configuration') throw new Error('Invalid step for action configuration');
   if (!state.pendingAction) throw new Error('No pending action to configure');
   if (payload.contentType) state.pendingAction.contentType = payload.contentType;
-  
+
   if (payload.route) {
     const assetError = validateRouteAssets(state, payload.route);
     if (assetError) throw new Error(assetError);
     state.pendingAction.temporaryRoute = payload.route;
   }
-  
   if (payload.targetCohortId) state.pendingAction.targetCohortId = payload.targetCohortId;
 
   const actionNeedsDestination = Boolean(payload.contentType) && !payload.route;
@@ -101,8 +90,6 @@ export function cancelPendingAction(state: GameState): GameState {
   state.flow.step = 'action_list';
   return state;
 }
-
-// confirmAction, process action, result are in outcome.ts and engine.ts
 
 export function completeDay(state: GameState, config: GameConfig): GameState {
   if (state.flow.step !== 'day_summary') {
@@ -122,9 +109,10 @@ export function completeDay(state: GameState, config: GameConfig): GameState {
     return state;
   }
 
+  state.resources.day += 1;
   state.flow.step = 'daily_intro';
+  state.flow.selectedIntent = null;
 
-  // Advance pending decisions / deferred cohorts
   for (const cohort of state.cohorts) {
     if (cohort.deferredUntilDay !== null && cohort.deferredUntilDay <= state.resources.day) {
       if (cohort.inboundDecision === 'deferred') cohort.inboundDecision = 'pending';
@@ -134,31 +122,25 @@ export function completeDay(state: GameState, config: GameConfig): GameState {
     }
   }
 
-  // Enforce pending decisions order at the start of the day
   state.pendingDecision = deriveNextPendingDecision(state);
   if (state.pendingDecision?.type === 'mini_game') {
     state.miniGame = generateMiniGameSession(state, state.pendingDecision.cohortId);
   }
-
   return state;
 }
 
 export function validateRouteAssets(state: GameState, route: RouteSelection): string | null {
-  if (route.entry === 'guide' && !state.assets.guide) return 'Нет ассета: Гайд';
-  if (route.entry === 'video_lesson' && !state.assets.videoLesson) return 'Нет ассета: Видеоурок';
-  if (route.entry === 'website' && !state.assets.website) return 'Нет ассета: Сайт';
-  
-  if (route.nurture.includes('guide') && !state.assets.guide) return 'Нет ассета: Гайд';
-  if (route.nurture.includes('video_lesson') && !state.assets.videoLesson) return 'Нет ассета: Видеоурок';
-  
-  if (route.processing === 'simple_bot' && !state.assets.simpleBot) return 'Нет ассета: Простой бот';
-  if (route.processing === 'ai_bot' && !state.assets.aiBot) return 'Нет ассета: ИИ Бот';
-  if (route.processing === 'manager' && !state.assets.manager) return 'Нет ассета: Менеджер';
-  if (route.processing === 'website_auto' && !state.assets.website) return 'Нет ассета: Сайт';
-  
-  if (route.saleMethod === 'website_auto' && !state.assets.website) return 'Нет ассета: Сайт';
-  
-  if (route.followup === 'bot' && !state.assets.simpleBot && !state.assets.aiBot) return 'Нет ассета: Бот для дожимов';
-  
+  if (route.entry === 'guide' && !state.assets.guide) return 'Сначала создайте гайд';
+  if (route.entry === 'video_lesson' && !state.assets.videoLesson) return 'Сначала создайте видеоурок';
+  if (route.entry === 'website' && !state.assets.website) return 'Сначала создайте сайт';
+  if (route.nurture.includes('guide') && !state.assets.guide) return 'Сначала создайте гайд';
+  if (route.nurture.includes('video_lesson') && !state.assets.videoLesson) return 'Сначала создайте видеоурок';
+  if (route.processing === 'simple_bot' && !state.assets.simpleBot) return 'Сначала создайте простого бота';
+  if (route.processing === 'ai_bot' && !state.assets.aiBot) return 'Сначала создайте ИИ-бота';
+  if (route.processing === 'manager' && !state.assets.manager) return 'Сначала наймите менеджера';
+  if (route.processing === 'website_auto' && !state.assets.website) return 'Сначала создайте сайт';
+  if (route.saleMethod === 'website_auto' && !state.assets.website) return 'Сначала создайте сайт';
+  if (route.saleMethod === 'bot_auto' && !state.assets.simpleBot && !state.assets.aiBot) return 'Сначала создайте бота';
+  if (route.followup === 'bot' && !state.assets.simpleBot && !state.assets.aiBot) return 'Сначала создайте бота для дожима';
   return null;
 }

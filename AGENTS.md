@@ -4,15 +4,19 @@
 
 Interactive mobile-first launch simulator «Проживи 30 дней запуска за 10 минут».
 
-The source of truth is `docs/game-flow-v2-tz.md`. If examples in older product notes conflict with it, follow the spec.
+The source of truth for the current game flow is `docs/game-flow-v3-miro-tz.md`.
+Old v1/v2 product specifications are not part of the active project context and must not be used as requirements.
+If older product notes, screenshots, or generated artifacts conflict with `docs/game-flow-v3-miro-tz.md`, follow the v3 spec.
 
 ## Working rules
 
 - **MANDATORY**: Before starting any architectural or UI work, read `docs/lessons_learned.md` to understand past decisions, corrected misinterpretations, and architectural fixes to avoid repeating mistakes.
-- Implement milestones 0–10 in the order defined by the spec.
+- Implement the current flow in the order defined by `docs/game-flow-v3-miro-tz.md`.
+- Record important product decisions, recurring bugs, and cleanup decisions in `docs/lessons_learned.md`.
 - Do not start final visual polish before the pure game engine, fixtures, and balance simulator pass.
 - Keep `packages/game-engine` framework-independent and deterministic.
 - Do not import React, Next.js, Prisma, browser APIs, or OpenAI inside the engine.
+- Treat old `day1_*`, `day2_*`, `daily_*`, `cohorts`, and `DirectMiniGame` UI/flow code as legacy compatibility unless a task explicitly targets old saved sessions. New product behavior belongs to v3.
 - Never use `Math.random()` in game calculations. Use keyed seeded randomness.
 - Never use `eval`, `new Function`, or executable expressions from JSON config.
 - Do not trust client-calculated metrics. The server applies commands through the same engine and stores canonical state.
@@ -23,31 +27,32 @@ The source of truth is `docs/game-flow-v2-tz.md`. If examples in older product n
 - AI explains deterministic diagnostics; it never calculates the game.
 - A lead submission is successful only after the server confirms storage and webhook delivery.
 - Do not add Figma or Sites hosting configuration.
+- Do not keep generated artifacts in the repository tree as source context: `.next`, `.pnpm-store`, `test-results`, `playwright-report`, coverage output, `.DS_Store`, and `tsconfig.tsbuildinfo` are disposable.
 
 ## Required verification
 
 For relevant changes run:
 
 ```bash
-npm run lint
-npm run typecheck
-npm run test
-npm run test:e2e
-npm run build
+pnpm lint
+pnpm typecheck
+pnpm test
+pnpm test:e2e
+pnpm build
 ```
 
 For engine or balance changes also run:
 
 ```bash
-npm run validate:config
-npm run simulate:balance -- --runs 50000
+pnpm validate:config
+pnpm simulate:balance -- --runs 50000
 ```
 
 For Prisma changes:
 
 ```bash
-npm run db:validate
-npm run db:migrate:test
+pnpm db:validate
+pnpm db:migrate:test
 ```
 
 ## Architecture
