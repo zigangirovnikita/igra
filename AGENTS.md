@@ -4,9 +4,10 @@
 
 Interactive mobile-first launch simulator «Проживи 30 дней запуска за 10 минут».
 
-The source of truth for the current game flow is `docs/game-flow-v3-miro-tz.md`.
-Old v1/v2 product specifications are not part of the active project context and must not be used as requirements.
-If older product notes, screenshots, or generated artifacts conflict with `docs/game-flow-v3-miro-tz.md`, follow the v3 spec.
+The source of truth for the target game flow is `docs/game-flow-v4-tz.md`.
+The running v3 flow is preserved only as a source of deterministic calculations and delivery integrations during the v4 migration.
+Old v1/v2/v3 product specifications are not active requirements unless `docs/game-flow-v4-tz.md` explicitly reuses a rule from them.
+If older product notes, screenshots, or generated artifacts conflict with `docs/game-flow-v4-tz.md`, follow the v4 spec.
 
 ## Working rules
 
