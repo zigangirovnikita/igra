@@ -54,7 +54,7 @@ export const V4_INSTRUMENTS: Record<V4InstrumentId, V4InstrumentDefinition> = {
   auto_webinar: value('auto_webinar', 'Автовебинар', false, 0.42, 0.08, 0.42, 0.22),
   chat: sales('chat', 'Переписка', true, 0.16),
   call: sales('call', 'Созвон', true, 0.25),
-  website: sales('website', 'Сайт', false, 0.11),
+  website: sales('website', 'Сайт', false, 0.04),
 };
 
 export const V4_STARTING_BANK = 100_000;
@@ -77,7 +77,7 @@ export function defaultV4Funnel(): V4FunnelStage[] {
 
 export function tutorialV4Funnel(): V4FunnelStage[] {
   return [
-    makeV4Stage('tutorial-1', 'paid_ads', 'expert', 'free', null, 55_000),
+    makeV4Stage('tutorial-1', 'paid_ads', 'expert', 'free', null, 95_000),
     makeV4Stage('tutorial-2', 'telegram', 'self', 'free', null, 14),
     makeV4Stage('tutorial-3', 'call', 'self', 'main_product', null, 1),
   ];

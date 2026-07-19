@@ -62,7 +62,7 @@ export function V4Result({ state, dispatch, busy }: { state: GameState; dispatch
       <div className="v4-result-grid">
         <Metric title="Потратили" value={rub(report.spent)} detail={report.spendBreakdown.map((item) => `${item.label}: ${rub(item.amount)}`).join(' · ') || 'Без расходов'} />
         <Metric title="Заработали" value={rub(report.totalRevenue)} detail={`Основной продукт: ${rub(report.mainProductRevenue)} · Трипваеры: ${rub(report.tripwireRevenue)}`} />
-        <Metric title="Потеряли потенциально" value={rub(report.lostPotentialRevenue)} detail={`Остыло/ушло заявок: ${report.manualQueueLost}`} />
+        <Metric title="Потеряли потенциально" value={rub(report.lostPotentialRevenue)} detail={`Остыло/ушло людей: ${report.lostPeople}`} />
         <Metric title="Итог в банке" value={rub(report.totalMoney)} detail={`После мечты: ${rub(report.afterDream)}`} />
       </div>
       <div className="v4-observations">

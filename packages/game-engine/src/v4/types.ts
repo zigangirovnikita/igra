@@ -90,6 +90,7 @@ export type V4AttemptReport = {
   result: 'not_reached' | 'dream_bought' | 'sustainable_win';
   stageResults: V4StageResult[];
   lostPotentialRevenue: number;
+  lostPeople: number;
   fallbackManualQueue: number;
   handledManualQueue: number;
   manualQueueLost: number;

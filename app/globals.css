@@ -222,14 +222,17 @@ select {
 
 .v4-screen {
   width: min(100%, 460px);
-  min-height: calc(100vh - 32px);
+  height: calc(100dvh - 16px);
   margin: 0 auto;
-  padding: 18px;
+  padding: 10px;
   color: #201828;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  overflow: hidden;
 }
 
 .v4-header {
-  margin-bottom: 18px;
+  margin-bottom: 8px;
 }
 
 .v4-kicker,
@@ -241,14 +244,16 @@ select {
 }
 
 .v4-header h1 {
-  font-size: 28px;
+  font-size: 22px;
   line-height: 1.05;
   margin: 0;
 }
 
 .v4-body {
   display: grid;
-  gap: 14px;
+  gap: 8px;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .v4-footer {
@@ -317,22 +322,47 @@ select {
   font-size: 12px;
 }
 
+.v4-danger {
+  color: #c61f5d;
+}
+
 .v4-builder-layout {
   display: grid;
-  grid-template-columns: 72px 1fr;
+  grid-template-columns: 1fr;
   gap: 12px;
   align-items: start;
+  min-height: 0;
+  height: 100%;
+}
+
+.v4-builder-layout--editing {
+  grid-template-columns: 58px 1fr;
 }
 
 .v4-stage-strip {
   display: grid;
-  gap: 8px;
+  gap: 6px;
   justify-items: center;
+  align-content: center;
+  height: 100%;
+  position: relative;
+}
+
+.v4-stage-strip::before {
+  content: "";
+  position: absolute;
+  top: 22px;
+  bottom: 42px;
+  left: 50%;
+  width: 4px;
+  transform: translateX(-50%);
+  background: #3b203a;
+  z-index: 0;
 }
 
 .v4-stage-tile,
 .v4-play-icon {
-  width: 58px;
+  width: 48px;
   aspect-ratio: 1;
   border: 3px solid var(--border);
   background: #bdf1ff;
@@ -341,6 +371,7 @@ select {
   color: #201828;
   font-size: 22px;
   position: relative;
+  z-index: 1;
 }
 
 .v4-stage-tile small {
@@ -354,31 +385,64 @@ select {
   background: #ffe46c;
 }
 
+.v4-stage-add {
+  width: 42px;
+  aspect-ratio: 1;
+  border: 3px solid var(--border);
+  background: #e23577;
+  color: white;
+  display: grid;
+  place-items: center;
+  font-size: 24px;
+  font-weight: 900;
+  z-index: 1;
+}
+
+.v4-builder-hint {
+  align-self: center;
+  justify-self: center;
+  width: min(270px, 100%);
+  border: 3px solid var(--border);
+  background: #fff7d9;
+  padding: 12px;
+  box-shadow: 4px 4px 0 rgba(36, 24, 41, 0.18);
+}
+
+.v4-builder-hint p {
+  margin: 0 0 8px;
+}
+
 .v4-tool-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-  max-height: 290px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 5px;
+  max-height: 188px;
   overflow: auto;
 }
 
 .v4-tool {
-  min-height: 74px;
+  min-height: 52px;
   border: 2px solid var(--border);
   background: #ffffff;
   display: grid;
   gap: 2px;
   justify-items: start;
-  padding: 8px;
+  padding: 5px;
   color: inherit;
 }
 
 .v4-tool span {
-  font-size: 20px;
+  font-size: 17px;
+}
+
+.v4-tool strong {
+  font-size: 11px;
+  line-height: 1.05;
 }
 
 .v4-tool small {
   color: #6a5c72;
+  font-size: 9px;
 }
 
 .v4-tool--selected {
@@ -389,7 +453,7 @@ select {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 8px;
-  margin: 10px 0;
+  margin: 6px 0;
 }
 
 .v4-segment button,
@@ -410,13 +474,15 @@ select {
 .v4-warning {
   border: 2px solid #c61f5d;
   background: #ffe3ec;
-  padding: 10px;
+  padding: 7px;
   font-weight: 800;
+  font-size: 12px;
 }
 
 .v4-footer-actions {
   display: grid;
   gap: 8px;
+  grid-template-columns: 1fr 1fr;
 }
 
 .v4-funnel-line {
@@ -455,18 +521,38 @@ select {
 .v4-ad-lane span:nth-child(3) { animation-delay: 1.8s; }
 
 .v4-funnel-play {
-  height: 390px;
+  height: min(48dvh, 360px);
   border: 4px solid var(--border);
   background: linear-gradient(#bdf1ff, #fff0aa);
   position: relative;
   overflow: hidden;
 }
 
+.v4-funnel-play::before {
+  content: "";
+  position: absolute;
+  left: 84px;
+  right: 28px;
+  top: 50%;
+  height: 4px;
+  background: rgba(59, 32, 58, .45);
+}
+
+.v4-funnel-play::after {
+  content: "";
+  position: absolute;
+  left: 110px;
+  top: 20px;
+  bottom: 20px;
+  width: 4px;
+  background: rgba(59, 32, 58, .45);
+}
+
 .v4-play-stages {
   position: absolute;
-  left: 14px;
-  top: 12px;
-  bottom: 12px;
+  left: 8px;
+  top: 8px;
+  bottom: 8px;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
@@ -481,6 +567,10 @@ select {
   font-weight: 800;
 }
 
+.v4-play-stage span {
+  display: none;
+}
+
 .v4-people-layer {
   position: absolute;
   inset: 0;
@@ -488,11 +578,11 @@ select {
 
 .v4-person {
   position: absolute;
-  width: 15px;
-  height: 22px;
+  width: 14px;
+  height: 20px;
   border: 2px solid #21162a;
   background: #ff9d31;
-  animation: v4-person-drop 5s linear infinite;
+  animation: v4-person-path 5s linear infinite;
 }
 
 .v4-person::before {
@@ -510,6 +600,28 @@ select {
 .v4-person--no { background: #e94444; }
 .v4-person--cold { background: #46a2f0; }
 .v4-person--warm { background: #ff9d31; }
+
+.v4-person--sold { animation-name: v4-person-sold; }
+.v4-person--no,
+.v4-person--cold { animation-name: v4-person-lost; }
+
+.v4-person em,
+.v4-person b {
+  position: absolute;
+  left: 16px;
+  top: -18px;
+  white-space: nowrap;
+  border: 2px solid var(--border);
+  background: white;
+  color: #201828;
+  font-size: 9px;
+  font-style: normal;
+  padding: 1px 4px;
+}
+
+.v4-person b {
+  color: #11823d;
+}
 
 .v4-action-panel {
   display: grid;
@@ -546,6 +658,27 @@ select {
   to { transform: translateY(90px); opacity: .2; }
 }
 
+@keyframes v4-person-path {
+  from { transform: translate(0, 0); opacity: 0; }
+  12% { opacity: 1; }
+  55% { transform: translate(42px, 0); opacity: 1; }
+  to { transform: translate(42px, 70px); opacity: .9; }
+}
+
+@keyframes v4-person-sold {
+  from { transform: translate(0, 0); opacity: 0; }
+  12% { opacity: 1; }
+  55% { transform: translate(46px, 0); }
+  to { transform: translate(150px, 0); opacity: 0; }
+}
+
+@keyframes v4-person-lost {
+  from { transform: translate(0, 0); opacity: 0; }
+  12% { opacity: 1; }
+  55% { transform: translate(34px, 0); }
+  to { transform: translate(-80px, 0); opacity: 0; }
+}
+
 @media (min-width: 720px) {
   .v4-screen {
     width: min(100%, 680px);
@@ -557,7 +690,7 @@ select {
   }
 
   .v4-footer-actions {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 

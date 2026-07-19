@@ -19,26 +19,26 @@ const INSTRUMENTS = Object.values(V4_INSTRUMENTS);
 const KIND_TITLES = { traffic: 'Реклама', value: 'Ценность', sales: 'Продажа' };
 
 export function V4Builder({ state, dispatch, busy }: { state: GameState; dispatch: Dispatch; busy: boolean }) {
-  const [selectedIndex, setSelectedIndex] = useState(0);
-  const selected = state.v4.funnel[selectedIndex] ?? state.v4.funnel[0];
+  const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
+  const selected = selectedIndex === null ? null : state.v4.funnel[selectedIndex];
   const plannedSpend = useMemo(() => state.v4.funnel.reduce((sum, stage) => sum + stageCost(stage), 0), [state.v4.funnel]);
+  const remaining = 100_000 - plannedSpend;
 
   return (
     <V4Screen
       title="Соберите воронку"
       footer={(
         <div className="v4-footer-actions">
-          <button className="btn-secondary" disabled={busy || state.v4.funnel.length <= 2} onClick={() => dispatch('v4_set_funnel_length', { length: state.v4.funnel.length - 1 })}>Убрать этап</button>
-          <button className="btn-secondary" disabled={busy || state.v4.funnel.length >= 6} onClick={() => dispatch('v4_set_funnel_length', { length: state.v4.funnel.length + 1 })}>+ Добавить этап</button>
+          <button className="btn-secondary" disabled={busy || state.v4.funnel.length <= 2} onClick={() => dispatch('v4_set_funnel_length', { length: state.v4.funnel.length - 1 })}>− Этап</button>
           <button className="btn-primary" disabled={busy} onClick={() => dispatch('v4_start_attempt')}>Запустить</button>
         </div>
       )}
     >
       <div className="v4-bank-row">
         <span>Заложили на запуск: <strong>{rub(plannedSpend)}</strong></span>
-        <span>Осталось в банке: <strong>{rub(100_000 - plannedSpend)}</strong></span>
+        <span>Осталось в банке: <strong className={remaining < 0 ? 'v4-danger' : ''}>{rub(remaining)}</strong></span>
       </div>
-      <div className="v4-builder-layout">
+      <div className={`v4-builder-layout${selected ? ' v4-builder-layout--editing' : ''}`}>
         <div className="v4-stage-strip">
           {state.v4.funnel.map((stage, index) => (
             <button
@@ -51,8 +51,33 @@ export function V4Builder({ state, dispatch, busy }: { state: GameState; dispatc
               <small>{index + 1}</small>
             </button>
           ))}
+          <button
+            className="v4-stage-add"
+            disabled={busy || state.v4.funnel.length >= 6}
+            onClick={() => dispatch('v4_set_funnel_length', { length: state.v4.funnel.length + 1 })}
+            aria-label="Добавить этап"
+          >
+            +
+          </button>
         </div>
-        {selected && <StageEditor index={selectedIndex} stage={selected} dispatch={dispatch} busy={busy} />}
+        {selected && selectedIndex !== null && (
+          <StageEditor
+            index={selectedIndex}
+            stage={selected}
+            dispatch={async (action, payload) => {
+              const ok = await dispatch(action, payload);
+              if (ok) setSelectedIndex(null);
+              return ok;
+            }}
+            busy={busy}
+          />
+        )}
+        {!selected && (
+          <div className="v4-builder-hint">
+            <p>Нажмите на квадрат этапа, чтобы поставить инструмент.</p>
+            <p>Первый квадрат — реклама. Дальше можно экспериментировать.</p>
+          </div>
+        )}
       </div>
     </V4Screen>
   );

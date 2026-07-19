@@ -9,9 +9,15 @@ type Dispatch = (actionType: string, payload?: Record<string, unknown>) => Promi
 
 export function V4MiniGame({ state, dispatch, busy }: { state: GameState; dispatch: Dispatch; busy: boolean }) {
   const active = state.v4.activeAttempt;
-  const [seconds, setSeconds] = useState(0);
+  const [nowMs, setNowMs] = useState(Date.now());
   const [manualActions, setManualActions] = useState(0);
   const [finishing, setFinishing] = useState(false);
+  const elapsedSeconds = active ? Math.max(0, Math.floor((nowMs - Date.parse(active.startedAt)) / 1000)) : 0;
+  const limit = active?.mode === 'tutorial' ? 18 : active?.durationSeconds ?? 60;
+  const remainingSeconds = Math.max(0, limit - elapsedSeconds);
+  const actionEnergyCost = active?.stages.some((stage) => stage.instrumentId === 'call') ? 14 : 8;
+  const energyCap = Math.floor(100 / actionEnergyCost);
+  const maxManualActions = Math.min(active?.mode === 'tutorial' ? 8 : 60, energyCap);
 
   const preview = useMemo(() => {
     if (!active || !state.v4.productPrice || !state.v4.dream) return null;
@@ -26,15 +32,17 @@ export function V4MiniGame({ state, dispatch, busy }: { state: GameState; dispat
 
   useEffect(() => {
     if (!active || finishing) return;
-    const limit = active.mode === 'tutorial' ? 18 : active.durationSeconds;
-    if (seconds >= limit || preview?.bankRemaining === 0 || preview?.energyRemaining === 0) {
+    const timer = window.setInterval(() => setNowMs(Date.now()), 250);
+    return () => window.clearInterval(timer);
+  }, [active, finishing]);
+
+  useEffect(() => {
+    if (!active || finishing) return;
+    if (elapsedSeconds >= limit || preview?.bankRemaining === 0 || preview?.energyRemaining === 0) {
       setFinishing(true);
       void dispatch('v4_finish_attempt', { manualActions });
-      return;
     }
-    const timer = window.setTimeout(() => setSeconds((current) => current + 1), 1000);
-    return () => window.clearTimeout(timer);
-  }, [active, dispatch, finishing, manualActions, preview?.bankRemaining, preview?.energyRemaining, seconds]);
+  }, [active, dispatch, elapsedSeconds, finishing, limit, manualActions, preview?.bankRemaining, preview?.energyRemaining]);
 
   if (!active || !preview) {
     return (
@@ -50,8 +58,8 @@ export function V4MiniGame({ state, dispatch, busy }: { state: GameState; dispat
   return (
     <V4Screen title={active.mode === 'tutorial' ? 'Учебный запуск' : 'Запуск на 2 недели'}>
       <div className="v4-mini-hud">
-        <strong>00:{String(Math.max(0, (active.mode === 'tutorial' ? 18 : 60) - seconds)).padStart(2, '0')}</strong>
-        <span>Банк {rub(preview.bankRemaining)}</span>
+        <strong>00:{String(remainingSeconds).padStart(2, '0')}</strong>
+        <span>Осталось {rub(preview.bankRemaining)}</span>
         <span>Энергия {preview.energyRemaining}</span>
       </div>
       <div className="v4-ad-lane" aria-hidden="true">
@@ -74,15 +82,18 @@ export function V4MiniGame({ state, dispatch, busy }: { state: GameState; dispat
               key={person.id}
               className={`v4-person v4-person--${person.status}`}
               style={{ left: `${person.left}%`, top: `${person.top}%`, animationDelay: `${person.delay}s` }}
-            />
+            >
+              {(person.status === 'no' || person.status === 'cold') && <em>{person.text}</em>}
+              {person.status === 'sold' && <b>₽ ₽</b>}
+            </span>
           ))}
         </div>
       </div>
       <div className="v4-action-panel">
         <button
           className="btn-primary"
-          disabled={busy || finishing || preview.energyRemaining <= 0}
-          onClick={() => setManualActions((current) => current + 1)}
+          disabled={busy || finishing || preview.energyRemaining <= 0 || manualActions >= maxManualActions}
+          onClick={() => setManualActions((current) => Math.min(maxManualActions, current + 1))}
         >
           {button}
         </button>
@@ -100,16 +111,18 @@ function actionLabel(stages: GameState['v4']['funnel']): string {
   return 'Ответь в личке';
 }
 
-function buildPeople(totalEntered: number, lost: number, handled: number): Array<{ id: string; status: string; left: number; top: number; delay: number }> {
+function buildPeople(totalEntered: number, lost: number, handled: number): Array<{ id: string; status: string; left: number; top: number; delay: number; text: string }> {
   const count = Math.max(8, Math.min(36, Math.ceil(totalEntered / 15)));
+  const phrases = ['Дорого', 'Не понял', 'Подумаю', 'Не сейчас', 'Не мое'];
   return Array.from({ length: count }, (_, index) => {
     const status = index < handled ? 'sold' : index < handled + lost ? 'cold' : index % 5 === 0 ? 'no' : 'warm';
     return {
       id: `p-${index}`,
       status,
-      left: 18 + ((index * 13) % 64),
-      top: 8 + ((index * 19) % 78),
+      left: 12 + ((index * 17) % 70),
+      top: 12 + ((index * 23) % 72),
       delay: (index % 10) * 0.18,
+      text: phrases[index % phrases.length],
     };
   });
 }

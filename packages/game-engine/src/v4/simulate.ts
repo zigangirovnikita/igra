@@ -15,7 +15,8 @@ export function simulateV4Attempt(input: V4AttemptInput): V4AttemptReport {
   let mainProductSales = 0;
   let tripwireRevenue = 0;
   let fallbackManualQueue = 0;
-  let lostPotentialRevenue = 0;
+  let salesManualQueue = 0;
+  let coldLostPeople = 0;
   let totalManualQueue = 0;
   const stageResults: V4StageResult[] = [];
   const spendBreakdown: Array<{ label: string; amount: number }> = [];
@@ -37,14 +38,16 @@ export function simulateV4Attempt(input: V4AttemptInput): V4AttemptReport {
     const entered = definition.kind === 'traffic' && !telegramWarmup
       ? count(views, definition[stage.execution].entryRate, input.seed, `${stage.id}:entry`)
       : audience;
-    const completed = definition.kind === 'traffic' && !telegramWarmup
+    const completed = definition.kind === 'sales'
+      ? entered
+      : definition.kind === 'traffic' && !telegramWarmup
       ? entered
       : count(entered, telegramWarmup ? 0.5 : definition[stage.execution].completionRate, input.seed, `${stage.id}:complete`);
     const tripwireSales = stage.offerMode === 'tripwire'
       ? count(completed, pricedRate(definition.directSaleRate, stage.tripwirePrice ?? 0), input.seed, `${stage.id}:tripwire`)
       : 0;
     const mainSales = definition.kind === 'sales' && !definition.manual
-      ? count(completed, definition.directSaleRate, input.seed, `${stage.id}:main-sale`)
+      ? count(completed, definition[stage.execution].completionRate, input.seed, `${stage.id}:main-sale`)
       : 0;
     const remaining = Math.max(0, completed - tripwireSales - mainSales);
     const manualQueue = definition.manual || telegramWarmup
@@ -56,11 +59,12 @@ export function simulateV4Attempt(input: V4AttemptInput): V4AttemptReport {
     const lost = Math.max(0, entered - tripwireSales - mainSales - manualQueue - progressed);
 
     if (!hasNext) fallbackManualQueue += manualQueue;
+    if (definition.kind === 'sales' && definition.manual) salesManualQueue += manualQueue;
     totalManualQueue += manualQueue;
     audience = progressed;
     mainProductSales += mainSales;
     tripwireRevenue += tripwireSales * (stage.tripwirePrice ?? 0);
-    lostPotentialRevenue += Math.round((lost + manualQueue) * input.mainProductPrice * 0.12);
+    coldLostPeople += lost;
     stageResults.push({
       stageId: stage.id,
       instrumentId: stage.instrumentId,
@@ -83,14 +87,27 @@ export function simulateV4Attempt(input: V4AttemptInput): V4AttemptReport {
   const manualQueueLost = Math.max(0, totalManualQueue - handledManualQueue);
   const energySpent = handledManualQueue * actionEnergyCost;
   const energyRemaining = Math.max(0, startingEnergy - energySpent);
+  const manualSalesRate = getManualSalesRate(input.stages);
+  const handledSalesManualQueue = Math.min(handledManualQueue, salesManualQueue + fallbackManualQueue);
   const assistedManualSales = count(
-    handledManualQueue,
-    callHeavy ? 0.18 : 0.11,
+    handledSalesManualQueue,
+    manualSalesRate,
     input.seed,
     'handled-manual-sales',
   );
+  if (assistedManualSales > 0) {
+    const manualStageResult = [...stageResults].reverse().find((result) => {
+      const definition = getV4Instrument(result.instrumentId);
+      return definition.manual;
+    }) ?? stageResults[stageResults.length - 1];
+    if (manualStageResult) manualStageResult.mainProductSales += assistedManualSales;
+  }
   mainProductSales += assistedManualSales;
-  lostPotentialRevenue += Math.round(manualQueueLost * input.mainProductPrice * 0.18);
+  const lostPotentialRevenue = estimateLostPotentialRevenue({
+    coldLostPeople,
+    manualQueueLost,
+    mainProductPrice: input.mainProductPrice,
+  });
 
   const mainProductRevenue = mainProductSales * input.mainProductPrice;
   const totalRevenue = mainProductRevenue + tripwireRevenue;
@@ -117,6 +134,7 @@ export function simulateV4Attempt(input: V4AttemptInput): V4AttemptReport {
     result,
     stageResults,
     lostPotentialRevenue,
+    lostPeople: coldLostPeople + manualQueueLost,
     fallbackManualQueue,
     handledManualQueue,
     manualQueueLost,
@@ -179,6 +197,26 @@ function pricedRate(base: number, price: number): number {
 
 function count(value: number, rate: number, seed: string, key: string): number {
   return Math.max(0, stochasticRound(Math.max(0, value) * Math.max(0, Math.min(1, rate)), `${seed}|${key}`));
+}
+
+function getManualSalesRate(stages: V4FunnelStage[]): number {
+  const manualSalesRates = stages
+    .map((stage) => ({ stage, definition: getV4Instrument(stage.instrumentId) }))
+    .filter(({ definition }) => definition.kind === 'sales' && definition.manual)
+    .map(({ stage, definition }) => definition[stage.execution].completionRate);
+  if (manualSalesRates.length > 0) return Math.max(...manualSalesRates);
+  return 0.11;
+}
+
+function estimateLostPotentialRevenue(input: {
+  coldLostPeople: number;
+  manualQueueLost: number;
+  mainProductPrice: number;
+}): number {
+  const coldLostSales = input.coldLostPeople * 0.003;
+  const manualLostSales = input.manualQueueLost * 0.015;
+  const achievableExtraSales = Math.min(12, coldLostSales + manualLostSales);
+  return Math.round(achievableExtraSales * input.mainProductPrice);
 }
 
 function buildObservations(

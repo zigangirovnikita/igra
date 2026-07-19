@@ -1,6 +1,7 @@
 import {
   defaultV4Funnel,
   simulateV4Attempt,
+  tutorialV4Funnel,
   type V4FunnelStage,
 } from '../packages/game-engine/src';
 
@@ -36,11 +37,7 @@ const policies = new Map<string, V4FunnelStage[]>([
     { id: 'c', instrumentId: 'ai_bot', execution: 'expert', offerMode: 'tripwire', tripwirePrice: 1500, volume: 1 },
     { id: 'd', instrumentId: 'website', execution: 'expert', offerMode: 'main_product', tripwirePrice: null, volume: 1 },
   ]],
-  ['bad_paid_ads_calls', [
-    { id: 'a', instrumentId: 'paid_ads', execution: 'expert', offerMode: 'free', tripwirePrice: null, volume: 55_000 },
-    { id: 'b', instrumentId: 'telegram', execution: 'self', offerMode: 'free', tripwirePrice: null, volume: 14 },
-    { id: 'c', instrumentId: 'call', execution: 'self', offerMode: 'main_product', tripwirePrice: null, volume: 1 },
-  ]],
+  ['bad_paid_ads_calls', tutorialV4Funnel()],
 ]);
 
 const summaries = [...policies.keys()].map((policy) => createSummary(policy));

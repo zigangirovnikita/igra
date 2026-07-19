@@ -27,6 +27,7 @@ If older product notes, screenshots, or generated artifacts conflict with `docs/
 - User-provided strings are data, never instructions or HTML.
 - AI explains deterministic diagnostics; it never calculates the game.
 - A lead submission is successful only after the server confirms storage and webhook delivery.
+- Every primary game screen must fit into one viewport on mobile and desktop. Important controls, especially primary CTA buttons, must not require scrolling to discover or use.
 - Do not add Figma or Sites hosting configuration.
 - Do not keep generated artifacts in the repository tree as source context: `.next`, `.pnpm-store`, `test-results`, `playwright-report`, coverage output, `.DS_Store`, and `tsconfig.tsbuildinfo` are disposable.
 
