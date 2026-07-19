@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { buildFallbackReport, explainWithAi } from '../../lib/ai/report';
-import { applyCommand, createInitialState, finishGame } from '../../packages/game-engine/src';
+import { applyCommand, createLegacyV3InitialState as createInitialState, finishGame } from '../../packages/game-engine/src';
 import { loadGameConfig } from '../../lib/config/game-config';
 import { scenarios } from '../fixtures/scenarios';
 

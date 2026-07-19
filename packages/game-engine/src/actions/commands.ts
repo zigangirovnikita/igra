@@ -8,6 +8,7 @@ import * as DailyTransitions from '../flow/daily';
 import * as OutcomeTransitions from '../flow/outcome';
 import * as PendingDecisions from '../flow/pending-decisions';
 import * as V3 from '../flow/v3';
+import * as V4 from '../flow/v4';
 import { applyEffect } from './dsl';
 
 export function applyCommand(input: GameState, config: GameConfig, command: GameCommand): GameState {
@@ -207,6 +208,37 @@ export function applyCommand(input: GameState, config: GameConfig, command: Game
       state = V3.returnV3Reflection(state);
       break;
 
+    case 'v4_set_dream':
+      state = V4.setV4Dream(state, command.payload);
+      break;
+    case 'v4_set_product':
+      state = V4.setV4Product(state, command.payload.productType);
+      break;
+    case 'v4_set_price':
+      state = V4.setV4Price(state, config, command.payload.productPrice);
+      break;
+    case 'v4_start_tutorial':
+      state = V4.startV4Tutorial(state);
+      break;
+    case 'v4_set_funnel_length':
+      state = V4.setV4FunnelLength(state, command.payload.length);
+      break;
+    case 'v4_configure_funnel_stage':
+      state = V4.configureV4FunnelStage(state, command.payload);
+      break;
+    case 'v4_start_attempt':
+      state = V4.startV4Attempt(state);
+      break;
+    case 'v4_finish_attempt':
+      state = V4.finishV4Attempt(state, command.payload?.manualActions ?? 0);
+      break;
+    case 'v4_start_next_attempt':
+      state = V4.startNextV4Attempt(state, command.payload?.changeProduct ?? false);
+      break;
+    case 'v4_toggle_details':
+      state = V4.toggleV4Details(state);
+      break;
+
     case 'start_parallel':
     case 'set_route':
       throw new Error('Developer command is disabled in public game API');
@@ -219,7 +251,7 @@ export function applyCommand(input: GameState, config: GameConfig, command: Game
     : command.type === 'select_action'
       ? command.payload.actionId
       : undefined;
-  if (command.type !== 'acknowledge_event' && !command.type.startsWith('v3_')) {
+  if (command.type !== 'acknowledge_event' && !command.type.startsWith('v3_') && !command.type.startsWith('v4_')) {
     state = appendTriggeredEvents(input, state, config, actionId);
   }
   state.appliedCommandIds.push(command.commandId);

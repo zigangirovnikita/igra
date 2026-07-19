@@ -1,54 +1,86 @@
 import {
-  applyCommand,
-  assertStateInvariants,
-  buildV3ActiveStagePlan,
-  createInitialState,
-  type GameCommand,
-  type GameState,
-  type V3ActiveActionLogEntry,
+  defaultV4Funnel,
+  simulateV4Attempt,
+  type V4FunnelStage,
 } from '../packages/game-engine/src';
-import { loadGameConfig } from '../lib/config/game-config';
-import { scenarios } from '../tests/fixtures/scenarios';
 
 type Summary = {
   policy: string;
   runs: number;
   wins: number;
+  sustainableWins: number;
   revenue: number[];
+  totalMoney: number[];
   profit: number[];
   finalEnergy: number[];
   invariantViolations: number;
 };
 
 const runs = getRuns();
-const config = loadGameConfig();
-const summaries = new Map<string, Summary>();
+const policies = new Map<string, V4FunnelStage[]>([
+  ['default_reels_ai_webinar_site', defaultV4Funnel()],
+  ['reels_ai_webinar_site', [
+    { id: 'a', instrumentId: 'reels', execution: 'expert', offerMode: 'free', tripwirePrice: null, volume: 24 },
+    { id: 'b', instrumentId: 'ai_bot', execution: 'expert', offerMode: 'free', tripwirePrice: null, volume: 1 },
+    { id: 'c', instrumentId: 'auto_webinar', execution: 'expert', offerMode: 'free', tripwirePrice: null, volume: 1 },
+    { id: 'd', instrumentId: 'website', execution: 'expert', offerMode: 'main_product', tripwirePrice: null, volume: 1 },
+  ]],
+  ['stories_lesson_site', [
+    { id: 'a', instrumentId: 'stories', execution: 'expert', offerMode: 'free', tripwirePrice: null, volume: 20 },
+    { id: 'b', instrumentId: 'video_lesson', execution: 'expert', offerMode: 'tripwire', tripwirePrice: 990, volume: 1 },
+    { id: 'c', instrumentId: 'website', execution: 'expert', offerMode: 'main_product', tripwirePrice: null, volume: 1 },
+  ]],
+  ['telegram_guide_ai_site', [
+    { id: 'a', instrumentId: 'telegram', execution: 'expert', offerMode: 'free', tripwirePrice: null, volume: 18 },
+    { id: 'b', instrumentId: 'guide', execution: 'expert', offerMode: 'free', tripwirePrice: null, volume: 1 },
+    { id: 'c', instrumentId: 'ai_bot', execution: 'expert', offerMode: 'tripwire', tripwirePrice: 1500, volume: 1 },
+    { id: 'd', instrumentId: 'website', execution: 'expert', offerMode: 'main_product', tripwirePrice: null, volume: 1 },
+  ]],
+  ['bad_paid_ads_calls', [
+    { id: 'a', instrumentId: 'paid_ads', execution: 'expert', offerMode: 'free', tripwirePrice: null, volume: 55_000 },
+    { id: 'b', instrumentId: 'telegram', execution: 'self', offerMode: 'free', tripwirePrice: null, volume: 14 },
+    { id: 'c', instrumentId: 'call', execution: 'self', offerMode: 'main_product', tripwirePrice: null, volume: 1 },
+  ]],
+]);
+
+const summaries = [...policies.keys()].map((policy) => createSummary(policy));
 
 for (let index = 0; index < runs; index += 1) {
-  const fixture = scenarios[index % scenarios.length];
-  const summary = getSummary(summaries, fixture.id);
-  try {
-    let state = createInitialState(fixture.setup, config, `${fixture.seed}_${index}`);
-    for (const command of fixture.commands) {
-      const preparedCommand = command.type === 'v3_complete_active_stage'
-        ? { ...command, payload: { actionLog: buildSimulatedV3ActionLog(state) } }
-        : command;
-      state = applyCommand(state, config, { ...preparedCommand, commandId: `${command.commandId}_${index}` });
-      state = resolveAllPending(state, index);
+  for (const summary of summaries) {
+    try {
+      const stages = policies.get(summary.policy);
+      if (!stages) throw new Error('Missing policy');
+      const report = simulateV4Attempt({
+        seed: `${summary.policy}_${index}`,
+        dreamPrice: 300_000,
+        mainProductPrice: 30_000,
+        stages,
+        manualActions: summary.policy.includes('bad') ? 18 : 14,
+      });
+      summary.runs += 1;
+      summary.wins += report.result !== 'not_reached' ? 1 : 0;
+      summary.sustainableWins += report.result === 'sustainable_win' ? 1 : 0;
+      summary.revenue.push(report.totalRevenue);
+      summary.totalMoney.push(report.totalMoney);
+      summary.profit.push(report.totalRevenue - report.spent);
+      summary.finalEnergy.push(report.energyRemaining);
+      if (!report.valid && !summary.policy.includes('bad')) summary.invariantViolations += 1;
+      if (report.totalMoney !== report.bankRemaining + report.totalRevenue) summary.invariantViolations += 1;
+      if (report.totalRevenue !== report.mainProductRevenue + report.tripwireRevenue) summary.invariantViolations += 1;
+    } catch (error) {
+      summary.invariantViolations += 1;
+      if (runs <= 100) console.error(`V4 simulation error in ${summary.policy}:`, error);
     }
-    assertStateInvariants(state, config);
-    collect(summary, state);
-  } catch (error) {
-    summary.invariantViolations += 1;
-    if (runs <= 100) console.error(`Simulation error in ${fixture.id}:`, error);
   }
 }
 
-const report = [...summaries.values()].map((summary) => ({
+const report = summaries.map((summary) => ({
   policy: summary.policy,
   runs: summary.runs,
   winRate: pct(summary.wins / Math.max(1, summary.runs)),
+  sustainableWinRate: pct(summary.sustainableWins / Math.max(1, summary.runs)),
   revenueMedian: percentile(summary.revenue, 0.5),
+  totalMoneyMedian: percentile(summary.totalMoney, 0.5),
   revenueP10: percentile(summary.revenue, 0.1),
   revenueP90: percentile(summary.revenue, 0.9),
   profitMedian: percentile(summary.profit, 0.5),
@@ -58,136 +90,24 @@ const report = [...summaries.values()].map((summary) => ({
 
 console.table(report);
 const violations = report.reduce((sum, item) => sum + item.invariantViolations, 0);
-if (violations > 0) throw new Error(`Balance simulation found ${violations} invariant violations`);
-const allPoliciesLose = report.every((item) => item.winRate === '0%');
-const allPoliciesBurnOut = report.every((item) => item.energyMedian === 0);
-if (allPoliciesLose) console.warn('Balance warning: every policy has 0% win rate. This simulator now reports the problem instead of treating it as a healthy balance.');
-if (allPoliciesBurnOut) throw new Error('Balance simulation quality gate failed: every policy ends with zero median energy');
+if (violations > 0) throw new Error(`V4 balance simulation found ${violations} invariant violations`);
+const viablePolicies = report.filter((item) => item.winRate !== '0%' && !item.policy.includes('bad')).length;
+if (viablePolicies < 2) {
+  throw new Error(`V4 balance quality gate failed: expected at least 2 viable policies, got ${viablePolicies}`);
+}
 
-function buildSimulatedV3ActionLog(state: GameState): V3ActiveActionLogEntry[] {
-  const plan = state.v3.activeStage?.plan ?? buildV3ActiveStagePlan(state);
-  const log: V3ActiveActionLogEntry[] = [];
-  let cursorMs = 0;
-  let sequence = 0;
-  const push = (type: V3ActiveActionLogEntry['type'], targetId: string, startedAtMs: number, durationSeconds: number) => {
-    const completedAtMs = startedAtMs + durationSeconds * 1000;
-    if (completedAtMs > plan.durationSeconds * 1000) return false;
-    sequence += 1;
-    log.push({ id: `sim_${sequence}`, type, targetId, startedAtMs, completedAtMs });
-    cursorMs = completedAtMs;
-    return true;
+function createSummary(policy: string): Summary {
+  return {
+    policy,
+    runs: 0,
+    wins: 0,
+    sustainableWins: 0,
+    revenue: [],
+    totalMoney: [],
+    profit: [],
+    finalEnergy: [],
+    invariantViolations: 0,
   };
-
-  for (const message of plan.warmupMessages) {
-    const startedAtMs = Math.max(cursorMs, message.second * 1000);
-    if (startedAtMs + 1000 > message.expiresSecond * 1000) continue;
-    if (!push('answer', message.id, startedAtMs, 1)) return log;
-  }
-
-  const salesKey = state.v3.activeSelection.sales ?? '';
-  const useCalls = salesKey.includes('call_script') || salesKey === 'sales:intuition';
-  const useSiteChats = salesKey.includes('website') || salesKey.includes('auto_webinar');
-  if (useCalls) {
-    for (const outcome of plan.callOutcomes) {
-      if (!push('call', outcome.id, cursorMs, plan.callDurationSeconds)) return log;
-      if (outcome.followupMessage && !push('post_call_chat', outcome.id, cursorMs, plan.chatDurationSeconds)) return log;
-    }
-    return log;
-  }
-
-  const chatType: V3ActiveActionLogEntry['type'] = useSiteChats ? 'site_chat' : 'direct_chat';
-  for (const outcome of plan.chatOutcomes) {
-    if (!push(chatType, outcome.id, cursorMs, plan.chatDurationSeconds)) return log;
-  }
-  return log;
-}
-
-function resolveAllPending(input: GameState, runIndex: number): GameState {
-  let state = input;
-  let guard = 0;
-  while (state.pendingDecision && guard < 20) {
-    guard += 1;
-    const decision = state.pendingDecision;
-    const cohortId = 'cohortId' in decision ? decision.cohortId : undefined;
-    let command: GameCommand;
-
-    if (decision.type === 'mini_game') {
-      command = {
-        commandId: `sim_mini_${runIndex}_${guard}`,
-        type: 'resolve_mini_game',
-        payload: { cohortId: decision.cohortId, mode: 'auto', processed: 0 },
-      };
-    } else if (decision.type === 'inbound') {
-      command = {
-        commandId: `sim_inbound_${runIndex}_${guard}`,
-        type: 'resolve_pending_decision',
-        payload: {
-          cohortId,
-          action: state.resources.energy >= 0.3 ? 'process_available' : 'ignore',
-        },
-      };
-    } else if (decision.type === 'sales') {
-      command = {
-        commandId: `sim_sales_${runIndex}_${guard}`,
-        type: 'resolve_pending_decision',
-        payload: {
-          cohortId,
-          action: state.resources.energy >= 0.5 ? 'process' : 'ignore',
-          amount: 10,
-        },
-      };
-    } else if (decision.type === 'followup') {
-      command = {
-        commandId: `sim_followup_${runIndex}_${guard}`,
-        type: 'resolve_pending_decision',
-        payload: { cohortId, action: state.resources.energy >= 5 ? 'followup_message' : 'ignore' },
-      };
-    } else if (decision.type === 'energy_crisis') {
-      command = {
-        commandId: `sim_energy_${runIndex}_${guard}`,
-        type: 'resolve_pending_decision',
-        payload: { action: state.resources.day < config.totalDays ? 'rest_day' : 'confirm' },
-      };
-    } else if (decision.type === 'budget_notice') {
-      command = {
-        commandId: `sim_budget_${runIndex}_${guard}`,
-        type: 'resolve_pending_decision',
-        payload: { action: 'continue_without_budget' },
-      };
-    } else if (decision.type === 'goal_reached') {
-      command = {
-        commandId: `sim_goal_${runIndex}_${guard}`,
-        type: 'resolve_pending_decision',
-        payload: { action: 'cancel' },
-      };
-    } else {
-      command = {
-        commandId: `sim_finish_${runIndex}_${guard}`,
-        type: 'resolve_pending_decision',
-        payload: { action: 'cancel' },
-      };
-    }
-
-    state = applyCommand(state, config, command);
-  }
-  if (guard >= 20 && state.pendingDecision) throw new Error(`Pending decision loop: ${state.pendingDecision.type}`);
-  return state;
-}
-
-function collect(summary: Summary, state: GameState): void {
-  summary.runs += 1;
-  summary.wins += state.metrics.sales >= state.targets.targetSales ? 1 : 0;
-  summary.revenue.push(state.metrics.revenue);
-  summary.profit.push(state.metrics.revenue - state.metrics.expenses);
-  summary.finalEnergy.push(state.resources.energy);
-}
-
-function getSummary(summaries: Map<string, Summary>, policyName: string): Summary {
-  const existing = summaries.get(policyName);
-  if (existing) return existing;
-  const created: Summary = { policy: policyName, runs: 0, wins: 0, revenue: [], profit: [], finalEnergy: [], invariantViolations: 0 };
-  summaries.set(policyName, created);
-  return created;
 }
 
 function getRuns(): number {

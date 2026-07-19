@@ -3,7 +3,7 @@ import {
   applyCommand,
   assertStateInvariants,
   buildV3ActiveStagePlan,
-  createInitialState,
+  createLegacyV3InitialState as createInitialState,
   finishGame,
   getActionAvailability,
   getV3AttemptInsight,

@@ -1,7 +1,7 @@
 export * from './types';
 export { applyCommand, finishGame } from './actions/commands';
 export { getActionAvailability, findAction } from './actions/availability';
-export { createInitialState } from './state/initial';
+export { createInitialState, createLegacyV3InitialState, createV4InitialState } from './state/initial';
 export { calculateTargets, getBucketTargetSales } from './state/goals';
 export { assertStateInvariants } from './state/invariants';
 export { hashToUnitInterval, keyedRandomMultiplier, stochasticRound } from './random/keyed';

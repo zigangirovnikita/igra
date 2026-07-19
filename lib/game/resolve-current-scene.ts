@@ -7,6 +7,7 @@ export function resolveCurrentScene(state: GameState): { scene: string; props?: 
   if (state.flow.stage === 'final' || step === 'final_reason' || step === 'final_diagnosis' || step === 'finish_confirmation') {
     return { scene: 'finished' };
   }
+  if (state.flow.stage === 'v4' || step.startsWith('v4_')) return { scene: 'v4' };
   if (state.flow.stage === 'v3' || step.startsWith('v3_')) return { scene: 'v3' };
 
   const pendingEvent = state.history.find((entry) => {

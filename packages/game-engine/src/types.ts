@@ -1,3 +1,11 @@
+import type {
+  V4AttemptReport,
+  V4Execution,
+  V4FunnelStage,
+  V4InstrumentId,
+  V4OfferMode,
+} from './v4/types';
+
 export type Id = string;
 
 export type Gender = 'female' | 'male';
@@ -51,6 +59,7 @@ export type FlowStage =
   | 'day2_resources'
   | 'daily'
   | 'v3'
+  | 'v4'
   | 'final';
 
 export type FlowStep =
@@ -104,7 +113,14 @@ export type FlowStep =
   | 'v3_action_select'
   | 'v3_active_intro'
   | 'v3_active_stage'
-  | 'v3_stage_report';
+  | 'v3_stage_report'
+  | 'v4_dream'
+  | 'v4_product'
+  | 'v4_price'
+  | 'v4_tutorial_intro'
+  | 'v4_minigame'
+  | 'v4_result'
+  | 'v4_builder';
 
 export type DailyIntent =
   | 'get_sales'
@@ -641,6 +657,42 @@ export type V3State = {
   } | null;
 };
 
+export type V4Dream = {
+  id: string;
+  title: string;
+  price: number;
+  custom?: boolean;
+};
+
+export type V4ProductType = V3ProductType;
+
+export type V4AttemptMode = 'tutorial' | 'custom';
+
+export type V4ActiveAttempt = {
+  id: string;
+  mode: V4AttemptMode;
+  seed: string;
+  startedAt: string;
+  expiresAt: string;
+  durationSeconds: 60;
+  startingBank: number;
+  startingEnergy: number;
+  stages: V4FunnelStage[];
+};
+
+export type V4State = {
+  dream: V4Dream | null;
+  productType: V4ProductType | null;
+  productPrice: number | null;
+  funnel: V4FunnelStage[];
+  tutorialCompleted: boolean;
+  attemptNumber: number;
+  activeAttempt: V4ActiveAttempt | null;
+  lastReport: V4AttemptReport | null;
+  reportHistory: V4AttemptReport[];
+  detailsOpen: boolean;
+};
+
 export type GameState = {
   schemaVersion: 2;
   sessionId: string;
@@ -688,6 +740,7 @@ export type GameState = {
   miniGame: MiniGameSession | null;
   decisionLog: DecisionRecord[];
   v3: V3State;
+  v4: V4State;
 };
 
 export type GameCommand =
@@ -750,4 +803,14 @@ export type GameCommand =
   | { commandId: string; type: 'v3_select_active'; payload: { kind: V3SelectionKind; key: string } }
   | { commandId: string; type: 'v3_start_active_stage'; payload?: Record<string, never> }
   | { commandId: string; type: 'v3_complete_active_stage'; payload?: { manualAnswers?: number; salesChats?: number; directSalesChats?: number; postCallChats?: number; calls?: number; actionLog?: V3ActiveActionLogEntry[] } }
-  | { commandId: string; type: 'v3_return_reflection'; payload?: Record<string, never> };
+  | { commandId: string; type: 'v3_return_reflection'; payload?: Record<string, never> }
+  | { commandId: string; type: 'v4_set_dream'; payload: { dreamId: string; title: string; price: number; custom?: boolean } }
+  | { commandId: string; type: 'v4_set_product'; payload: { productType: V4ProductType } }
+  | { commandId: string; type: 'v4_set_price'; payload: { productPrice: number } }
+  | { commandId: string; type: 'v4_start_tutorial'; payload?: Record<string, never> }
+  | { commandId: string; type: 'v4_set_funnel_length'; payload: { length: number } }
+  | { commandId: string; type: 'v4_configure_funnel_stage'; payload: { index: number; instrumentId: V4InstrumentId; execution: V4Execution; offerMode: V4OfferMode; tripwirePrice?: number | null; volume?: number } }
+  | { commandId: string; type: 'v4_start_attempt'; payload?: Record<string, never> }
+  | { commandId: string; type: 'v4_finish_attempt'; payload?: { manualActions?: number } }
+  | { commandId: string; type: 'v4_start_next_attempt'; payload?: { changeProduct?: boolean } }
+  | { commandId: string; type: 'v4_toggle_details'; payload?: Record<string, never> };

@@ -1,7 +1,45 @@
 import type { GameConfig, GameState, PlayerProfile } from '../types';
+import { defaultV4Funnel } from '../v4/config';
 import { assertStateInvariants } from './invariants';
 
 export function createInitialState(setup: PlayerProfile, config: GameConfig, seed: string): GameState {
+  return createV4InitialState(setup, config, seed);
+}
+
+export function createV4InitialState(setup: PlayerProfile, config: GameConfig, seed: string): GameState {
+  const state = createBaseState(setup, config, seed);
+  state.flow = {
+    stage: 'v4',
+    step: 'v4_dream',
+    selectedIntent: null,
+    selectedGroup: null,
+    goalPromptHandled: false,
+    backStep: null,
+  };
+  state.resources.energy = 100;
+  state.v4 = {
+    dream: null,
+    productType: null,
+    productPrice: null,
+    funnel: defaultV4Funnel(),
+    tutorialCompleted: false,
+    attemptNumber: 0,
+    activeAttempt: null,
+    lastReport: null,
+    reportHistory: [],
+    detailsOpen: false,
+  };
+  assertStateInvariants(state, config);
+  return state;
+}
+
+export function createLegacyV3InitialState(setup: PlayerProfile, config: GameConfig, seed: string): GameState {
+  const state = createBaseState(setup, config, seed);
+  assertStateInvariants(state, config);
+  return state;
+}
+
+function createBaseState(setup: PlayerProfile, config: GameConfig, seed: string): GameState {
   const state: GameState = {
     schemaVersion: 2,
     sessionId: seed,
@@ -119,8 +157,19 @@ export function createInitialState(setup: PlayerProfile, config: GameConfig, see
       activeStageStartedAt: null,
       activeStage: null,
     },
+    v4: {
+      dream: null,
+      productType: null,
+      productPrice: null,
+      funnel: defaultV4Funnel(),
+      tutorialCompleted: false,
+      attemptNumber: 0,
+      activeAttempt: null,
+      lastReport: null,
+      reportHistory: [],
+      detailsOpen: false,
+    },
   };
 
-  assertStateInvariants(state, config);
   return state;
 }

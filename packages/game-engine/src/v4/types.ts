@@ -56,6 +56,7 @@ export type V4AttemptInput = {
   mainProductPrice: number;
   dreamPrice: number;
   stages: V4FunnelStage[];
+  manualActions?: number;
   startingBank?: number;
   startingEnergy?: number;
 };
@@ -80,6 +81,7 @@ export type V4AttemptReport = {
   spent: number;
   bankRemaining: number;
   energyRemaining: number;
+  endingReason: 'completed' | 'budget_empty' | 'burnout';
   mainProductRevenue: number;
   tripwireRevenue: number;
   totalRevenue: number;
@@ -89,4 +91,8 @@ export type V4AttemptReport = {
   stageResults: V4StageResult[];
   lostPotentialRevenue: number;
   fallbackManualQueue: number;
+  handledManualQueue: number;
+  manualQueueLost: number;
+  observations: string[];
+  spendBreakdown: Array<{ label: string; amount: number }>;
 };

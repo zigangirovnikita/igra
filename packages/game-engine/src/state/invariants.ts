@@ -1,6 +1,11 @@
 import type { GameConfig, GameState } from '../types';
 
 export function assertStateInvariants(state: GameState, config: GameConfig): void {
+  if (state.flow.stage === 'v4') {
+    assertV4StateInvariants(state, config);
+    return;
+  }
+
   if (state.resources.bank < 0 || state.resources.bank > config.startingBank) {
     throw new Error('Invariant violation: bank out of bounds');
   }
@@ -112,4 +117,36 @@ export function assertStateInvariants(state: GameState, config: GameConfig): voi
 
 export function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
+}
+
+function assertV4StateInvariants(state: GameState, config: GameConfig): void {
+  if (state.configVersion !== config.version) {
+    throw new Error('Invariant violation: configVersion changed');
+  }
+  if (state.resources.bank < 0 || state.resources.bank > 100_000) {
+    throw new Error('Invariant violation: v4 bank out of bounds');
+  }
+  if (state.resources.energy < 0 || state.resources.energy > 100) {
+    throw new Error('Invariant violation: v4 energy out of bounds');
+  }
+  if (state.v4.funnel.length < 2 || state.v4.funnel.length > 6) {
+    throw new Error('Invariant violation: v4 funnel length out of bounds');
+  }
+  if (state.flow.step.startsWith('v4_') === false) {
+    throw new Error('Invariant violation: flow.step incompatible with v4 stage');
+  }
+  for (const stage of state.v4.funnel) {
+    if (!stage.id || !stage.instrumentId || !Number.isFinite(stage.volume) || stage.volume < 1) {
+      throw new Error('Invariant violation: invalid v4 funnel stage');
+    }
+  }
+  if (state.v4.lastReport) {
+    const report = state.v4.lastReport;
+    if (report.totalRevenue !== report.mainProductRevenue + report.tripwireRevenue) {
+      throw new Error('Invariant violation: v4 revenue mismatch');
+    }
+    if (report.totalMoney !== report.bankRemaining + report.totalRevenue) {
+      throw new Error('Invariant violation: v4 total money mismatch');
+    }
+  }
 }

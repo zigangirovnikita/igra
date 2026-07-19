@@ -1,4 +1,4 @@
-import type { V4InstrumentDefinition, V4InstrumentId } from './types';
+import type { V4FunnelStage, V4InstrumentDefinition, V4InstrumentId } from './types';
 
 const traffic = (
   id: Extract<V4InstrumentId, 'stories' | 'reels' | 'telegram' | 'paid_ads'>,
@@ -59,7 +59,47 @@ export const V4_INSTRUMENTS: Record<V4InstrumentId, V4InstrumentDefinition> = {
 
 export const V4_STARTING_BANK = 100_000;
 export const V4_STARTING_ENERGY = 100;
+export const V4_MANUAL_ENERGY_COST = 8;
+export const V4_CALL_ENERGY_COST = 14;
 
 export function getV4Instrument(id: V4InstrumentId): V4InstrumentDefinition {
   return V4_INSTRUMENTS[id];
+}
+
+export function defaultV4Funnel(): V4FunnelStage[] {
+  return [
+    makeV4Stage('stage-1', 'reels', 'self', 'free', null, 14),
+    makeV4Stage('stage-2', 'ai_bot', 'expert', 'free', null, 1),
+    makeV4Stage('stage-3', 'auto_webinar', 'expert', 'free', null, 1),
+    makeV4Stage('stage-4', 'website', 'expert', 'main_product', null, 1),
+  ];
+}
+
+export function tutorialV4Funnel(): V4FunnelStage[] {
+  return [
+    makeV4Stage('tutorial-1', 'paid_ads', 'expert', 'free', null, 55_000),
+    makeV4Stage('tutorial-2', 'telegram', 'self', 'free', null, 14),
+    makeV4Stage('tutorial-3', 'call', 'self', 'main_product', null, 1),
+  ];
+}
+
+export function makeV4Stage(
+  id: string,
+  instrumentId: V4InstrumentId,
+  execution: 'self' | 'expert',
+  offerMode: 'free' | 'tripwire' | 'main_product',
+  tripwirePrice: number | null,
+  volume: number,
+): V4FunnelStage {
+  return { id, instrumentId, execution, offerMode, tripwirePrice, volume };
+}
+
+export function estimateV4Views(stage: V4FunnelStage): [number, number] {
+  const definition = getV4Instrument(stage.instrumentId);
+  if (definition.kind !== 'traffic') return [0, 0];
+  if (stage.instrumentId === 'paid_ads') {
+    return [Math.round(stage.volume * 1.7), Math.round(stage.volume * 2.7)];
+  }
+  const [low, high] = definition[stage.execution].reach;
+  return [Math.round(low * stage.volume), Math.round(high * stage.volume * 1.25)];
 }

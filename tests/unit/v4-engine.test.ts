@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { simulateV4Attempt, type V4FunnelStage } from '../../packages/game-engine/src';
+import { createInitialState, simulateV4Attempt, type V4FunnelStage } from '../../packages/game-engine/src';
+import { loadGameConfig } from '../../lib/config/game-config';
 
 const stages: V4FunnelStage[] = [
   { id: 'reels', instrumentId: 'reels', execution: 'expert', offerMode: 'free', tripwirePrice: null, volume: 28 },
@@ -8,6 +9,18 @@ const stages: V4FunnelStage[] = [
 ];
 
 describe('v4 funnel engine', () => {
+  it('starts new public sessions in the v4 dream step', () => {
+    const state = createInitialState({
+      avatarGender: 'female',
+      name: 'Марина',
+      niche: 'Воронка на мечту',
+      superpower: 'energy',
+    }, loadGameConfig(), 'v4-start');
+    expect(state.flow.stage).toBe('v4');
+    expect(state.flow.step).toBe('v4_dream');
+    expect(state.v4.funnel.length).toBeGreaterThanOrEqual(2);
+  });
+
   it('is deterministic for the same seed and allows repeated instruments', () => {
     const repeated = [...stages, { ...stages[1], id: 'second-bot', offerMode: 'free' as const }];
     const input = { seed: 'v4-repeat', mainProductPrice: 30_000, dreamPrice: 300_000, stages: repeated };

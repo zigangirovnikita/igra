@@ -26,7 +26,9 @@ export async function POST(request: Request) {
   if (!hasSessionAccess(request, parsed.data.sessionId)) return sessionAccessDenied();
 
   const session = await getSession(parsed.data.sessionId);
-  if (!session || session.state.status !== 'finished') {
+  const canSubmitLead = session?.state.status === 'finished'
+    || (session?.state.flow.stage === 'v4' && Boolean(session.state.v4.lastReport));
+  if (!session || !canSubmitLead) {
     return NextResponse.json({ error: 'finished_session_required' }, { status: 409 });
   }
 

@@ -32,6 +32,10 @@ const v3PreparationModeSchema = z.enum(['self', 'expert']);
 const v3AdviceCategorySchema = z.enum(['ads', 'warmup', 'sales']);
 const v3AdviceOptionSchema = z.enum(['friend', 'consult_5k', 'consult_10k']);
 const v3SelectionKindSchema = z.enum(['ad', 'warmup', 'sales']);
+const v4ProductTypeSchema = z.enum(['consultation', 'service', 'recorded_course', 'live_course', 'mentorship', 'membership']);
+const v4InstrumentIdSchema = z.enum(['stories', 'reels', 'telegram', 'paid_ads', 'guide', 'simple_bot', 'ai_bot', 'video_lesson', 'auto_webinar', 'chat', 'call', 'website']);
+const v4ExecutionSchema = z.enum(['self', 'expert']);
+const v4OfferModeSchema = z.enum(['free', 'tripwire', 'main_product']);
 const v3ActiveActionLogEntrySchema = z.object({
   id: z.string().min(1).max(120),
   type: z.enum(['answer', 'call', 'direct_chat', 'post_call_chat', 'site_chat']),
@@ -175,6 +179,32 @@ export const commandRequestSchema = z.discriminatedUnion('type', [
     actionLog: z.array(v3ActiveActionLogEntrySchema).max(240).optional(),
   }).optional() }),
   z.object({ ...base, type: z.literal('v3_return_reflection'), payload: z.object({}).optional() }),
+  z.object({ ...base, type: z.literal('v4_set_dream'), payload: z.object({
+    dreamId: z.string().trim().min(1).max(120),
+    title: z.string().trim().min(2).max(80),
+    price: z.number().int().min(1_000).max(5_000_000),
+    custom: z.boolean().optional(),
+  }) }),
+  z.object({ ...base, type: z.literal('v4_set_product'), payload: z.object({ productType: v4ProductTypeSchema }) }),
+  z.object({ ...base, type: z.literal('v4_set_price'), payload: z.object({ productPrice: z.number().int().min(1_000).max(5_000_000) }) }),
+  z.object({ ...base, type: z.literal('v4_start_tutorial'), payload: z.object({}).optional() }),
+  z.object({ ...base, type: z.literal('v4_set_funnel_length'), payload: z.object({ length: z.number().int().min(2).max(6) }) }),
+  z.object({ ...base, type: z.literal('v4_configure_funnel_stage'), payload: z.object({
+    index: z.number().int().min(0).max(5),
+    instrumentId: v4InstrumentIdSchema,
+    execution: v4ExecutionSchema,
+    offerMode: v4OfferModeSchema,
+    tripwirePrice: z.number().int().min(100).max(50_000).nullable().optional(),
+    volume: z.number().int().min(1).max(100_000).optional(),
+  }) }),
+  z.object({ ...base, type: z.literal('v4_start_attempt'), payload: z.object({}).optional() }),
+  z.object({ ...base, type: z.literal('v4_finish_attempt'), payload: z.object({
+    manualActions: z.number().int().min(0).max(300).optional(),
+  }).optional() }),
+  z.object({ ...base, type: z.literal('v4_start_next_attempt'), payload: z.object({
+    changeProduct: z.boolean().optional(),
+  }).optional() }),
+  z.object({ ...base, type: z.literal('v4_toggle_details'), payload: z.object({}).optional() }),
 ]);
 
 export const developerCommandRequestSchema = z.discriminatedUnion('type', [

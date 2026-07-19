@@ -1,5 +1,14 @@
 import type { GameState } from '@/packages/game-engine/src';
 
+const V4_PRODUCT_TITLES = {
+  consultation: 'Консультация',
+  service: 'Услуга',
+  recorded_course: 'Курс в записи',
+  live_course: 'Живой курс',
+  mentorship: 'Наставничество',
+  membership: 'Клуб / подписка',
+} as const;
+
 export async function submitLead(state: GameState, formData: FormData): Promise<void> {
   const name = String(formData.get('name') ?? '').trim();
   const contact = String(formData.get('contact') ?? '').trim();
@@ -9,7 +18,7 @@ export async function submitLead(state: GameState, formData: FormData): Promise<
 
   const formProduct = String(formData.get('product') ?? '').trim();
   const formProductPrice = String(formData.get('productPrice') ?? '').trim();
-  const fallbackProductPrice = state.launchPlan.productPrice ?? state.v3.productPrice ?? 1000;
+  const fallbackProductPrice = state.v4.productPrice ?? state.launchPlan.productPrice ?? state.v3.productPrice ?? 1000;
   const parsedProductPrice = formProductPrice ? Number(formProductPrice) : fallbackProductPrice;
   const productPrice = Number.isFinite(parsedProductPrice) && parsedProductPrice >= 100
     ? parsedProductPrice
@@ -19,7 +28,7 @@ export async function submitLead(state: GameState, formData: FormData): Promise<
     sessionId: state.sessionId,
     name,
     contact,
-    product: formProduct || state.player.niche,
+    product: formProduct || (state.v4.productType ? V4_PRODUCT_TITLES[state.v4.productType] : state.player.niche),
     productPrice,
     socialLink: String(formData.get('socialLink') ?? ''),
     comment: String(formData.get('comment') ?? ''),

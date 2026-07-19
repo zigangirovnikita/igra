@@ -2,10 +2,17 @@
 
 import { useState } from 'react';
 import type { GameState } from '@/packages/game-engine/src';
+import { PRODUCT_TITLES } from './flows/v4/v4Ui';
 
 export function LeadForm({ state, busy, status, onSubmit, onBack, onRestart }: { state: GameState; busy: boolean; status: string | null; onSubmit: (data: FormData) => void; onBack: () => void; onRestart: () => void }) {
   const [validationError, setValidationError] = useState<string | null>(null);
   const visibleStatus = validationError ?? status;
+  const productTitle = state.flow.stage === 'v4' && state.v4.productType
+    ? PRODUCT_TITLES[state.v4.productType]
+    : state.player.niche;
+  const productPrice = state.flow.stage === 'v4'
+    ? state.v4.productPrice ?? ''
+    : state.launchPlan?.productPrice ?? '';
 
   if (status === 'success') {
     return (
@@ -37,8 +44,8 @@ export function LeadForm({ state, busy, status, onSubmit, onBack, onRestart }: {
       <p className="lead-form-sub">Заполните контакты — мы посмотрим ваш продукт, воронку и точки роста.</p>
       <label className="setup-field-label">Имя * <input name="name" defaultValue={state.player.name} aria-required="true" /></label>
       <label className="setup-field-label">Телеграм / номер * <input name="contact" aria-required="true" placeholder="@username или номер" /></label>
-      <label className="setup-field-label">Ниша <input name="product" defaultValue={state.player.niche} /></label>
-      <label className="setup-field-label">Чек <input name="productPrice" type="number" defaultValue={state.launchPlan?.productPrice ?? ''} /></label>
+      <label className="setup-field-label">Продукт <input name="product" defaultValue={productTitle} /></label>
+      <label className="setup-field-label">Чек <input name="productPrice" type="number" defaultValue={productPrice} /></label>
       <label className="setup-field-label">Инстаграм, если есть <input name="socialLink" placeholder="@username или ссылка" /></label>
       <label className="setup-field-label">Что вы хотите получить на разборе? <textarea name="comment" maxLength={1000} /></label>
       <input className="hidden-field" name="website" tabIndex={-1} autoComplete="off" />
