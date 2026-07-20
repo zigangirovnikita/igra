@@ -18,7 +18,7 @@ export function V4Result({ state, dispatch, busy }: { state: GameState; dispatch
   if (!report || !dream) {
     return (
       <V4Screen title="Результат не найден">
-        <button className="btn-primary" onClick={() => dispatch('v4_start_next_attempt')}>Вернуться в конструктор</button>
+        <button className="btn-primary btn-compact" onClick={() => dispatch('v4_start_next_attempt')}>Вернуться в конструктор</button>
       </V4Screen>
     );
   }
@@ -68,7 +68,7 @@ export function V4Result({ state, dispatch, busy }: { state: GameState; dispatch
       <div className="v4-observations">
         {report.observations.map((line) => <p key={line}>{line}</p>)}
       </div>
-      <button className="btn-secondary" onClick={() => dispatch('v4_toggle_details')}>
+      <button className="btn-secondary btn-compact" onClick={() => dispatch('v4_toggle_details')}>
         {state.v4.detailsOpen ? 'Скрыть детали расчета' : 'Посмотреть детали расчета'}
       </button>
       {state.v4.detailsOpen && (

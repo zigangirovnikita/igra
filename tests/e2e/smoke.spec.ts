@@ -7,6 +7,7 @@ async function startV4Game(page: Page) {
   await page.locator('input').fill('Марина');
   await page.getByRole('button', { name: 'Дальше' }).click();
   await page.getByRole('button').filter({ hasText: 'Новый iPhone' }).click();
+  await page.getByRole('button', { name: 'Дальше' }).click();
   await page.getByRole('button', { name: 'Услуга' }).click();
   await page.locator('input').fill('30000');
   await page.getByRole('button', { name: 'Готово' }).click();

@@ -25,7 +25,7 @@ export function V4Flow({ state, config, dispatch, busy }: { state: GameState; co
             <span>Telegram</span>
             <span>Созвоны</span>
           </div>
-          <button className="btn-primary" disabled={busy} onClick={() => dispatch('v4_start_tutorial')}>Запустить пробу</button>
+          <button className="btn-primary btn-compact" disabled={busy} onClick={() => dispatch('v4_start_tutorial')}>Запустить пробу</button>
         </div>
       </V4Screen>
     );
@@ -45,7 +45,7 @@ export function V4Flow({ state, config, dispatch, busy }: { state: GameState; co
 
   return (
     <V4Screen title="Экран v4 не найден">
-      <button className="btn-primary" disabled={busy} onClick={() => dispatch('v4_start_next_attempt')}>В конструктор</button>
+      <button className="btn-primary btn-compact" disabled={busy} onClick={() => dispatch('v4_start_next_attempt')}>В конструктор</button>
     </V4Screen>
   );
 }

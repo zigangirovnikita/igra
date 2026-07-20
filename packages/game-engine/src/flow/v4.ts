@@ -5,6 +5,7 @@ import type {
 } from '../types';
 import type { V4Execution, V4InstrumentId, V4OfferMode } from '../v4/types';
 import {
+  emptyV4Funnel,
   getV4Instrument,
   makeV4Stage,
   tutorialV4Funnel,
@@ -127,6 +128,7 @@ export function startNextV4Attempt(state: GameState, changeProduct = false): Gam
   state.v4.activeAttempt = null;
   state.v4.lastReport = null;
   state.v4.detailsOpen = false;
+  state.v4.funnel = emptyV4Funnel();
   state.flow.step = changeProduct ? 'v4_product' : 'v4_builder';
   return state;
 }

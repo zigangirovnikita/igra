@@ -91,7 +91,7 @@ export function V4MiniGame({ state, dispatch, busy }: { state: GameState; dispat
       </div>
       <div className="v4-action-panel">
         <button
-          className="btn-primary"
+          className="btn-primary btn-compact"
           disabled={busy || finishing || preview.energyRemaining <= 0 || manualActions >= maxManualActions}
           onClick={() => setManualActions((current) => Math.min(maxManualActions, current + 1))}
         >

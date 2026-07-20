@@ -62,6 +62,7 @@ export function V4Builder({ state, dispatch, busy }: { state: GameState; dispatc
         </div>
         {selected && selectedIndex !== null && (
           <StageEditor
+            key={selected.id}
             index={selectedIndex}
             stage={selected}
             dispatch={async (action, payload) => {
@@ -84,7 +85,11 @@ export function V4Builder({ state, dispatch, busy }: { state: GameState; dispatc
 }
 
 function StageEditor({ index, stage, dispatch, busy }: { index: number; stage: V4FunnelStage; dispatch: Dispatch; busy: boolean }) {
-  const [instrumentId, setInstrumentId] = useState<V4InstrumentId>(stage.instrumentId);
+  const availableInstruments = INSTRUMENTS.filter((item) => index === 0 ? item.kind === 'traffic' : item.kind !== 'traffic');
+  const initialInstrumentId = availableInstruments.some((item) => item.id === stage.instrumentId)
+    ? stage.instrumentId
+    : availableInstruments[0].id;
+  const [instrumentId, setInstrumentId] = useState<V4InstrumentId>(initialInstrumentId);
   const [execution, setExecution] = useState<V4Execution>(stage.execution);
   const [offerMode, setOfferMode] = useState<V4OfferMode>(stage.offerMode);
   const [tripwirePrice, setTripwirePrice] = useState(String(stage.tripwirePrice ?? 990));
@@ -105,7 +110,7 @@ function StageEditor({ index, stage, dispatch, busy }: { index: number; stage: V
     <div className="v4-editor">
       <h2>Этап {index + 1}</h2>
       <div className="v4-tool-grid">
-        {INSTRUMENTS.map((item) => (
+        {availableInstruments.map((item) => (
           <button
             key={item.id}
             className={`v4-tool${instrumentId === item.id ? ' v4-tool--selected' : ''}`}

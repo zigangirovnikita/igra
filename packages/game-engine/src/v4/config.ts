@@ -75,6 +75,15 @@ export function defaultV4Funnel(): V4FunnelStage[] {
   ];
 }
 
+export function emptyV4Funnel(): V4FunnelStage[] {
+  return [
+    makeV4Stage('stage-1', 'stories', 'self', 'free', null, 1),
+    makeV4Stage('stage-2', 'guide', 'self', 'free', null, 1),
+    makeV4Stage('stage-3', 'guide', 'self', 'free', null, 1),
+    makeV4Stage('stage-4', 'guide', 'self', 'free', null, 1),
+  ];
+}
+
 export function tutorialV4Funnel(): V4FunnelStage[] {
   return [
     makeV4Stage('tutorial-1', 'paid_ads', 'expert', 'free', null, 95_000),
