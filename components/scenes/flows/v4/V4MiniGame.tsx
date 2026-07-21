@@ -141,10 +141,11 @@ export function V4MiniGame({ state, dispatch, busy }: { state: GameState; dispat
           {active.stages.map((stage) => (
             <div className="v4-flow-row" key={stage.id} />
           ))}
-          {people.map((person) => (
+          {people.map((person, personIndex) => (
             <span
-              key={person.id}
+              key={`${person.id}-${personIndex}`}
               className={`v4-flow-person v4-flow-person--${person.status}`}
+              data-person-id={person.id}
               style={{
                 ['--x' as string]: `${person.x}%`,
                 ['--y' as string]: `${person.y}%`,
@@ -250,7 +251,7 @@ function buildVisualPeople(input: {
 
     addPeople(people, stage, stageIndex, 'stream', streamCount, y, input.mainProductPrice);
     addPeople(people, stage, stageIndex, 'warm', counts.warm ?? 0, y, input.mainProductPrice);
-    addWaitingPeople(people, stage, stageIndex, counts.waiting ?? 0, y, input.mainProductPrice);
+    addWaitingPeople(people, stage, stageIndex, counts.waiting ?? 0, y);
     addPeople(people, stage, stageIndex, 'lost', counts.lost ?? 0, y, input.mainProductPrice);
     addPeople(people, stage, stageIndex, 'sold', counts.sold ?? 0, y, input.mainProductPrice);
     if (processing > 0) addPeople(people, stage, stageIndex, 'processing', 1, y, input.mainProductPrice);
@@ -321,20 +322,18 @@ function addWaitingPeople(
   stageIndex: number,
   count: number,
   y: number,
-  mainProductPrice: number,
 ): void {
   for (let index = 0; index < count; index += 1) {
-    addPeople(
-      people,
-      stage,
-      stageIndex,
-      index % 4 === 2 ? 'cooling' : 'waiting',
-      1,
+    const status = index % 4 === 2 ? 'cooling' : 'waiting';
+    people.push({
+      id: `${stage.id}-${status}-${index}`,
+      status,
+      text: null,
+      amount: null,
+      x: lineX(54, 88, index, count),
       y,
-      mainProductPrice,
-    );
-    people[people.length - 1].x = lineX(54, 88, index, count);
-    people[people.length - 1].delay = index * 0.12 + stageIndex * 0.08;
+      delay: index * 0.12 + stageIndex * 0.08,
+    });
   }
 }
 
