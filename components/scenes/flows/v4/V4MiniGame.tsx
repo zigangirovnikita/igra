@@ -28,7 +28,7 @@ type StageAction = {
 
 type VisualPerson = {
   id: string;
-  status: 'stream' | 'warm' | 'waiting' | 'cooling' | 'cold' | 'sold' | 'lost';
+  status: 'stream' | 'warm' | 'waiting' | 'cooling' | 'processing' | 'sold' | 'lost';
   text: string | null;
   amount: number | null;
   x: number;
@@ -113,8 +113,10 @@ export function V4MiniGame({ state, dispatch, busy }: { state: GameState; dispat
 
   const people = buildVisualPeople({
     stages: active.stages,
-    report: baseReport,
+    report: preview,
+    queueReport: baseReport,
     handledByStage,
+    activeStageId: activeAction?.stageId ?? null,
     mainProductPrice: state.v4.productPrice ?? 0,
   });
   const actionRemainingSeconds = activeAction ? Math.max(0, Math.ceil((activeAction.endsAt - nowMs) / 1000)) : 0;
@@ -218,85 +220,130 @@ function getReplyLabel(sourceStage: V4FunnelStage | undefined): string {
 function buildVisualPeople(input: {
   stages: V4FunnelStage[];
   report: V4AttemptReport;
+  queueReport: V4AttemptReport;
   handledByStage: Record<string, number>;
+  activeStageId: string | null;
   mainProductPrice: number;
 }): VisualPerson[] {
   const people: VisualPerson[] = [];
   input.stages.forEach((stage, stageIndex) => {
     const result = input.report.stageResults[stageIndex];
+    const queueResult = input.queueReport.stageResults[stageIndex];
     if (!result) return;
     const y = stageY(stageIndex, input.stages.length);
     const handled = input.handledByStage[stage.id] ?? 0;
-    const waiting = Math.max(0, result.manualQueue - handled);
-    const sold = result.mainProductSales + result.tripwireSales + handledSales(stage, handled);
+    const processing = input.activeStageId === stage.id ? 1 : 0;
+    const waiting = Math.max(0, (queueResult?.manualQueue ?? result.manualQueue) - handled - processing);
+    const sold = result.mainProductSales + result.tripwireSales;
     const lost = result.lost;
     const warm = result.progressed;
     const streamCount = stageIndex === 0 ? Math.max(6, Math.min(8, Math.ceil(result.entered / 10))) : 0;
-    const streamMix = Array.from({ length: streamCount }, () => ({ status: 'stream' as const }));
-    const mix = [
-      ...streamMix,
-      ...allocatePeople(
-        [
-          { status: 'waiting' as const, value: waiting },
-          { status: 'sold' as const, value: sold },
-          { status: 'lost' as const, value: lost },
-          { status: 'warm' as const, value: warm },
-        ],
-        MAX_PEOPLE_PER_STAGE - streamCount,
-      ),
-    ];
-    mix.forEach((item, localIndex) => {
-      const status = item.status === 'waiting' && localIndex % 3 === 1 ? 'cooling' : item.status;
-      people.push({
-        id: `${stage.id}-${status}-${localIndex}`,
-        status,
-        text: phraseFor(status, localIndex),
-        amount: amountFor(status, stage, input.mainProductPrice),
-        x: xFor(status, localIndex),
-        y: y + jitter(localIndex),
-        delay: (localIndex % 8) * 0.16 + stageIndex * 0.08,
-      });
-    });
+    const counts = allocatePeopleCounts(
+      [
+        { status: 'waiting' as const, value: waiting },
+        { status: 'sold' as const, value: sold },
+        { status: 'lost' as const, value: lost },
+        { status: 'warm' as const, value: warm },
+      ],
+      MAX_PEOPLE_PER_STAGE - streamCount - processing,
+    );
+
+    addPeople(people, stage, stageIndex, 'stream', streamCount, y, input.mainProductPrice);
+    addPeople(people, stage, stageIndex, 'warm', counts.warm ?? 0, y, input.mainProductPrice);
+    addWaitingPeople(people, stage, stageIndex, counts.waiting ?? 0, y, input.mainProductPrice);
+    addPeople(people, stage, stageIndex, 'lost', counts.lost ?? 0, y, input.mainProductPrice);
+    addPeople(people, stage, stageIndex, 'sold', counts.sold ?? 0, y, input.mainProductPrice);
+    if (processing > 0) addPeople(people, stage, stageIndex, 'processing', 1, y, input.mainProductPrice);
   });
   return people;
 }
 
-function allocatePeople(
+function allocatePeopleCounts(
   items: Array<{ status: VisualPerson['status']; value: number }>,
   maxCount = MAX_PEOPLE_PER_STAGE,
-): Array<{ status: VisualPerson['status'] }> {
+): Partial<Record<VisualPerson['status'], number>> {
   const relevant = items.filter((item) => item.value > 0);
   const total = relevant.reduce((sum, item) => sum + item.value, 0);
-  if (total <= 0 || maxCount <= 0) return [];
+  if (total <= 0 || maxCount <= 0) return {};
   const baseCount = Math.min(relevant.length, maxCount);
   const remainingSlots = Math.max(0, maxCount - baseCount);
-  const allocated = relevant.flatMap((item) => {
+  const counts: Partial<Record<VisualPerson['status'], number>> = {};
+  relevant.forEach((item) => {
     const extraCount = remainingSlots > 0 ? Math.round((item.value / total) * remainingSlots) : 0;
-    return Array.from({ length: 1 + extraCount }, () => ({ status: item.status }));
+    counts[item.status] = 1 + extraCount;
   });
-  return allocated.slice(0, maxCount);
-}
-
-function handledSales(stage: V4FunnelStage, handled: number): number {
-  return stage.instrumentId === 'call' || stage.instrumentId === 'chat' ? Math.ceil(handled * 0.2) : 0;
+  let allocated = Object.values(counts).reduce((sum, count) => sum + (count ?? 0), 0);
+  for (const item of [...relevant].reverse()) {
+    if (allocated <= maxCount) break;
+    const current = counts[item.status] ?? 0;
+    if (current > 1) {
+      counts[item.status] = current - 1;
+      allocated -= 1;
+    }
+  }
+  return counts;
 }
 
 function amountFor(status: VisualPerson['status'], stage: V4FunnelStage, mainProductPrice: number): number | null {
   if (status !== 'sold') return null;
+  if (getV4Instrument(stage.instrumentId).kind !== 'sales') return null;
   if (stage.offerMode === 'tripwire' && stage.tripwirePrice) return stage.tripwirePrice;
   return mainProductPrice;
 }
 
-function phraseFor(status: VisualPerson['status'], index: number): string | null {
+function addPeople(
+  people: VisualPerson[],
+  stage: V4FunnelStage,
+  stageIndex: number,
+  status: VisualPerson['status'],
+  count: number,
+  y: number,
+  mainProductPrice: number,
+): void {
+  if (count <= 0) return;
+  const segment = segmentFor(status);
+  for (let index = 0; index < count; index += 1) {
+    people.push({
+      id: `${stage.id}-${status}-${index}`,
+      status,
+      text: phraseFor(status, index, getV4Instrument(stage.instrumentId).kind === 'sales'),
+      amount: amountFor(status, stage, mainProductPrice),
+      x: lineX(segment.from, segment.to, index, count),
+      y,
+      delay: index * 0.14 + stageIndex * 0.08,
+    });
+  }
+}
+
+function addWaitingPeople(
+  people: VisualPerson[],
+  stage: V4FunnelStage,
+  stageIndex: number,
+  count: number,
+  y: number,
+  mainProductPrice: number,
+): void {
+  for (let index = 0; index < count; index += 1) {
+    addPeople(
+      people,
+      stage,
+      stageIndex,
+      index % 4 === 2 ? 'cooling' : 'waiting',
+      1,
+      y,
+      mainProductPrice,
+    );
+    people[people.length - 1].x = lineX(54, 88, index, count);
+    people[people.length - 1].delay = index * 0.12 + stageIndex * 0.08;
+  }
+}
+
+function phraseFor(status: VisualPerson['status'], index: number, salesStage: boolean): string | null {
+  if (!salesStage || status !== 'sold' && status !== 'lost') return null;
   const phrases = {
-    waiting: ['Можно подробнее?', 'А сколько стоит?', 'Хочу созвон'],
-    cooling: ['Жду ответа', 'Еще актуально?', 'Напишите мне'],
-    cold: ['Не дождался', 'Уже не актуально', 'Напишу потом'],
     lost: ['Дорого', 'Не понял ценность', 'Подумаю'],
     sold: ['Оплатил!', 'Беру', 'Когда старт?'],
-    warm: [null, null, 'Иду дальше'],
-    stream: [null, null, null],
-  } satisfies Record<VisualPerson['status'], Array<string | null>>;
+  } satisfies Record<'sold' | 'lost', string[]>;
   return phrases[status][index % phrases[status].length];
 }
 
@@ -305,14 +352,16 @@ function stageY(index: number, total: number): number {
   return 10 + (index * 80) / (total - 1);
 }
 
-function xFor(status: VisualPerson['status'], index: number): number {
-  if (status === 'sold') return 82 + (index % 4) * 3;
-  if (status === 'lost' || status === 'cold') return 8 + (index % 4) * 4;
-  if (status === 'waiting' || status === 'cooling') return 42 + (index % 5) * 5;
-  if (status === 'stream') return 16 + (index % 8) * 8;
-  return 50 + (index % 6) * 6;
+function segmentFor(status: VisualPerson['status']): { from: number; to: number } {
+  if (status === 'stream') return { from: 8, to: 58 };
+  if (status === 'warm') return { from: 22, to: 74 };
+  if (status === 'waiting' || status === 'cooling') return { from: 54, to: 88 };
+  if (status === 'processing') return { from: 76, to: 92 };
+  if (status === 'sold') return { from: 80, to: 93 };
+  return { from: 28, to: 10 };
 }
 
-function jitter(index: number): number {
-  return ((index % 5) - 2) * 1.4;
+function lineX(from: number, to: number, index: number, count: number): number {
+  if (count <= 1) return (from + to) / 2;
+  return from + ((to - from) * index) / (count - 1);
 }
